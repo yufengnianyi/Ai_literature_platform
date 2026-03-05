@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: name=demo_01
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        api-key: sk-b281b7e0a99b4811b034e4691531ddbb
+        model-name: qwen-plus
+      embedding-model:
+        api-key: sk-b281b7e0a99b4811b034e4691531ddbb
+        model-name: text-embedding-v4
