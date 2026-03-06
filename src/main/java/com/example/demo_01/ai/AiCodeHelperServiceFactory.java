@@ -1,5 +1,6 @@
 package com.example.demo_01.ai;
 
+import com.example.demo_01.ai.tools.InterviewQuestionTool;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
@@ -32,6 +33,7 @@ public class AiCodeHelperServiceFactory {
                 //.chatMemoryProvider(memoryId -> MessageWindowChatMemory.withMaxMessages(10))
                 .chatMemory(chatMemory) //会话记忆
                 .contentRetriever(jsonlContentRetriever)
+                .tools(new InterviewQuestionTool())
                 .build();
 
         return aiCodeHelperService;

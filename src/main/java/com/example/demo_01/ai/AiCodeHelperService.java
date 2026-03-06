@@ -1,9 +1,9 @@
 package com.example.demo_01.ai;
 
 import dev.langchain4j.service.MemoryId;
+import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
-import dev.langchain4j.service.spring.AiService;
 
 import java.util.List;
 
@@ -26,6 +26,6 @@ public interface AiCodeHelperService {
 
     // 返回带来源的回答
     @SystemMessage(fromResource = "system-prompt.txt")
-    dev.langchain4j.service.Result<String> chatWithSources(String userMessage);
+    Result<String> chatWithSources(String userMessage);
 
 }
