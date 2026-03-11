@@ -1,13 +1,17 @@
 package com.example.demo_01.ai;
 
+import com.example.demo_01.ai.guardrail.SafeInputGuardrail;
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.guardrail.InputGuardrails;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
 //@AiService
+@InputGuardrails(SafeInputGuardrail.class)
 public interface AiCodeHelperService {
 
     // 设置系统提示词
@@ -27,5 +31,15 @@ public interface AiCodeHelperService {
     // 返回带来源的回答
     @SystemMessage(fromResource = "system-prompt.txt")
     Result<String> chatWithSources(String userMessage);
+
+
+    // 使用mcp网络检索回答
+    @SystemMessage(fromResource = "system-prompt.txt")
+    Result<String> chatWithTools(String userMessage);
+
+
+    @SystemMessage(fromResource = "system-prompt.txt")
+    // 使用Flux
+    Flux<String> chatWithFlux(@MemoryId int id, @UserMessage String userMessage);
 
 }

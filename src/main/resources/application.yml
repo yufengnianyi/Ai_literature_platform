@@ -10,3 +10,12 @@ langchain4j:
       embedding-model:
         api-key: sk-b281b7e0a99b4811b034e4691531ddbb
         model-name: text-embedding-v4
+      streaming-chat-model:
+        api-key: sk-b281b7e0a99b4811b034e4691531ddbb
+        model-name: qwen-plus
+bigmodel:
+  api-key: 8b1ff6b0841c4946b7dcd9e3168ba6bf.7kjVRcNxgmj4N4QL
+server:
+  port: 8081
+  servlet:
+    context-path: /api

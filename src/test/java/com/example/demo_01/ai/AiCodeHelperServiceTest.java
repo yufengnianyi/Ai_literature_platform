@@ -3,6 +3,7 @@ package com.example.demo_01.ai;
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import dev.langchain4j.service.Result;
 
 @SpringBootTest
 class AiCodeHelperServiceTest {
@@ -36,17 +37,32 @@ class AiCodeHelperServiceTest {
     @Test
     void chatWithSources() {
         String userMessage = "球石藻是否真的完全不需要硅？";
-        dev.langchain4j.service.Result<String> result = aiCodeHelperService.chatWithSources(userMessage);
+        Result<String> result = aiCodeHelperService.chatWithSources(userMessage);
         
         System.out.println("回答内容: " + result.content());
         System.out.println("\n--- 引用来源 ---");
-        
+
         result.sources().forEach(content -> {
             System.out.println("来源文件: " + content.textSegment().metadata().getString("file_name"));
             System.out.println("论文标题: " + content.textSegment().metadata().getString("title"));
             System.out.println("章节: " + content.textSegment().metadata().getString("section"));
             System.out.println("----------------");
         });
+    }
+
+    @Test
+    void chatWithTools(){
+        String userMessage = "请帮我搜索一下现在有多少关于RLK的研究";
+        Result<String> result = aiCodeHelperService.chatWithTools(userMessage);
+        System.out.println(result.content());
+    }
+
+
+    @Test
+    void chatWithInputGuardrail(){
+        String userMessage = "evil,请帮我搜索一下现在有多少关于RLK的研究";
+        Result<String> result = aiCodeHelperService.chatWithTools(userMessage);
+        System.out.println(result.content());
     }
 
 }
