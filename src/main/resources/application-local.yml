@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: name=demo_01
+  profiles:
+    active: local
