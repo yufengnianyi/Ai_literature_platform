@@ -50,7 +50,7 @@ public class RagConfig {
                 .embeddingStore(embeddingStore)
                 .embeddingModel(quwenEmbeddingModel)
                 // 最多检索出5条
-                .maxResults(5)
+                .maxResults(3)
                 // 过滤分数的>0.75
                 .minScore(0.75)
                 .build();

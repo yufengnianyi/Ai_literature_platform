@@ -24,7 +24,7 @@ public class QwenChatModelConfig {
     private ChatModelListener chatModelListener;
 
     @Bean
-    public ChatModel MyqwenChatModel(RequestService requestBuilder) {
+    public ChatModel myqwenChatModel(RequestService requestBuilder) {
         // 创建一个qwenChatModel对象
         // QwenChatModel是安装LLM依赖中提供的实现接口
         return QwenChatModel.builder()

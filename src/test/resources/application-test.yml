@@ -1,0 +1,21 @@
+spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+app:
+  ai:
+    rag:
+      embedding-dimension: 1024
+      bootstrap-mode: skip
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        api-key: test-key
+        model-name: qwen-plus
+      embedding-model:
+        api-key: test-key
+        model-name: text-embedding-v4
+      streaming-chat-model:
+        api-key: test-key
+        model-name: qwen-plus

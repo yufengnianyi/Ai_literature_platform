@@ -1,46 +1,48 @@
-import axios from 'axios'
-import { message } from 'ant-design-vue'
+import axios from 'axios';
+import { message } from 'ant-design-vue';
+import { API_BASE_URL, DEFAULT_USER } from '@/constants/user';
 
-// 创建 Axios 实例
 const myAxios = axios.create({
-  baseURL: 'http://localhost:8081/api',
+  baseURL: API_BASE_URL,
   timeout: 60000,
-  // 携带凭证
   withCredentials: true,
-})
+});
 
-// 全局请求拦截器
 myAxios.interceptors.request.use(
   function (config) {
-    // Do something before request is sent
-    return config
+    const headers = config.headers as { set?: (name: string, value: string) => void } | undefined;
+    if (headers && typeof headers.set === 'function') {
+      headers.set('X-User-Id', DEFAULT_USER.userId);
+    } else {
+      config.headers = {
+        ...(config.headers as Record<string, unknown> | undefined),
+        'X-User-Id': DEFAULT_USER.userId,
+      } as any;
+    }
+    return config;
   },
   function (error) {
-    // Do something with request error
-    return Promise.reject(error)
+    return Promise.reject(error);
   },
-)
+);
 
-// 全局响应拦截器
 myAxios.interceptors.response.use(
   function (response) {
-    const { data } = response
-    // 假设后端约定的未登录状态码是 40100
+    const { data } = response;
     if (data && data.code === 40100) {
       if (
         response.request.responseURL &&
         !response.request.responseURL.includes('user/get/login') &&
         !window.location.pathname.includes('/user/login')
       ) {
-        message.warning('请先登录')
-        // window.location.href = `/user/login?redirect=${window.location.href}`
+        message.warning('Please login first');
       }
     }
-    return response
+    return response;
   },
   function (error) {
-    return Promise.reject(error)
+    return Promise.reject(error);
   },
-)
+);
 
-export default myAxios
+export default myAxios;

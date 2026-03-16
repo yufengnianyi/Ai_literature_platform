@@ -1,56 +1,153 @@
-/**
- * 提供 SSE 对话接口的封装服务
- */
+import { API_BASE_URL, DEFAULT_USER } from '@/constants/user';
 
-// number prompt: 用户传入的参数
-// 其他三个是 不同状态下的处理出发
 export interface ChatSseParams {
-  memoryId: number;
+  conversationId: string;
   prompt: string;
   onMessage: (data: string) => void;
-  onError: (error: Event) => void;
+  onSources?: (sources: string[]) => void;
+  onError: (error: unknown) => void;
   onComplete: () => void;
 }
 
-export const chatService = {
-  /**
-   * 发起流式对话
-   */
+export interface ChatStreamHandle {
+  close: () => void;
+}
 
-  streamChat({ memoryId, prompt, onMessage, onError, onComplete }: ChatSseParams): EventSource {
-    const encodedPrompt = encodeURIComponent(prompt);
-    // TODO: baseUrl 可以抽离到环境变量
-    const url = `http://localhost:8081/api/ai?memory_id=${memoryId}&prompt=${encodedPrompt}`;
-
-    // 想url 发送一个SSE请求，保持链接，持续接收数据
-    const eventSource = new EventSource(url);
-
-
-    // 接受到数据的方法
-    eventSource.onmessage = (event) => {
-      let newData = event.data;
-      // 简单处理如果后端发送的数据被引号包裹，将其去掉
-      // 处理后端返回的数据
-      if (newData.startsWith('"') && newData.endsWith('"')) {
-         try {
-             newData = JSON.parse(newData);
-         } catch(e) {}
-      }
-      onMessage(newData);
-    };
-
-    // 错误处理
-    eventSource.onerror = (error) => {
-      onError(error);
-      eventSource.close();
-    };
-
-    // 假设后端完成流式输出时会关闭连接或者发送一个特定的结束标记
-    eventSource.addEventListener('complete', () => {
-      onComplete();
-      eventSource.close();
-    });
-
-    return eventSource;
+const decodeMessagePayload = (rawData: string): string => {
+  if (rawData.startsWith('"') && rawData.endsWith('"')) {
+    try {
+      return JSON.parse(rawData) as string;
+    } catch {
+      return rawData;
+    }
   }
+  return rawData;
+};
+
+const parseEventBlock = (rawBlock: string): { eventName: string; data: string } | null => {
+  const lines = rawBlock.split('\n');
+  let eventName = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('event:')) {
+      eventName = line.slice('event:'.length).trim() || 'message';
+      continue;
+    }
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trimStart());
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return null;
+  }
+
+  return {
+    eventName,
+    data: dataLines.join('\n'),
+  };
+};
+
+export const chatService = {
+  streamChat({ conversationId, prompt, onMessage, onSources, onError, onComplete }: ChatSseParams): ChatStreamHandle {
+    const encodedConversationId = encodeURIComponent(conversationId);
+    const encodedPrompt = encodeURIComponent(prompt);
+    const url = `${API_BASE_URL}/ai?conversationId=${encodedConversationId}&prompt=${encodedPrompt}`;
+    const controller = new AbortController();
+
+    let completed = false;
+    const finalize = () => {
+      if (!completed) {
+        completed = true;
+        onComplete();
+      }
+    };
+
+    void (async () => {
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/event-stream',
+            'X-User-Id': DEFAULT_USER.userId,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Chat request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error('SSE response body is empty');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+          let separatorIndex = buffer.indexOf('\n\n');
+
+          while (separatorIndex >= 0) {
+            const rawBlock = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+
+            const parsed = parseEventBlock(rawBlock);
+            if (parsed) {
+              if (parsed.eventName === 'complete') {
+                finalize();
+                return;
+              }
+
+              if (parsed.eventName === 'sources') {
+                if (onSources) {
+                  try {
+                    onSources(JSON.parse(parsed.data) as string[]);
+                  } catch (error) {
+                    console.error('Failed to parse sources payload', error);
+                  }
+                }
+              } else {
+                onMessage(decodeMessagePayload(parsed.data));
+              }
+            }
+
+            separatorIndex = buffer.indexOf('\n\n');
+          }
+        }
+
+        const rest = buffer.trim();
+        if (rest.length > 0) {
+          const parsed = parseEventBlock(rest);
+          if (parsed && parsed.eventName !== 'sources') {
+            onMessage(decodeMessagePayload(parsed.data));
+          }
+        }
+
+        finalize();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          finalize();
+          return;
+        }
+        onError(error);
+      }
+    })();
+
+    return {
+      close: () => {
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+      },
+    };
+  },
 };

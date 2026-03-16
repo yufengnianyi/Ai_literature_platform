@@ -1,44 +1,44 @@
 <template>
   <div class="chat-container">
-    <!-- 聊天内容区域 -->
     <div class="chat-messages" ref="messagesContainer">
       <div v-if="messages.length === 0" class="empty-state">
-        <div class="empty-icon">🤖</div>
-        <h3>你好，我是 AI 助手</h3>
-        <p>你可以问我任何问题，例如：“你能帮我写一段快排代码吗？”</p>
+        <div class="empty-icon">AI</div>
+        <h3>Hello, I am your AI assistant</h3>
+        <p>Please select a conversation on the left and start asking questions.</p>
       </div>
-      
-      <ChatMessageItem 
-        v-for="msg in messages" 
-        :key="msg.id" 
+
+      <ChatMessageItem
+        v-for="msg in messages"
+        :key="msg.id"
         :message="msg"
       />
     </div>
 
-    <!-- 底部输入区域 -->
-    <ChatComposer 
-      :disabled="isGenerating"
+    <ChatComposer
+      :disabled="isGenerating || !activeConversationId"
       @send="handleSend"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import ChatComposer from '../components/chat/ChatComposer.vue';
 import { useChat } from '../composables/useChat';
+import { useConversationState } from '@/composables/useConversationState';
 
 const messagesContainer = ref<HTMLElement | null>(null);
+const { activeConversationId } = useConversationState();
 
-// 提取的 chat 逻辑 Hook
-const { 
-  messages, 
-  isGenerating, 
-  sendMessage 
+const {
+  messages,
+  isGenerating,
+  sendMessage,
+  clearMessages,
+  stopGenerating,
 } = useChat();
 
-// 滚动到底部的辅助函数
 const scrollToBottom = async () => {
   await nextTick();
   if (messagesContainer.value) {
@@ -47,9 +47,22 @@ const scrollToBottom = async () => {
 };
 
 const handleSend = (text: string) => {
-  // 目前硬编码 memoryId = 1，实际可以从路由或 store 获取
-  sendMessage(text, 1, scrollToBottom);
+  if (!activeConversationId.value) {
+    return;
+  }
+  sendMessage(text, activeConversationId.value, scrollToBottom);
 };
+
+watch(
+  () => activeConversationId.value,
+  (newId, oldId) => {
+    if (newId !== oldId) {
+      stopGenerating();
+      clearMessages();
+      scrollToBottom();
+    }
+  },
+);
 
 onMounted(() => {
   scrollToBottom();
@@ -82,7 +95,7 @@ onMounted(() => {
 }
 
 .empty-icon {
-  font-size: 48px;
+  font-size: 32px;
   margin-bottom: 16px;
 }
 </style>

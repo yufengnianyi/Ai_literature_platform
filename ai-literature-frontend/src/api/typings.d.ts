@@ -1,6 +1,7 @@
 declare namespace API {
   type chatParams = {
-    memory_id: number;
+    conversationId?: string;
+    memory_id?: number;
     prompt: string;
   };
 

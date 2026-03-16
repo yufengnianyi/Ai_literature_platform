@@ -5,10 +5,12 @@ import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
+@Disabled("Requires external DashScope credentials and live model access")
 public class AiChatTest {
 
     @Resource
@@ -16,7 +18,7 @@ public class AiChatTest {
 
     @Test
     public void test() {
-        String s = aiCodeHelper.chat("请给我介绍一下RLK进化相关的知识");
+        String s = aiCodeHelper.chat("请给我介绍一下SLK进化相关的知识");
         System.out.println(s);
     }
 
