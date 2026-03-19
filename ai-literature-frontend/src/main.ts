@@ -1,18 +1,16 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
+﻿import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import Antd from 'ant-design-vue';
 
-import App from './App.vue'
-import router from './router'
+import App from './App.vue';
+import router from './router';
+import 'ant-design-vue/dist/reset.css';
+import './assets/base.css';
 
-// 引入组件库
-import Antd from 'ant-design-vue'
-import 'ant-design-vue/dist/reset.css'
+const app = createApp(App);
 
-const app = createApp(App)
+app.use(createPinia());
+app.use(router);
+app.use(Antd);
 
-// app 使用组件
-app.use(createPinia())
-app.use(router)
-app.use(Antd)
-
-app.mount('#app')
+app.mount('#app');

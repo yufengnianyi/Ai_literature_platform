@@ -12,25 +12,22 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class ChatModelListenerConfig {
 
-    // 创建listener对象
     @Bean
     ChatModelListener chatModelListener() {
         return new ChatModelListener() {
-
-            // 重写不同种的方法
             @Override
             public void onRequest(ChatModelRequestContext requestContext) {
-                log.info("onRequest(): {}", requestContext.chatRequest());
+                log.debug("onRequest(): {}", requestContext.chatRequest());
             }
 
             @Override
             public void onResponse(ChatModelResponseContext responseContext) {
-                log.info("onResponse(): {}", responseContext.chatResponse());
+                log.debug("onResponse(): {}", responseContext.chatResponse());
             }
 
             @Override
             public void onError(ChatModelErrorContext errorContext) {
-                log.info("onError(): {}", errorContext.error().getMessage());
+                log.warn("onError(): {}", errorContext.error().getMessage());
             }
         };
     }

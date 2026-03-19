@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "openapi2ts": "openapi2ts",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "test:markdown": "node --experimental-strip-types src/utils/__tests__/markdown.test.ts"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",

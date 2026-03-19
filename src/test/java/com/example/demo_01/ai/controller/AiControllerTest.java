@@ -46,7 +46,11 @@ class AiControllerTest {
                         .param("prompt", "hello")
                         .accept(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("hi")));
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("event:message"),
+                        org.hamcrest.Matchers.containsString("data:hi"),
+                        org.hamcrest.Matchers.containsString("event:complete")
+                )));
 
         verify(userService).assertUserExists("u-1");
         verify(conversationService).createConversationIfAbsent("u-1", "conv-1");

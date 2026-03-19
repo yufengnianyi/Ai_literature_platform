@@ -1,0 +1,54 @@
+name: ai_literature
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-demo_01}
+      POSTGRES_USER: ${POSTGRES_USER:-demo_01}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo_01}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-demo_01} -d ${POSTGRES_DB:-demo_01}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-demo_01}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-demo_01}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-demo_01}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      DASHSCOPE_CHAT_MODEL: ${DASHSCOPE_CHAT_MODEL:-qwen-max}
+      DASHSCOPE_EMBEDDING_MODEL: ${DASHSCOPE_EMBEDDING_MODEL:-text-embedding-v4}
+      BIGMODEL_API_KEY: ${BIGMODEL_API_KEY:-}
+      APP_AI_RAG_BOOTSTRAP_MODE: ${APP_AI_RAG_BOOTSTRAP_MODE:-if-empty}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
+
+  web:
+    build:
+      context: ./ai-literature-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_BASE_PATH: ${VITE_APP_BASE_PATH:-/viteApp/}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/viteApp/api}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8088}:80"
+
+volumes:
+  postgres-data:

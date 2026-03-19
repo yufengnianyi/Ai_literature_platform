@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.controller;
 
 import com.example.demo_01.ai.AiCodeHelperService;
+import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.memory.UserConversationKey;
 import com.example.demo_01.conversation.ConversationService;
 import com.example.demo_01.user.UserService;
@@ -42,11 +43,27 @@ public class AiController {
         String resolvedConversationId = resolveConversationId(conversationId, legacyMemoryId);
         conversationService.createConversationIfAbsent(normalizedUserId, resolvedConversationId);
         String memoryKey = UserConversationKey.compose(normalizedUserId, resolvedConversationId);
+        MarkdownChunkBuffer chunkBuffer = new MarkdownChunkBuffer();
 
-        return aiCodeHelperService.chatWithFlux(memoryKey, prompt)
+        Flux<ServerSentEvent<String>> messageEvents = aiCodeHelperService.chatWithFlux(memoryKey, prompt)
+                .concatMapIterable(chunkBuffer::append)
                 .map(chunk -> ServerSentEvent.<String>builder()
+                        .event("message")
                         .data(chunk)
                         .build());
+
+        Flux<ServerSentEvent<String>> completionEvents = Flux.defer(() -> Flux.concat(
+                Flux.fromIterable(chunkBuffer.flushRemaining())
+                        .map(chunk -> ServerSentEvent.<String>builder()
+                                .event("message")
+                                .data(chunk)
+                                .build()),
+                Flux.just(ServerSentEvent.<String>builder()
+                        .event("complete")
+                        .build())
+        ));
+
+        return messageEvents.concatWith(completionEvents);
     }
 
     private String resolveUserId(String userId) {

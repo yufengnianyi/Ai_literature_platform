@@ -1,24 +1,33 @@
-<script setup lang="ts">
-import BasicLayout from './layouts/BasicLayout.vue'
+﻿<script setup lang="ts">
+import BasicLayout from './layouts/BasicLayout.vue';
+
+const theme = {
+  token: {
+    colorPrimary: '#2563eb',
+    colorInfo: '#2563eb',
+    colorText: '#111827',
+    colorTextSecondary: '#6b7280',
+    colorBgBase: '#f5f7fb',
+    borderRadius: 14,
+    fontFamily: "'IBM Plex Sans', 'Segoe UI', sans-serif",
+  },
+};
 </script>
 
 <template>
-  <a-config-provider>
+  <a-config-provider :theme="theme">
     <BasicLayout />
   </a-config-provider>
 </template>
 
 <style>
-/* 全局重置样式 */
-html, body {
+html,
+body,
+#app {
   margin: 0;
   padding: 0;
-  height: 100%;
   width: 100%;
-}
-
-#app {
   height: 100%;
-  width: 100%;
+  overflow: hidden;
 }
 </style>

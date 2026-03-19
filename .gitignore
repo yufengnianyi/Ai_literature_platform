@@ -37,3 +37,7 @@ build/
 ### VS Code ###
 .vscode/
 node_modules
+.env
+.env.local
+*.local
+*-deploy-*.zip

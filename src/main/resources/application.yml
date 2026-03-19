@@ -7,30 +7,27 @@ spring:
     placeholders:
       embeddingDimension: ${app.ai.rag.embedding-dimension:1024}
       vectorTable: ${app.ai.rag.vector-table:embedding_store}
+
 server:
   port: 8081
+  forward-headers-strategy: framework
   servlet:
     context-path: /api
-langchain4j:
-  community:
-    dashscope:
-      chat-model:
-        api-key: ${DASHSCOPE_API_KEY:demo-key}
-        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
-      embedding-model:
-        api-key: ${DASHSCOPE_API_KEY:demo-key}
-        model-name: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}
-      streaming-chat-model:
-        api-key: ${DASHSCOPE_API_KEY:demo-key}
-        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
 app:
   ai:
     memory:
       max-tokens: 4000
     rag:
       embedding-dimension: 1024
-      docs-path: src/main/resources/docs
       vector-table: embedding_store
-      bootstrap-mode: if-empty
-bigmodel:
-  api-key: ${BIGMODEL_API_KEY:demo-key}

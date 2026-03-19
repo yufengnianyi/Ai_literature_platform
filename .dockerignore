@@ -1,0 +1,8 @@
+.git
+.idea
+.vscode
+.m2
+target
+node_modules
+ai-literature-frontend
+demo_01.iml

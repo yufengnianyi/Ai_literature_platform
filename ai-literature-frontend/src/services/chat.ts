@@ -1,10 +1,12 @@
 import { API_BASE_URL, DEFAULT_USER } from '@/constants/user';
+import type { MessageSource } from '@/types/chat';
+import { normalizeSourcesPayload } from '@/utils/sources';
 
 export interface ChatSseParams {
   conversationId: string;
   prompt: string;
   onMessage: (data: string) => void;
-  onSources?: (sources: string[]) => void;
+  onSources?: (sources: MessageSource[]) => void;
   onError: (error: unknown) => void;
   onComplete: () => void;
 }
@@ -39,7 +41,7 @@ const parseEventBlock = (rawBlock: string): { eventName: string; data: string } 
     }
   }
 
-  if (dataLines.length === 0) {
+  if (dataLines.length === 0 && eventName !== 'complete') {
     return null;
   }
 
@@ -110,7 +112,7 @@ export const chatService = {
               if (parsed.eventName === 'sources') {
                 if (onSources) {
                   try {
-                    onSources(JSON.parse(parsed.data) as string[]);
+                    onSources(normalizeSourcesPayload(JSON.parse(parsed.data)));
                   } catch (error) {
                     console.error('Failed to parse sources payload', error);
                   }

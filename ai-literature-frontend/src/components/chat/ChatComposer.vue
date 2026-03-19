@@ -1,24 +1,25 @@
 <template>
   <div class="chat-input-area">
-    <div class="input-wrapper">
+    <div class="input-wrapper" :class="{ 'input-wrapper-disabled': disabled }">
       <a-textarea
         v-model:value="inputText"
-        placeholder="给 AI 发送消息..."
+        placeholder="Ask about a paper, compare findings, or request a concise synthesis..."
         :auto-size="{ minRows: 1, maxRows: 6 }"
+        aria-label="Message"
         @pressEnter="handlePressEnter"
         class="custom-textarea"
+        :disabled="disabled"
       />
-      <a-button 
-        type="primary" 
-        shape="circle" 
+      <a-button
+        type="primary"
         class="send-btn"
-        :disabled="!inputText.trim() || disabled"
+        :disabled="disabled"
         @click="handleSend"
       >
         <template #icon><SendOutlined /></template>
+        Send
       </a-button>
     </div>
-    <div class="footer-tip">内容由 AI 生成，请注意甄别。</div>
   </div>
 </template>
 
@@ -38,8 +39,10 @@ const inputText = ref('');
 
 const handleSend = () => {
   const text = inputText.value.trim();
-  if (!text || props.disabled) return;
-  
+  if (!text || props.disabled) {
+    return;
+  }
+
   emit('send', text);
   inputText.value = '';
 };
@@ -54,52 +57,77 @@ const handlePressEnter = (e: KeyboardEvent) => {
 
 <style scoped>
 .chat-input-area {
-  padding: 16px 24px;
-  background-color: #fff;
-  border-top: 1px solid #f0f0f0;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  border: 1px solid #dbe7f5;
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px 16px;
+  box-shadow: 0 -1px 0 rgba(219, 231, 245, 0.7);
 }
 
 .input-wrapper {
   position: relative;
   display: flex;
   align-items: flex-end;
-  background-color: #f5f5f5;
-  border-radius: 24px;
-  padding: 4px;
-  border: 1px solid #e8e8e8;
-  transition: all 0.3s;
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  background: #fff;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .input-wrapper:focus-within {
-  border-color: #1677ff;
-  background-color: #fff;
-  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.input-wrapper-disabled {
+  opacity: 0.72;
 }
 
 .custom-textarea {
   flex: 1;
   border: none !important;
   box-shadow: none !important;
-  background-color: transparent !important;
+  background: transparent !important;
   resize: none;
-  padding: 8px 16px;
-  padding-right: 50px; /* 给按钮留空间 */
+  padding: 12px 16px;
+  padding-right: 112px;
 }
 
 .custom-textarea :deep(textarea) {
-  background-color: transparent;
+  background: transparent;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.custom-textarea :deep(textarea::placeholder) {
+  color: #94a3b8;
 }
 
 .send-btn {
   position: absolute;
   right: 8px;
   bottom: 8px;
+  height: 36px;
+  border-radius: 10px;
+  padding: 0 14px;
+  border: none;
+  background: #2563eb;
 }
 
-.footer-tip {
-  text-align: center;
-  font-size: 12px;
-  color: #bfbfbf;
-  margin-top: 8px;
+.send-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+@media (max-width: 720px) {
+  .chat-input-area {
+    padding: 10px 12px;
+  }
 }
 </style>

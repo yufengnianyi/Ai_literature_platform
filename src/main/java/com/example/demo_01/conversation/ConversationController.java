@@ -45,6 +45,15 @@ public class ConversationController {
         return conversationService.listConversations(normalizedUserId);
     }
 
+    @GetMapping("/{conversationId}/messages")
+    public List<ConversationService.ConversationMessageResponse> listMessages(
+            @RequestHeader(USER_ID_HEADER) String userId,
+            @PathVariable String conversationId) {
+        String normalizedUserId = normalizeUserId(userId);
+        userService.assertUserExists(normalizedUserId);
+        return conversationService.listConversationMessages(normalizedUserId, conversationId);
+    }
+
     @PatchMapping("/{conversationId}")
     public ConversationService.ConversationResponse rename(
             @RequestHeader(USER_ID_HEADER) String userId,
@@ -53,6 +62,16 @@ public class ConversationController {
         String normalizedUserId = normalizeUserId(userId);
         userService.assertUserExists(normalizedUserId);
         return conversationService.renameConversation(normalizedUserId, conversationId, request);
+    }
+
+    @PatchMapping("/{conversationId}/pin")
+    public ConversationService.ConversationResponse pin(
+            @RequestHeader(USER_ID_HEADER) String userId,
+            @PathVariable String conversationId,
+            @RequestBody ConversationService.PinConversationRequest request) {
+        String normalizedUserId = normalizeUserId(userId);
+        userService.assertUserExists(normalizedUserId);
+        return conversationService.pinConversation(normalizedUserId, conversationId, request);
     }
 
     @DeleteMapping("/{conversationId}")

@@ -1,97 +1,174 @@
 <template>
   <a-layout class="basic-layout">
-    <a-layout-header class="header">
-      <div class="header-left">
-        <img alt="logo" class="logo" src="@/assets/img.png" />
-        <span class="title">AI Literature</span>
+    <a-layout-header class="shell-header">
+      <div class="brand-block">
+        <div class="brand-mark">
+          <img alt="AI Literature" class="logo" src="@/assets/img.png" />
+        </div>
+        <span class="brand-title">AI Literature</span>
       </div>
-      <div class="header-right">
+
+      <div class="user-pill">
         <a-avatar class="user-avatar" :size="34">
           <template #icon><UserOutlined /></template>
         </a-avatar>
-        <span class="username">{{ DEFAULT_USER.username }}</span>
+        <div class="user-copy">
+          <span class="user-label">Account</span>
+          <span class="username">{{ DEFAULT_USER.username }}</span>
+        </div>
       </div>
     </a-layout-header>
 
     <a-layout class="main-layout">
       <a-layout-sider
-        :width="300"
-        :collapsed-width="64"
+        :width="312"
+        :collapsed-width="72"
         :collapsed="collapsed"
         theme="light"
         class="left-sider"
         :trigger="null"
       >
-        <div class="sider-header" :class="{ 'sider-header-collapsed': collapsed }">
-          <span v-if="!collapsed" class="sider-title">Conversations</span>
-          <div class="sider-actions">
-            <a-tooltip title="New conversation">
-              <a-button type="text" shape="circle" @click="handleCreateConversation">
-                <template #icon><PlusOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-button type="text" shape="circle" @click="toggleCollapse">
-              <template #icon>
-                <MenuUnfoldOutlined v-if="collapsed" />
-                <MenuFoldOutlined v-else />
-              </template>
-            </a-button>
+        <div class="sider-panel">
+          <div class="sider-header" :class="{ 'sider-header-collapsed': collapsed }">
+            <div v-if="!collapsed" class="sider-copy">
+              <span class="sider-title">Conversations</span>
+            </div>
+
+            <div class="sider-actions" :class="{ 'sider-actions-collapsed': collapsed }">
+              <a-tooltip title="New conversation">
+                <a-button
+                  class="sider-button sider-button-primary"
+                  type="text"
+                  shape="circle"
+                  @click="handleCreateConversation"
+                >
+                  <template #icon><PlusOutlined /></template>
+                </a-button>
+              </a-tooltip>
+              <a-tooltip :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+                <a-button class="sider-button" type="text" shape="circle" @click="toggleCollapse">
+                  <template #icon>
+                    <MenuUnfoldOutlined v-if="collapsed" />
+                    <MenuFoldOutlined v-else />
+                  </template>
+                </a-button>
+              </a-tooltip>
+            </div>
           </div>
-        </div>
 
-        <div class="conversation-list">
-          <div
-            v-for="item in conversations"
-            :key="item.conversationId"
-            class="conversation-item"
-            :class="{
-              'conversation-item-active': item.conversationId === activeConversationId,
-              'conversation-item-collapsed': collapsed
-            }"
-            @click="handleSelectConversation(item.conversationId)"
-          >
-            <template v-if="editingConversationId === item.conversationId && !collapsed">
-              <a-input
-                ref="renameInputRef"
-                v-model:value="editingTitle"
-                size="small"
-                class="rename-input"
-                @pressEnter="handleSubmitRename(item.conversationId)"
-                @click.stop
-              />
-              <div class="rename-actions">
-                <a-button type="text" size="small" @click.stop="handleSubmitRename(item.conversationId)">
-                  <template #icon><CheckOutlined /></template>
-                </a-button>
-                <a-button type="text" size="small" @click.stop="cancelRename">
-                  <template #icon><CloseOutlined /></template>
-                </a-button>
-              </div>
-            </template>
-
-            <template v-else>
-              <FileTextOutlined class="conversation-icon" />
-              <span v-if="!collapsed" class="conversation-title">{{ item.title }}</span>
-              <a-button
-                v-if="!collapsed"
-                class="rename-trigger"
-                type="text"
-                size="small"
-                @click.stop="startRename(item.conversationId, item.title)"
+          <div class="conversation-list">
+            <template v-if="conversationSections.length > 0">
+              <section
+                v-for="section in conversationSections"
+                :key="section.key"
+                class="conversation-section"
               >
-                <template #icon><EditOutlined /></template>
-              </a-button>
-            </template>
-          </div>
+                <div v-if="!collapsed" class="section-header">
+                  <span class="section-title">{{ section.title }}</span>
+                  <span class="section-count">{{ section.items.length }}</span>
+                </div>
 
-          <div v-if="!isConversationLoading && conversations.length === 0 && !collapsed" class="empty-text">
-            No conversation yet. Click + to create one.
+                <div class="section-items">
+                  <div
+                    v-for="item in section.items"
+                    :key="item.conversationId"
+                    class="conversation-item"
+                    :class="{
+                      'conversation-item-active': item.conversationId === activeConversationId,
+                      'conversation-item-collapsed': collapsed,
+                      'conversation-item-pinned': item.pinned,
+                    }"
+                    @click="handleSelectConversation(item.conversationId)"
+                  >
+                    <span v-if="item.pinned" class="pin-marker"></span>
+
+                    <template v-if="editingConversationId === item.conversationId && !collapsed">
+                      <div class="rename-panel" @click.stop>
+                        <a-input
+                          ref="renameInputRef"
+                          v-model:value="editingTitle"
+                          size="large"
+                          class="rename-input"
+                          maxlength="255"
+                          @pressEnter="handleSubmitRename(item.conversationId)"
+                        />
+                        <div class="rename-actions">
+                          <button type="button" class="rename-button" @click="cancelRename">Cancel</button>
+                          <button
+                            type="button"
+                            class="rename-button rename-button-primary"
+                            @click="handleSubmitRename(item.conversationId)"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    </template>
+
+                    <template v-else>
+                      <div class="conversation-icon-shell">
+                        <PushpinFilled v-if="item.pinned" class="conversation-pin-icon" />
+                        <FileTextOutlined class="conversation-icon" />
+                      </div>
+
+                      <div v-if="!collapsed" class="conversation-body">
+                        <div class="conversation-row">
+                          <div class="conversation-main">
+                            <div class="conversation-title">{{ item.title }}</div>
+                            <div class="conversation-meta">
+                              {{ item.pinned ? 'Pinned' : 'Updated' }} - {{ formatConversationDate(item.updatedAt) }}
+                            </div>
+                          </div>
+
+                          <div class="conversation-side">
+                            <span class="conversation-time">{{ formatConversationTime(item.updatedAt) }}</span>
+                            <a-dropdown :trigger="['click']" placement="bottomRight">
+                              <a-button
+                                class="conversation-menu-button"
+                                type="text"
+                                size="small"
+                                :disabled="isConversationBusy(item.conversationId)"
+                                @click.stop
+                              >
+                                <template #icon><MoreOutlined /></template>
+                              </a-button>
+
+                              <template #overlay>
+                                <a-menu @click="handleConversationMenuClick($event, item.conversationId, item.title, item.pinned)">
+                                  <a-menu-item key="rename">
+                                    <EditOutlined />
+                                    Rename
+                                  </a-menu-item>
+                                  <a-menu-item key="pin">
+                                    <PushpinOutlined />
+                                    {{ item.pinned ? 'Unpin' : 'Pin' }}
+                                  </a-menu-item>
+                                  <a-menu-divider />
+                                  <a-menu-item key="delete" danger>
+                                    <DeleteOutlined />
+                                    Delete
+                                  </a-menu-item>
+                                </a-menu>
+                              </template>
+                            </a-dropdown>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </section>
+            </template>
+
+            <div v-else-if="!isConversationLoading && !collapsed" class="empty-text">
+              No conversations yet. Create one to get started.
+            </div>
           </div>
         </div>
       </a-layout-sider>
 
       <a-layout-content class="content">
-        <div class="chat-placeholder">
+        <div class="content-shell">
           <router-view />
         </div>
       </a-layout-content>
@@ -100,24 +177,32 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import { message, Modal } from 'ant-design-vue';
 import {
-  CheckOutlined,
-  CloseOutlined,
+  DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoreOutlined,
   PlusOutlined,
+  PushpinFilled,
+  PushpinOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue';
 import { useConversationState } from '@/composables/useConversationState';
 import { DEFAULT_USER } from '@/constants/user';
 
+interface MenuClickEvent {
+  key: string | number;
+}
+
 const collapsed = ref(false);
 const editingConversationId = ref('');
 const editingTitle = ref('');
+const deletingConversationId = ref('');
+const pinningConversationId = ref('');
 const renameInputRef = ref();
 
 const {
@@ -126,12 +211,81 @@ const {
   isConversationLoading,
   initializeConversations,
   createConversation,
+  deleteConversation,
   renameConversation,
+  togglePinConversation,
   setActiveConversation,
 } = useConversationState();
 
+const pinnedConversations = computed(() => conversations.value.filter((item) => item.pinned));
+const recentConversations = computed(() => conversations.value.filter((item) => !item.pinned));
+
+const conversationSections = computed(() => {
+  if (collapsed.value) {
+    return [
+      {
+        key: 'all',
+        title: 'All',
+        items: conversations.value,
+      },
+    ];
+  }
+
+  return [
+    ...(pinnedConversations.value.length > 0
+      ? [
+          {
+            key: 'pinned',
+            title: 'Pinned',
+            items: pinnedConversations.value,
+          },
+        ]
+      : []),
+    ...(recentConversations.value.length > 0
+      ? [
+          {
+            key: 'recent',
+            title: 'Recent',
+            items: recentConversations.value,
+          },
+        ]
+      : []),
+  ];
+});
+
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+});
+
+const fullDateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 const toggleCollapse = () => {
   collapsed.value = !collapsed.value;
+};
+
+const isConversationBusy = (conversationId: string) => {
+  return deletingConversationId.value === conversationId || pinningConversationId.value === conversationId;
+};
+
+const formatConversationTime = (value: string) => {
+  return timeFormatter.format(new Date(value));
+};
+
+const formatConversationDate = (value: string) => {
+  const date = new Date(value);
+  const now = new Date();
+  const sameYear = now.getFullYear() === date.getFullYear();
+  return sameYear ? dateFormatter.format(date) : fullDateFormatter.format(date);
 };
 
 const handleCreateConversation = async () => {
@@ -170,7 +324,7 @@ const handleSubmitRename = async (conversationId: string) => {
     return;
   }
   if (title.length > 255) {
-    message.warning('Conversation title length must be <= 255');
+    message.warning('Conversation title length must be 255 characters or fewer');
     return;
   }
 
@@ -181,6 +335,85 @@ const handleSubmitRename = async (conversationId: string) => {
     console.error(error);
     message.error('Failed to rename conversation');
   }
+};
+
+const handleTogglePin = async (conversationId: string, pinned: boolean) => {
+  if (pinningConversationId.value) {
+    return;
+  }
+
+  pinningConversationId.value = conversationId;
+  try {
+    const updated = await togglePinConversation(conversationId, pinned);
+    message.success(updated.pinned ? 'Conversation pinned' : 'Conversation unpinned');
+  } catch (error) {
+    console.error(error);
+    message.error('Failed to update conversation pin');
+  } finally {
+    pinningConversationId.value = '';
+  }
+};
+
+const handleDeleteConversation = async (conversationId: string) => {
+  if (deletingConversationId.value) {
+    return;
+  }
+
+  deletingConversationId.value = conversationId;
+  cancelRename();
+
+  try {
+    await deleteConversation(conversationId);
+    message.success('Conversation deleted');
+  } catch (error) {
+    console.error(error);
+    message.error('Failed to delete conversation');
+  } finally {
+    deletingConversationId.value = '';
+  }
+};
+
+const confirmDeleteConversation = (conversationId: string) => {
+  Modal.confirm({
+    title: 'Delete this conversation permanently?',
+    content: 'The message history in this conversation will be removed.',
+    okText: 'Delete',
+    cancelText: 'Cancel',
+    okType: 'danger',
+    onOk: async () => {
+      await handleDeleteConversation(conversationId);
+    },
+  });
+};
+
+const handleConversationMenuAction = (
+  action: string,
+  conversationId: string,
+  title: string,
+  pinned: boolean,
+) => {
+  if (action === 'rename') {
+    startRename(conversationId, title);
+    return;
+  }
+
+  if (action === 'pin') {
+    void handleTogglePin(conversationId, !pinned);
+    return;
+  }
+
+  if (action === 'delete') {
+    confirmDeleteConversation(conversationId);
+  }
+};
+
+const handleConversationMenuClick = (
+  event: MenuClickEvent,
+  conversationId: string,
+  title: string,
+  pinned: boolean,
+) => {
+  handleConversationMenuAction(String(event.key), conversationId, title, pinned);
 };
 
 onMounted(async () => {
@@ -196,88 +429,116 @@ onMounted(async () => {
 <style scoped>
 .basic-layout {
   height: 100vh;
-  display: flex;
-  flex-direction: column;
+  background: #f3f7ff;
+  color: var(--app-text);
+  overflow: hidden;
 }
 
-.header {
+.shell-header {
+  height: 64px;
+  padding: 0 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #dbe7f5;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #e8e8e8;
-  padding: 0 24px;
-  height: 64px;
 }
 
-.header-left {
+.brand-block {
   display: flex;
   align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .logo {
-  height: 32px;
-  margin-right: 12px;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.title {
+.brand-title {
   font-size: 18px;
   font-weight: 600;
-  color: #1f1f1f;
+  color: #0f172a;
 }
 
-.header-right {
-  display: flex;
+.user-pill {
+  display: inline-flex;
   align-items: center;
   gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid #dbe7f5;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.04);
 }
 
 .user-avatar {
-  background: #1677ff;
+  background: #2563eb;
+}
+
+.user-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.user-label {
+  font-size: 11px;
+  color: #64748b;
 }
 
 .username {
   font-size: 14px;
-  color: #1f1f1f;
-  font-weight: 500;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .main-layout {
   flex: 1;
-  overflow: hidden;
-  background-color: #f0f2f5;
+  min-height: 0;
+  background: transparent;
   padding: 16px;
   gap: 16px;
+  overflow: hidden;
 }
 
 .left-sider,
 .content {
-  background-color: #fff !important;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: #ffffff !important;
+  border: 1px solid #dbe7f5;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.05);
   overflow: hidden;
 }
 
 .left-sider {
-  display: flex;
-  flex-direction: column;
-  transition: width 0.2s ease;
   min-width: 0 !important;
 }
 
-.content {
-  flex: 1;
-  margin: 0;
-  overflow-y: auto;
-  background-color: #fff;
+.sider-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .sider-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  padding: 14px 12px 14px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #eff6ff;
 }
 
 .sider-header-collapsed {
@@ -285,15 +546,45 @@ onMounted(async () => {
 }
 
 .sider-title {
+  display: block;
   font-size: 16px;
   font-weight: 600;
-  color: #1f1f1f;
+  color: #0f172a;
 }
 
 .sider-actions {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sider-actions-collapsed {
+  flex-direction: column;
+}
+
+.sider-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #475569;
+  border: 1px solid #dbe7f5;
+  background: #ffffff;
+}
+
+.sider-button:hover {
+  color: #2563eb;
+  background: #f8fbff;
+}
+
+.sider-button-primary {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.sider-button-primary:hover {
+  color: #ffffff;
+  background: #1d4ed8;
 }
 
 .conversation-list {
@@ -302,73 +593,221 @@ onMounted(async () => {
   padding: 12px;
 }
 
-.conversation-item {
+.conversation-section + .conversation-section {
+  margin-top: 16px;
+}
+
+.section-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  justify-content: space-between;
+  padding: 0 4px 8px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-count {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conversation-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #ffffff;
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  margin-bottom: 6px;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .conversation-item:hover {
-  background-color: #f5f5f5;
+  background: #f8fbff;
+  border-color: #dbeafe;
 }
 
 .conversation-item-active {
-  background-color: #e6f4ff;
-  color: #1677ff;
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
 
 .conversation-item-collapsed {
   justify-content: center;
-  padding: 10px 0;
+  align-items: center;
+  padding: 12px 8px;
 }
 
-.conversation-icon {
-  font-size: 14px;
+.pin-marker {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.conversation-icon-shell {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid #dbe7f5;
+  background: #f8fbff;
+  color: #2563eb;
+  position: relative;
+}
+
+.conversation-pin-icon {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  color: #2563eb;
+}
+
+.conversation-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.conversation-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.conversation-main {
+  min-width: 0;
+  flex: 1;
 }
 
 .conversation-title {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
 }
 
-.rename-trigger {
-  opacity: 0;
-  transition: opacity 0.2s ease;
+.conversation-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
 }
 
-.conversation-item:hover .rename-trigger,
-.conversation-item-active .rename-trigger {
-  opacity: 1;
+.conversation-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.rename-input {
-  flex: 1;
+.conversation-time {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.conversation-menu-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #64748b;
+}
+
+.conversation-menu-button:hover {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.rename-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rename-input :deep(.ant-input) {
+  height: 40px;
+  border-radius: 10px;
+  border-color: #cbd5e1;
 }
 
 .rename-actions {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rename-button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #dbe7f5;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.rename-button-primary {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .empty-text {
-  color: #8c8c8c;
+  padding: 12px 4px;
+  color: #64748b;
   font-size: 13px;
-  padding: 8px 4px;
 }
 
-.chat-placeholder {
-  height: 100%;
+.content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.content-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+@media (max-width: 960px) {
+  .main-layout {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .conversation-menu-button {
+    opacity: 1;
+  }
 }
 </style>

@@ -56,3 +56,12 @@
 # 合规与安全
 - 不提供危险性生物/化学实验的可执行操作细节。
 - 对高风险内容只给高层次建议与文献方向。
+
+# Markdown Output Contract
+- Use a strict Markdown subset for every answer.
+- Headings must use `# ` or `## ` with a space after the hash marks.
+- Lists must use `- ` or `1. ` with a space after the marker.
+- Leave one blank line between paragraphs and any heading, list, table, or fenced code block.
+- Fenced code blocks must always be closed with matching backticks.
+- Citations must use `{source=<name>; section=<optional>; chunk=<optional>; page=<optional>}`.
+- Do not use non-standard bullets such as `•`, `·`, or `●`.
