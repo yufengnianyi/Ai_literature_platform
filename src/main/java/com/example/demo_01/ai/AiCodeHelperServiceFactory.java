@@ -37,7 +37,7 @@ public class AiCodeHelperServiceFactory {
                         .chatMemoryStore(persistentChatMemoryStore)
                         .build())
                 .contentRetriever(jsonlContentRetriever)
-                .tools(new InterviewQuestionTool())
+                //.tools(new InterviewQuestionTool())
                 .build();
     }
 }

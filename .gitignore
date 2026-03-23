@@ -8,6 +8,7 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+src/main/resources/docs_1
 
 ### STS ###
 .apt_generated

@@ -2,8 +2,15 @@
   <div class="chat-container">
     <div class="chat-stage">
       <div class="chat-stage-header">
-        <div>
+        <div class="chat-stage-copy">
+          <div class="history-kicker">
+            <span class="history-dot" :class="{ 'history-dot-loading': isHistoryLoading }"></span>
+            {{ historyStatusText }}
+          </div>
           <h2 class="chat-stage-title">Research assistant</h2>
+          <p class="chat-stage-subtitle">
+            {{ activeConversationTitle }}
+          </p>
         </div>
         <div class="chat-stage-meta">
           {{ isHistoryLoading ? 'Loading...' : `${messages.length} message${messages.length === 1 ? '' : 's'}` }}
@@ -38,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import ChatComposer from '../components/chat/ChatComposer.vue';
@@ -46,7 +53,7 @@ import { useChat } from '../composables/useChat';
 import { useConversationState } from '@/composables/useConversationState';
 
 const messagesContainer = ref<HTMLElement | null>(null);
-const { activeConversationId } = useConversationState();
+const { activeConversationId, conversations } = useConversationState();
 
 const {
   messages,
@@ -55,6 +62,38 @@ const {
   loadConversationMessages,
   sendMessage,
 } = useChat();
+
+const activeConversation = computed(() =>
+  conversations.value.find((item) => item.conversationId === activeConversationId.value),
+);
+
+const activeConversationTitle = computed(() => {
+  if (isHistoryLoading.value) {
+    return 'Loading saved messages for the selected conversation.';
+  }
+
+  if (activeConversation.value?.title) {
+    return activeConversation.value.title;
+  }
+
+  return 'Start a new thread or select an existing conversation from the sidebar.';
+});
+
+const historyStatusText = computed(() => {
+  if (isHistoryLoading.value) {
+    return 'Loading history';
+  }
+
+  if (activeConversationId.value && messages.value.length > 0) {
+    return 'History loaded';
+  }
+
+  if (activeConversationId.value) {
+    return 'Conversation ready';
+  }
+
+  return 'No active conversation';
+});
 
 const scrollToBottom = async () => {
   await nextTick();
@@ -122,11 +161,47 @@ onMounted(() => {
   background: #f8fbff;
 }
 
+.chat-stage-copy {
+  min-width: 0;
+}
+
+.history-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.12);
+}
+
+.history-dot-loading {
+  animation: historyPulse 1.2s ease-in-out infinite;
+}
+
 .chat-stage-title {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: #111827;
+}
+
+.chat-stage-subtitle {
+  margin: 6px 0 0;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748b;
 }
 
 .chat-stage-meta {
@@ -165,6 +240,19 @@ onMounted(() => {
   max-width: 420px;
   margin: 0;
   line-height: 1.6;
+}
+
+@keyframes historyPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(0.78);
+    opacity: 0.45;
+  }
 }
 
 @media (max-width: 960px) {

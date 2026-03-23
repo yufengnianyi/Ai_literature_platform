@@ -1,0 +1,86 @@
+package com.example.demo_01.ai.rag;
+
+import com.example.demo_01.ai.rag.api.RagBatchController;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchAcceptedResponse;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchStatus;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionBatchRecord;
+import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@WebMvcTest(RagBatchController.class)
+class RagBatchApiControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private RagBatchIngestionService ragBatchIngestionService;
+
+    @Test
+    void folderBatchShouldReturnAcceptedPayload() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        when(ragBatchIngestionService.ingestFolder("docs/pdfs"))
+                .thenReturn(new RagBatchAcceptedResponse(batchId, RagBatchStatus.QUEUED, 12));
+
+        mockMvc.perform(post("/rag/batches/folder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"folderPath":"docs/pdfs"}
+                                """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.totalFiles").value(12));
+    }
+
+    @Test
+    void getBatchShouldReturnBatchState() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        when(ragBatchIngestionService.getBatch(batchId)).thenReturn(new RagIngestionBatchRecord(
+                batchId,
+                "D:/Project/ai_coding_platform/demo_01/docs/pdfs",
+                RagBatchStatus.COMPLETED,
+                3,
+                3,
+                2,
+                1,
+                0,
+                44,
+                1500L,
+                1480L,
+                100L,
+                200L,
+                300L,
+                50L,
+                40L,
+                600L,
+                70L,
+                1360L,
+                Instant.parse("2026-03-20T06:00:00Z"),
+                Instant.parse("2026-03-20T06:22:40Z"),
+                Instant.parse("2026-03-20T06:00:00Z"),
+                Instant.parse("2026-03-20T06:22:40Z")
+        ));
+
+        mockMvc.perform(get("/rag/batches/{batchId}", batchId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.providerTokensTotal").value(1480))
+                .andExpect(jsonPath("$.totalElapsedMs").value(1360));
+    }
+}

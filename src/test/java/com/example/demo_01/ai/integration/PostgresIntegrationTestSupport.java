@@ -47,6 +47,6 @@ abstract class PostgresIntegrationTestSupport {
 
     @AfterEach
     void cleanTables() {
-        jdbcTemplate.execute("truncate table ai_chat_message_history, ai_chat_memory_snapshot, ai_chat_conversation, app_user, rag_ingestion_state, embedding_store restart identity cascade");
+        jdbcTemplate.execute("truncate table rag_ingestion_batch, rag_ingestion_job, rag_document, ai_chat_message_history, ai_chat_memory_snapshot, ai_chat_conversation, app_user, rag_ingestion_state, embedding_store restart identity cascade");
     }
 }

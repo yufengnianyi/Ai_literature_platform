@@ -21,6 +21,7 @@ cp .env.example .env
 ```
 
 4. Edit `.env` with the real server values.
+   Keep `APP_AI_RAG_GROBID_BASE_URL=http://grobid:8070` unless you intentionally run GROBID outside this Compose stack.
 5. Configure Apache as the only public entrypoint:
 
 ```apache
@@ -67,7 +68,7 @@ What the script does:
 
 - Verifies the server worktree is clean.
 - Pulls `origin/main` with `git pull --ff-only`.
-- Rebuilds the stack with `docker compose -p ai_literature -f docker-compose.prod.yml up -d --build`.
+- Rebuilds the stack with `docker compose -p ai_literature -f docker-compose.prod.yml up -d --build`, including the internal `grobid` service.
 - Keeps the frontend bound to `127.0.0.1:8088` so Apache remains the only public endpoint.
 - Checks container status, `/api/actuator/health`, `/api/rag/ingestions/status`, and the `embedding_store` row count.
 - Warns if docs changed and RAG rebuild is required.

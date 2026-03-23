@@ -2,9 +2,9 @@ package com.example.demo_01.ai.rag;
 
 import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.config.RagBootstrapMode;
-import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.store.embedding.EmbeddingStore;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagVectorIngestionResult;
+import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
+import dev.langchain4j.data.document.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -36,16 +36,13 @@ class RagIngestionServiceTest {
     Path tempDir;
 
     @Mock
-    private EmbeddingModel quwenEmbeddingModel;
-
-    @Mock
-    private EmbeddingStore<TextSegment> embeddingStore;
-
-    @Mock
     private JsonlLoader jsonlLoader;
 
     @Mock
     private JdbcTemplate jdbcTemplate;
+
+    @Mock
+    private RagVectorIngestionService ragVectorIngestionService;
 
     private RagIngestionService ragIngestionService;
     private AiPersistenceProperties properties;
@@ -61,11 +58,10 @@ class RagIngestionServiceTest {
         properties.getRag().setEmbeddingDimension(1024);
 
         ragIngestionService = new RagIngestionService();
-        ReflectionTestUtils.setField(ragIngestionService, "quwenEmbeddingModel", quwenEmbeddingModel);
-        ReflectionTestUtils.setField(ragIngestionService, "embeddingStore", embeddingStore);
         ReflectionTestUtils.setField(ragIngestionService, "jsonlLoader", jsonlLoader);
         ReflectionTestUtils.setField(ragIngestionService, "jdbcTemplate", jdbcTemplate);
         ReflectionTestUtils.setField(ragIngestionService, "properties", properties);
+        ReflectionTestUtils.setField(ragIngestionService, "ragVectorIngestionService", ragVectorIngestionService);
     }
 
     @Test
@@ -74,7 +70,7 @@ class RagIngestionServiceTest {
 
         ragIngestionService.ingest(RagBootstrapMode.SKIP);
 
-        verifyNoInteractions(jdbcTemplate, jsonlLoader);
+        verifyNoInteractions(jdbcTemplate, jsonlLoader, ragVectorIngestionService);
     }
 
     @Test
@@ -91,11 +87,13 @@ class RagIngestionServiceTest {
     @Test
     void ingestShouldLoadDocumentsWhenIfEmptyAndTableIsEmpty() {
         when(jdbcTemplate.queryForObject("select count(*) from embedding_store", Long.class)).thenReturn(0L);
-        when(jsonlLoader.loadDirectory(any(Path.class))).thenReturn(List.of());
+        when(jsonlLoader.loadDirectory(any(Path.class))).thenReturn(List.of(Document.from("hello")));
+        when(ragVectorIngestionService.ingestDocuments(any())).thenReturn(new RagVectorIngestionResult(1, 5L, 6L, 7L, 8L));
 
         ragIngestionService.ingest(RagBootstrapMode.IF_EMPTY);
 
         verify(jsonlLoader).loadDirectory(Path.of(properties.getRag().getDocsPath()));
+        verify(ragVectorIngestionService).ingestDocuments(any());
     }
 
     @Test

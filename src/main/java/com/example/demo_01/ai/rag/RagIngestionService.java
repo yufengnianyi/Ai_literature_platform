@@ -2,13 +2,9 @@ package com.example.demo_01.ai.rag;
 
 import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.config.RagBootstrapMode;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagVectorIngestionResult;
+import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
 import dev.langchain4j.data.document.Document;
-import dev.langchain4j.data.document.splitter.DocumentByParagraphSplitter;
-import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
-import dev.langchain4j.store.embedding.IngestionResult;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,12 +36,6 @@ public class RagIngestionService {
     private static final String DATASET_KEY = "jsonl-docs";
 
     @Resource
-    private EmbeddingModel quwenEmbeddingModel;
-
-    @Resource
-    private EmbeddingStore<TextSegment> embeddingStore;
-
-    @Resource
     private JsonlLoader jsonlLoader;
 
     @Resource
@@ -53,6 +43,9 @@ public class RagIngestionService {
 
     @Resource
     private AiPersistenceProperties properties;
+
+    @Resource
+    private RagVectorIngestionService ragVectorIngestionService;
 
     public void bootstrapEmbeddings() {
         ingest(properties.getRag().getBootstrapMode());
@@ -121,29 +114,10 @@ public class RagIngestionService {
             return;
         }
 
-        DocumentByParagraphSplitter splitter = new DocumentByParagraphSplitter(1200, 200);
-        EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
-                .documentSplitter(splitter)
-                .textSegmentTransformer(segment -> {
-                    String title = segment.metadata().getString("title");
-                    String section = segment.metadata().getString("section");
-                    StringBuilder builder = new StringBuilder();
-                    if (title != null && !title.isBlank()) {
-                        builder.append("Paper: ").append(title).append('\n');
-                    }
-                    if (section != null && !section.isBlank()) {
-                        builder.append("Section: ").append(section).append('\n');
-                    }
-                    builder.append(segment.text());
-                    return TextSegment.from(builder.toString(), segment.metadata());
-                })
-                .embeddingModel(quwenEmbeddingModel)
-                .embeddingStore(embeddingStore)
-                .build();
-
-        IngestionResult result = ingestor.ingest(documents);
+        RagVectorIngestionResult result = ragVectorIngestionService.ingestDocuments(documents);
         updateDatasetHash(datasetHash);
-        log.info("Persisted {} JSONL chunks to pgvector. Token usage: {}", documents.size(), result.tokenUsage());
+        log.info("Persisted {} JSONL chunks to pgvector. Estimated tokens: {}, provider tokens: {}",
+                result.chunkCount(), result.estimatedTokensTotal(), result.providerTokensTotal());
     }
 
     private long countEmbeddings() {

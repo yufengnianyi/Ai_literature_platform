@@ -122,14 +122,16 @@ const parsed = computed(() => {
 .message-wrapper {
   display: flex;
   margin-bottom: 24px;
-  max-width: min(92%, 920px);
+  width: 100%;
 }
 
 .user-message {
+  justify-content: flex-end;
   margin-left: auto;
 }
 
 .ai-message {
+  justify-content: flex-start;
   margin-right: auto;
 }
 
@@ -137,7 +139,8 @@ const parsed = computed(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: fit-content;
+  max-width: min(92%, 920px);
 }
 
 .citations-header {
@@ -157,12 +160,15 @@ const parsed = computed(() => {
 }
 
 .user-message .message-content {
+  width: fit-content;
+  max-width: min(100%, 42rem);
   background: #2563eb;
   border-color: #2563eb;
   color: #ffffff;
 }
 
 .ai-message .message-content {
+  width: min(100%, 920px);
   background: #ffffff;
   color: #111827;
 }

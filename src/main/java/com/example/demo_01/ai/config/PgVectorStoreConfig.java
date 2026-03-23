@@ -1,6 +1,5 @@
 package com.example.demo_01.ai.config;
 
-import dev.langchain4j.community.model.dashscope.QwenTokenCountEstimator;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.TokenCountEstimator;
 import dev.langchain4j.store.embedding.EmbeddingStore;
@@ -36,8 +35,7 @@ public class PgVectorStoreConfig {
 
     @Bean
     public TokenCountEstimator tokenCountEstimator(
-            @Value("${langchain4j.community.dashscope.chat-model.api-key}") String apiKey,
-            @Value("${langchain4j.community.dashscope.chat-model.model-name}") String modelName) {
-        return new QwenTokenCountEstimator(apiKey, modelName);
+            @Value("${langchain4j.community.dashscope.embedding-model.model-name}") String modelName) {
+        return new HeuristicTokenCountEstimator(modelName);
     }
 }

@@ -24,4 +24,4 @@ printf '%s\n' "$rebuild_response"
 
 print_step "RAG status after rebuild"
 after_response="$(curl --silent --show-error --fail "$status_url")"
-printf '%s\n' "$after_response"
+printf '%s\n' "$after_response"w
