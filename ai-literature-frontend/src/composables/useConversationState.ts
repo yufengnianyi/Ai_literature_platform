@@ -1,14 +1,19 @@
 import { readonly, ref } from 'vue';
 import { conversationService } from '@/services/conversation';
 import type { Conversation } from '@/types/conversation';
-import { DEFAULT_USER } from '@/constants/user';
+import { useLoginUserStore } from '@/stores/loginUser';
+import { pinia } from '@/stores';
 
 const conversationsState = ref<Conversation[]>([]);
 const activeConversationIdState = ref('');
 const loadingState = ref(false);
 const initializedState = ref(false);
 let initializePromise: Promise<void> | null = null;
-const activeConversationStorageKey = `ai-literature.activeConversationId:${DEFAULT_USER.userId}`;
+
+const getStorageKey = () => {
+  const loginUserStore = useLoginUserStore(pinia);
+  return `ai-literature.activeConversationId:${loginUserStore.loginUser?.userId ?? 'anonymous'}`;
+};
 
 const sortConversations = (items: Conversation[]): Conversation[] => {
   return [...items].sort((a, b) => {
@@ -28,13 +33,14 @@ const readPersistedActiveConversationId = (): string => {
   if (typeof window === 'undefined') {
     return '';
   }
-  return window.localStorage.getItem(activeConversationStorageKey) || '';
+  return window.localStorage.getItem(getStorageKey()) || '';
 };
 
 const persistActiveConversationId = (conversationId: string) => {
   if (typeof window === 'undefined') {
     return;
   }
+  const activeConversationStorageKey = getStorageKey();
   if (conversationId) {
     window.localStorage.setItem(activeConversationStorageKey, conversationId);
     return;
@@ -155,6 +161,15 @@ const initializeConversations = async (): Promise<void> => {
   }
 };
 
+const resetConversationState = () => {
+  conversationsState.value = [];
+  activeConversationIdState.value = '';
+  loadingState.value = false;
+  initializedState.value = false;
+  initializePromise = null;
+  persistActiveConversationId('');
+};
+
 export function useConversationState() {
   return {
     conversations: readonly(conversationsState),
@@ -167,5 +182,6 @@ export function useConversationState() {
     togglePinConversation,
     deleteConversation,
     setActiveConversation,
+    resetConversationState,
   };
 }

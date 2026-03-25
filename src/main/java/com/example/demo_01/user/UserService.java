@@ -1,77 +1,42 @@
 package com.example.demo_01.user;
 
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
+import com.example.demo_01.user.model.dto.UserAddRequest;
+import com.example.demo_01.user.model.dto.UserLoginRequest;
+import com.example.demo_01.user.model.dto.UserQueryRequest;
+import com.example.demo_01.user.model.dto.UserRegisterRequest;
+import com.example.demo_01.user.model.dto.UserUpdateRequest;
+import com.example.demo_01.user.model.entity.User;
+import com.example.demo_01.user.model.vo.LoginUserVO;
+import com.example.demo_01.user.model.vo.UserVO;
+import com.mybatisflex.core.paginate.Page;
+import com.mybatisflex.core.service.IService;
+import jakarta.servlet.http.HttpServletRequest;
 
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+public interface UserService extends IService<User> {
 
-@Service
-public class UserService {
+    String userRegister(UserRegisterRequest request);
 
-    private final JdbcTemplate jdbcTemplate;
+    LoginUserVO userLogin(UserLoginRequest request, HttpServletRequest httpServletRequest);
 
-    public UserService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+    LoginUserVO getCurrentLoginUser(HttpServletRequest request);
 
-    public UserResponse createUser(CreateUserRequest request) {
-        if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
-        }
-        String username = normalizeUsername(request.username());
-        String userId = UUID.randomUUID().toString();
-        Timestamp now = Timestamp.from(Instant.now());
-        try {
-            jdbcTemplate.update("""
-                    insert into app_user (user_id, username, created_at, updated_at)
-                    values (?, ?, ?, ?)
-                    """, userId, username, now, now);
-        } catch (DataIntegrityViolationException ex) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "username already exists");
-        }
-        return new UserResponse(userId, username, now.toInstant(), now.toInstant());
-    }
+    User getLoginUser(HttpServletRequest request);
 
-    public UserResponse getUser(String userId) {
-        List<UserResponse> users = jdbcTemplate.query("""
-                select user_id, username, created_at, updated_at
-                from app_user
-                where user_id = ?
-                """, (rs, rowNum) -> new UserResponse(
-                rs.getString("user_id"),
-                rs.getString("username"),
-                rs.getTimestamp("created_at").toInstant(),
-                rs.getTimestamp("updated_at").toInstant()
-        ), userId);
-        if (users.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
-        }
-        return users.get(0);
-    }
+    boolean userLogout(HttpServletRequest request);
 
-    public void assertUserExists(String userId) {
-        Integer count = jdbcTemplate.queryForObject("select count(*) from app_user where user_id = ?", Integer.class, userId);
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
-        }
-    }
+    String addUser(UserAddRequest request);
 
-    private String normalizeUsername(String username) {
-        if (username == null || username.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required");
-        }
-        return username.trim();
-    }
+    UserVO getUserById(String userId);
 
-    public record CreateUserRequest(String username) {
-    }
+    boolean updateUser(UserUpdateRequest request);
 
-    public record UserResponse(String userId, String username, Instant createdAt, Instant updatedAt) {
-    }
+    boolean deleteUser(String userId);
+
+    Page<UserVO> listUserByPage(UserQueryRequest request);
+
+    LoginUserVO getLoginUserVO(User user);
+
+    UserVO getUserVO(User user);
+
+    boolean isAdmin(User user);
 }

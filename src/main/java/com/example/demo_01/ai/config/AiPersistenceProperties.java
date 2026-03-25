@@ -33,8 +33,8 @@ public class AiPersistenceProperties {
         @Min(1)
         private int embeddingDimension;
 
-        @NotBlank
-        private String docsPath = "src/main/resources/docs";
+
+
 
         @NotBlank
         private String vectorTable = "embedding_store";
@@ -51,7 +51,8 @@ public class AiPersistenceProperties {
         @Valid
         private Chunking chunking = new Chunking();
 
-        private RagBootstrapMode bootstrapMode = RagBootstrapMode.IF_EMPTY;
+
+
     }
 
     @Data
@@ -89,3 +90,4 @@ public class AiPersistenceProperties {
         private String strategyVersion = "grobid-section-sentence-v1";
     }
 }
+

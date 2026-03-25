@@ -5,17 +5,44 @@
         <div class="brand-mark">
           <img alt="AI Literature" class="logo" src="@/assets/img.png" />
         </div>
-        <span class="brand-title">AI Literature</span>
+        <div class="brand-copy">
+          <span class="brand-title">AI Literature</span>
+          <span class="brand-subtitle">Session workspace</span>
+        </div>
       </div>
 
-      <div class="user-pill">
-        <a-avatar class="user-avatar" :size="34">
-          <template #icon><UserOutlined /></template>
-        </a-avatar>
-        <div class="user-copy">
-          <span class="user-label">Account</span>
-          <span class="username">{{ DEFAULT_USER.username }}</span>
-        </div>
+      <div class="header-actions">
+        <a-space :size="12">
+          <a-button :type="isHomeRoute ? 'primary' : 'default'" @click="goHome">Chat</a-button>
+          <a-button
+            v-if="isAdmin"
+            :type="isAdminRoute ? 'primary' : 'default'"
+            @click="goUserManage"
+          >
+            Users
+          </a-button>
+        </a-space>
+
+        <a-dropdown placement="bottomRight">
+          <div class="user-pill">
+            <a-avatar class="user-avatar" :size="34" :src="loginUser?.userAvatar">
+              <template #icon><UserOutlined /></template>
+            </a-avatar>
+            <div class="user-copy">
+              <span class="user-label">{{ isAdmin ? 'Administrator' : 'Account' }}</span>
+              <span class="username">{{ displayName }}</span>
+            </div>
+          </div>
+
+          <template #overlay>
+            <a-menu @click="handleUserMenuClick">
+              <a-menu-item key="chat">Chat</a-menu-item>
+              <a-menu-item v-if="isAdmin" key="manage">User Manage</a-menu-item>
+              <a-menu-divider />
+              <a-menu-item key="logout" danger>Logout</a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
       </div>
     </a-layout-header>
 
@@ -32,6 +59,7 @@
           <div class="sider-header" :class="{ 'sider-header-collapsed': collapsed }">
             <div v-if="!collapsed" class="sider-copy">
               <span class="sider-title">Conversations</span>
+              <span class="sider-subtitle">{{ loginUser?.userAccount }}</span>
             </div>
 
             <div class="sider-actions" :class="{ 'sider-actions-collapsed': collapsed }">
@@ -178,6 +206,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { message, Modal } from 'ant-design-vue';
 import {
   DeleteOutlined,
@@ -191,13 +220,18 @@ import {
   PushpinOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue';
+import { logout } from '@/api/usersController';
 import { useConversationState } from '@/composables/useConversationState';
-import { DEFAULT_USER } from '@/constants/user';
+import { useLoginUserStore } from '@/stores/loginUser';
+import { USER_ROLE_ADMIN } from '@/constants/user';
 
 interface MenuClickEvent {
   key: string | number;
 }
 
+const router = useRouter();
+const route = useRoute();
+const loginUserStore = useLoginUserStore();
 const collapsed = ref(false);
 const editingConversationId = ref('');
 const editingTitle = ref('');
@@ -215,40 +249,29 @@ const {
   renameConversation,
   togglePinConversation,
   setActiveConversation,
+  resetConversationState,
 } = useConversationState();
+
+const loginUser = computed(() => loginUserStore.loginUser);
+const isAdmin = computed(() => loginUser.value?.userRole === USER_ROLE_ADMIN);
+const displayName = computed(() => loginUser.value?.userName || loginUser.value?.userAccount || 'Workspace user');
+const isHomeRoute = computed(() => route.path === '/');
+const isAdminRoute = computed(() => route.path.startsWith('/admin'));
 
 const pinnedConversations = computed(() => conversations.value.filter((item) => item.pinned));
 const recentConversations = computed(() => conversations.value.filter((item) => !item.pinned));
 
 const conversationSections = computed(() => {
   if (collapsed.value) {
-    return [
-      {
-        key: 'all',
-        title: 'All',
-        items: conversations.value,
-      },
-    ];
+    return [{ key: 'all', title: 'All', items: conversations.value }];
   }
 
   return [
     ...(pinnedConversations.value.length > 0
-      ? [
-          {
-            key: 'pinned',
-            title: 'Pinned',
-            items: pinnedConversations.value,
-          },
-        ]
+      ? [{ key: 'pinned', title: 'Pinned', items: pinnedConversations.value }]
       : []),
     ...(recentConversations.value.length > 0
-      ? [
-          {
-            key: 'recent',
-            title: 'Recent',
-            items: recentConversations.value,
-          },
-        ]
+      ? [{ key: 'recent', title: 'Recent', items: recentConversations.value }]
       : []),
   ];
 });
@@ -277,32 +300,35 @@ const isConversationBusy = (conversationId: string) => {
   return deletingConversationId.value === conversationId || pinningConversationId.value === conversationId;
 };
 
-const formatConversationTime = (value: string) => {
-  return timeFormatter.format(new Date(value));
-};
+const formatConversationTime = (value: string) => timeFormatter.format(new Date(value));
 
 const formatConversationDate = (value: string) => {
   const date = new Date(value);
   const now = new Date();
-  const sameYear = now.getFullYear() === date.getFullYear();
-  return sameYear ? dateFormatter.format(date) : fullDateFormatter.format(date);
+  return now.getFullYear() === date.getFullYear() ? dateFormatter.format(date) : fullDateFormatter.format(date);
 };
 
 const handleCreateConversation = async () => {
   try {
     cancelRename();
     await createConversation();
+    if (!isHomeRoute.value) {
+      await router.push('/');
+    }
   } catch (error) {
     console.error(error);
     message.error('Failed to create conversation');
   }
 };
 
-const handleSelectConversation = (conversationId: string) => {
+const handleSelectConversation = async (conversationId: string) => {
   if (editingConversationId.value && editingConversationId.value !== conversationId) {
     cancelRename();
   }
   setActiveConversation(conversationId);
+  if (!isHomeRoute.value) {
+    await router.push('/');
+  }
 };
 
 const startRename = async (conversationId: string, currentTitle: string) => {
@@ -341,7 +367,6 @@ const handleTogglePin = async (conversationId: string, pinned: boolean) => {
   if (pinningConversationId.value) {
     return;
   }
-
   pinningConversationId.value = conversationId;
   try {
     const updated = await togglePinConversation(conversationId, pinned);
@@ -358,7 +383,6 @@ const handleDeleteConversation = async (conversationId: string) => {
   if (deletingConversationId.value) {
     return;
   }
-
   deletingConversationId.value = conversationId;
   cancelRename();
 
@@ -386,34 +410,58 @@ const confirmDeleteConversation = (conversationId: string) => {
   });
 };
 
-const handleConversationMenuAction = (
-  action: string,
-  conversationId: string,
-  title: string,
-  pinned: boolean,
-) => {
-  if (action === 'rename') {
-    startRename(conversationId, title);
-    return;
-  }
-
-  if (action === 'pin') {
-    void handleTogglePin(conversationId, !pinned);
-    return;
-  }
-
-  if (action === 'delete') {
-    confirmDeleteConversation(conversationId);
-  }
-};
-
 const handleConversationMenuClick = (
   event: MenuClickEvent,
   conversationId: string,
   title: string,
   pinned: boolean,
 ) => {
-  handleConversationMenuAction(String(event.key), conversationId, title, pinned);
+  const action = String(event.key);
+  if (action === 'rename') {
+    void startRename(conversationId, title);
+    return;
+  }
+  if (action === 'pin') {
+    void handleTogglePin(conversationId, !pinned);
+    return;
+  }
+  if (action === 'delete') {
+    confirmDeleteConversation(conversationId);
+  }
+};
+
+const goHome = async () => {
+  await router.push('/');
+};
+
+const goUserManage = async () => {
+  if (isAdmin.value) {
+    await router.push('/admin/user-manage');
+  }
+};
+
+const handleLogout = async () => {
+  try {
+    await logout();
+  } finally {
+    resetConversationState();
+    loginUserStore.clearLoginUser();
+    await router.push('/user/login');
+  }
+};
+
+const handleUserMenuClick = async ({ key }: MenuClickEvent) => {
+  if (key === 'chat') {
+    await goHome();
+    return;
+  }
+  if (key === 'manage') {
+    await goUserManage();
+    return;
+  }
+  if (key === 'logout') {
+    await handleLogout();
+  }
 };
 
 onMounted(async () => {
@@ -429,31 +477,42 @@ onMounted(async () => {
 <style scoped>
 .basic-layout {
   height: 100vh;
-  background: #f3f7ff;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 26%),
+    linear-gradient(180deg, #f3f7ff, #eef4fb);
   color: var(--app-text);
   overflow: hidden;
 }
 
 .shell-header {
-  height: 64px;
+  height: 72px;
   padding: 0 20px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid #dbe7f5;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.brand-block,
+.header-actions,
+.user-pill,
+.brand-copy,
+.user-copy {
+  display: flex;
+  align-items: center;
 }
 
 .brand-block {
-  display: flex;
-  align-items: center;
   gap: 12px;
   min-width: 0;
 }
 
 .brand-mark {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -465,21 +524,38 @@ onMounted(async () => {
   object-fit: cover;
 }
 
+.brand-copy {
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
 .brand-title {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
 }
 
+.brand-subtitle {
+  margin-top: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #64748b;
+}
+
+.header-actions {
+  gap: 14px;
+}
+
 .user-pill {
-  display: inline-flex;
-  align-items: center;
   gap: 10px;
   padding: 8px 12px;
   border-radius: 14px;
   background: linear-gradient(180deg, #ffffff, #f8fbff);
   border: 1px solid #dbe7f5;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.04);
+  cursor: pointer;
 }
 
 .user-avatar {
@@ -487,9 +563,9 @@ onMounted(async () => {
 }
 
 .user-copy {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
   line-height: 1.1;
 }
 
@@ -545,11 +621,23 @@ onMounted(async () => {
   justify-content: center;
 }
 
+.sider-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .sider-title {
   display: block;
   font-size: 16px;
   font-weight: 600;
   color: #0f172a;
+}
+
+.sider-subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .sider-actions {
@@ -633,9 +721,7 @@ onMounted(async () => {
   border-radius: 14px;
   background: #ffffff;
   cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .conversation-item:hover {
@@ -801,13 +887,20 @@ onMounted(async () => {
 }
 
 @media (max-width: 960px) {
+  .shell-header {
+    height: auto;
+    padding: 14px 16px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: space-between;
+  }
+
   .main-layout {
     padding: 12px;
     gap: 12px;
-  }
-
-  .conversation-menu-button {
-    opacity: 1;
   }
 }
 </style>

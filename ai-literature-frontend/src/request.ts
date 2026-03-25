@@ -1,6 +1,32 @@
 import axios from 'axios';
 import { message } from 'ant-design-vue';
-import { API_BASE_URL, DEFAULT_USER } from '@/constants/user';
+import { API_BASE_URL } from '@/constants/user';
+
+const PUBLIC_PATHS = new Set(['/user/login', '/user/register']);
+
+const getRelativePath = () => {
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const pathname = window.location.pathname;
+  if (basePath && basePath !== '/' && pathname.startsWith(basePath)) {
+    return pathname.slice(basePath.length) || '/';
+  }
+  return pathname;
+};
+
+export const redirectToLogin = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  if (PUBLIC_PATHS.has(getRelativePath())) {
+    return;
+  }
+  const redirect = `${getRelativePath()}${window.location.search}`;
+  const loginUrl = `${import.meta.env.BASE_URL}user/login?redirect=${encodeURIComponent(redirect)}`;
+  window.location.assign(loginUrl);
+};
 
 const myAxios = axios.create({
   baseURL: API_BASE_URL,
@@ -8,39 +34,15 @@ const myAxios = axios.create({
   withCredentials: true,
 });
 
-myAxios.interceptors.request.use(
-  function (config) {
-    const headers = config.headers as { set?: (name: string, value: string) => void } | undefined;
-    if (headers && typeof headers.set === 'function') {
-      headers.set('X-User-Id', DEFAULT_USER.userId);
-    } else {
-      config.headers = {
-        ...(config.headers as Record<string, unknown> | undefined),
-        'X-User-Id': DEFAULT_USER.userId,
-      } as any;
-    }
-    return config;
-  },
-  function (error) {
-    return Promise.reject(error);
-  },
-);
-
 myAxios.interceptors.response.use(
-  function (response) {
-    const { data } = response;
-    if (data && data.code === 40100) {
-      if (
-        response.request.responseURL &&
-        !response.request.responseURL.includes('user/get/login') &&
-        !window.location.pathname.includes('/user/login')
-      ) {
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      if (typeof window !== 'undefined' && !PUBLIC_PATHS.has(getRelativePath())) {
         message.warning('Please login first');
       }
+      redirectToLogin();
     }
-    return response;
-  },
-  function (error) {
     return Promise.reject(error);
   },
 );

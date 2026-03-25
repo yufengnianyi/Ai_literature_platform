@@ -31,19 +31,3 @@ compose_prod up -d --build
 
 print_step "Running post-deploy checks"
 bash scripts/check-prod.sh
-
-if [ "$previous_head" != "$new_head" ] && docs_changed_between "$previous_head" "$new_head"; then
-  if [ "${AUTO_REBUILD_RAG:-0}" = "1" ]; then
-    print_step "Docs changed; rebuilding RAG automatically"
-    bash scripts/rebuild-rag.sh
-  else
-    cat <<EOF
-
-Docs changed between ${previous_head} and ${new_head}.
-Rebuild RAG with:
-  bash scripts/rebuild-rag.sh
-
-Set AUTO_REBUILD_RAG=1 before running this script if you want the rebuild to happen automatically.
-EOF
-  fi
-fi

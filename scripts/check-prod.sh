@@ -9,7 +9,6 @@ require_command curl
 
 project_name="$(compose_project_name)"
 health_url="$(api_base_url)/actuator/health"
-rag_status_url="$(api_base_url)/rag/ingestions/status"
 legacy_containers="$(docker ps --format '{{.Names}}' | grep '^demo_01-' || true)"
 
 print_step "Current containers for ${project_name}"
@@ -31,10 +30,6 @@ case "$health_response" in
   *'"status":"UP"'*) ;;
   *) fail "Health endpoint did not report status UP." ;;
 esac
-
-print_step "Fetching RAG ingestion status"
-rag_response="$(curl --silent --show-error --fail "$rag_status_url")"
-printf '%s\n' "$rag_response"
 
 print_step "Checking embedding row count"
 row_count="$(compose_prod exec -T postgres psql -U "$(postgres_user)" -d "$(postgres_db)" -t -A -c "select count(*) from $(vector_table);")"

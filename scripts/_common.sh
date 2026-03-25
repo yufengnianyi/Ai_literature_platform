@@ -105,10 +105,3 @@ wait_for_http() {
 
   return 1
 }
-
-docs_changed_between() {
-  local old_ref="$1"
-  local new_ref="$2"
-
-  ! git diff --quiet "$old_ref" "$new_ref" -- src/main/resources/docs
-}

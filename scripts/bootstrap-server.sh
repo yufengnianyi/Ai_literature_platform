@@ -26,9 +26,3 @@ compose_prod up -d --build
 
 print_step "Running deployment checks"
 bash scripts/check-prod.sh
-
-cat <<'EOF'
-
-If this is the first deployment or the docs dataset changed, rebuild RAG now:
-  bash scripts/rebuild-rag.sh
-EOF

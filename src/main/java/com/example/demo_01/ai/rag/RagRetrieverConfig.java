@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class JsonlRagConfig {
+public class RagRetrieverConfig {
 
     @Resource
     private EmbeddingModel quwenEmbeddingModel;
@@ -19,9 +19,9 @@ public class JsonlRagConfig {
     @Resource
     private EmbeddingStore<TextSegment> embeddingStore;
 
-    @Bean("jsonlContentRetriever")
+    @Bean("ragContentRetriever")
     @DependsOnDatabaseInitialization
-    public ContentRetriever jsonlContentRetriever() {
+    public ContentRetriever ragContentRetriever() {
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(embeddingStore)
                 .embeddingModel(quwenEmbeddingModel)

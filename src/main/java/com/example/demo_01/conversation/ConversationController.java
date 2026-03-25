@@ -1,7 +1,9 @@
 package com.example.demo_01.conversation;
 
 import com.example.demo_01.user.UserService;
+import com.example.demo_01.user.model.entity.User;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +11,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,8 +21,6 @@ import java.util.List;
 @RequestMapping("/conversations")
 public class ConversationController {
 
-    private static final String USER_ID_HEADER = "X-User-Id";
-
     @Resource
     private ConversationService conversationService;
 
@@ -30,63 +29,49 @@ public class ConversationController {
 
     @PostMapping
     public ConversationService.ConversationResponse create(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @RequestBody(required = false) ConversationService.CreateConversationRequest request) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        return conversationService.createConversation(normalizedUserId, request);
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        return conversationService.createConversation(loginUser.getUserId(), request);
     }
 
     @GetMapping
-    public List<ConversationService.ConversationResponse> list(
-            @RequestHeader(USER_ID_HEADER) String userId) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        return conversationService.listConversations(normalizedUserId);
+    public List<ConversationService.ConversationResponse> list(HttpServletRequest httpServletRequest) {
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        return conversationService.listConversations(loginUser.getUserId());
     }
 
     @GetMapping("/{conversationId}/messages")
     public List<ConversationService.ConversationMessageResponse> listMessages(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @PathVariable String conversationId) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        return conversationService.listConversationMessages(normalizedUserId, conversationId);
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        return conversationService.listConversationMessages(loginUser.getUserId(), conversationId);
     }
 
     @PatchMapping("/{conversationId}")
     public ConversationService.ConversationResponse rename(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @PathVariable String conversationId,
             @RequestBody ConversationService.RenameConversationRequest request) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        return conversationService.renameConversation(normalizedUserId, conversationId, request);
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        return conversationService.renameConversation(loginUser.getUserId(), conversationId, request);
     }
 
     @PatchMapping("/{conversationId}/pin")
     public ConversationService.ConversationResponse pin(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @PathVariable String conversationId,
             @RequestBody ConversationService.PinConversationRequest request) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        return conversationService.pinConversation(normalizedUserId, conversationId, request);
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        return conversationService.pinConversation(loginUser.getUserId(), conversationId, request);
     }
 
     @DeleteMapping("/{conversationId}")
     public void delete(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @PathVariable String conversationId) {
-        String normalizedUserId = normalizeUserId(userId);
-        userService.assertUserExists(normalizedUserId);
-        conversationService.deleteConversation(normalizedUserId, conversationId);
-    }
-
-    private String normalizeUserId(String userId) {
-        if (userId == null || userId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-User-Id header is required");
-        }
-        return userId.trim();
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        conversationService.deleteConversation(loginUser.getUserId(), conversationId);
     }
 }

@@ -1,6 +1,4 @@
 ﻿<script setup lang="ts">
-import BasicLayout from './layouts/BasicLayout.vue';
-
 const theme = {
   token: {
     colorPrimary: '#2563eb',
@@ -16,7 +14,8 @@ const theme = {
 
 <template>
   <a-config-provider :theme="theme">
-    <BasicLayout />
+    // 根据路由动态切换页面
+    <router-view />
   </a-config-provider>
 </template>
 

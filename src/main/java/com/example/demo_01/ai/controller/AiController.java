@@ -5,11 +5,12 @@ import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.memory.UserConversationKey;
 import com.example.demo_01.conversation.ConversationService;
 import com.example.demo_01.user.UserService;
+import com.example.demo_01.user.model.entity.User;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,8 +20,6 @@ import reactor.core.publisher.Flux;
 @RestController
 @RequestMapping("/ai")
 public class AiController {
-
-    private static final String USER_ID_HEADER = "X-User-Id";
 
     @Resource
     private AiCodeHelperService aiCodeHelperService;
@@ -33,12 +32,12 @@ public class AiController {
 
     @GetMapping
     public Flux<ServerSentEvent<String>> chat(
-            @RequestHeader(USER_ID_HEADER) String userId,
+            HttpServletRequest httpServletRequest,
             @RequestParam(required = false) String conversationId,
             @RequestParam(name = "memory_id", required = false) Integer legacyMemoryId,
             @RequestParam String prompt) {
-        String normalizedUserId = resolveUserId(userId);
-        userService.assertUserExists(normalizedUserId);
+        User loginUser = userService.getLoginUser(httpServletRequest);
+        String normalizedUserId = loginUser.getUserId();
 
         String resolvedConversationId = resolveConversationId(conversationId, legacyMemoryId);
         conversationService.createConversationIfAbsent(normalizedUserId, resolvedConversationId);
@@ -64,13 +63,6 @@ public class AiController {
         ));
 
         return messageEvents.concatWith(completionEvents);
-    }
-
-    private String resolveUserId(String userId) {
-        if (userId == null || userId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-User-Id header is required");
-        }
-        return userId.trim();
     }
 
     private String resolveConversationId(String conversationId, Integer legacyMemoryId) {

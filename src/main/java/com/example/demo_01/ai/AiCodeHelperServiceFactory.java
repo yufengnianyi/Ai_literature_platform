@@ -17,8 +17,8 @@ public class AiCodeHelperServiceFactory {
     @Resource
     private ChatModel myqwenChatModel;
 
-    @Resource(name = "jsonlContentRetriever")
-    private ContentRetriever jsonlContentRetriever;
+    @Resource(name = "ragContentRetriever")
+    private ContentRetriever ragContentRetriever;
 
     @Resource
     private StreamingChatModel streamingChatModel;
@@ -36,7 +36,7 @@ public class AiCodeHelperServiceFactory {
                         .maxMessages(20)
                         .chatMemoryStore(persistentChatMemoryStore)
                         .build())
-                .contentRetriever(jsonlContentRetriever)
+                .contentRetriever(ragContentRetriever)
                 //.tools(new InterviewQuestionTool())
                 .build();
     }

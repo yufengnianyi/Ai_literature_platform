@@ -1,6 +1,7 @@
-import { API_BASE_URL, DEFAULT_USER } from '@/constants/user';
+import { API_BASE_URL } from '@/constants/user';
 import type { MessageSource } from '@/types/chat';
 import { normalizeSourcesPayload } from '@/utils/sources';
+import { redirectToLogin } from '@/request';
 
 export interface ChatSseParams {
   conversationId: string;
@@ -72,10 +73,15 @@ export const chatService = {
           method: 'GET',
           headers: {
             'Accept': 'text/event-stream',
-            'X-User-Id': DEFAULT_USER.userId,
           },
+          credentials: 'include',
           signal: controller.signal,
         });
+
+        if (response.status === 401) {
+          redirectToLogin();
+          throw new Error('Chat request unauthorized');
+        }
 
         if (!response.ok) {
           throw new Error(`Chat request failed: ${response.status}`);
