@@ -4,6 +4,8 @@ import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchAcceptedRespon
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagFolderBatchRequest;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionBatchRecord;
 import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
+import com.example.demo_01.common.BaseResponse;
+import com.example.demo_01.common.ResultUtils;
 import jakarta.annotation.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,12 +25,12 @@ public class RagBatchController {
     private RagBatchIngestionService ragBatchIngestionService;
 
     @PostMapping("/folder")
-    public ResponseEntity<RagBatchAcceptedResponse> ingestFolder(@RequestBody RagFolderBatchRequest request) {
-        return ResponseEntity.accepted().body(ragBatchIngestionService.ingestFolder(request.folderPath()));
+    public ResponseEntity<BaseResponse<RagBatchAcceptedResponse>> ingestFolder(@RequestBody RagFolderBatchRequest request) {
+        return ResponseEntity.accepted().body(ResultUtils.success(ragBatchIngestionService.ingestFolder(request.folderPath())));
     }
 
     @GetMapping("/{batchId}")
-    public RagIngestionBatchRecord getBatch(@PathVariable UUID batchId) {
-        return ragBatchIngestionService.getBatch(batchId);
+    public BaseResponse<RagIngestionBatchRecord> getBatch(@PathVariable UUID batchId) {
+        return ResultUtils.success(ragBatchIngestionService.getBatch(batchId));
     }
 }

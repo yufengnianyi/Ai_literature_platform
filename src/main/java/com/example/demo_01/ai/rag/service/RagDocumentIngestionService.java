@@ -10,12 +10,13 @@ import com.example.demo_01.ai.rag.repository.RagDocumentRepository;
 import com.example.demo_01.ai.rag.repository.RagIngestionJobRepository;
 import com.example.demo_01.ai.rag.support.FailedLiteratureCsvRecorder;
 import com.example.demo_01.ai.rag.support.Sha256Support;
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
 import jakarta.annotation.Resource;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,9 +28,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
 public class RagDocumentIngestionService {
@@ -80,12 +78,12 @@ public class RagDocumentIngestionService {
 
     public RagDocumentRecord getDocument(UUID documentId) {
         return documentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Document not found: " + documentId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Document not found: " + documentId));
     }
 
     public RagIngestionJobRecord getJob(UUID jobId) {
         return jobRepository.findById(jobId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Job not found: " + jobId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Job not found: " + jobId));
     }
 
     private RagDocumentIngestionOutcome process(UUID jobId, UUID documentId, StoredUpload upload, RagJobMetrics metrics) {
@@ -290,7 +288,7 @@ public class RagDocumentIngestionService {
             file.transferTo(pdfPath);
             return new StoredUpload(storageDir, pdfPath, Sha256Support.hash(pdfPath), originalFilename(file));
         } catch (IOException e) {
-            throw new ResponseStatusException(BAD_REQUEST, "Failed to persist uploaded PDF", e);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Failed to persist uploaded PDF");
         }
     }
 
@@ -304,7 +302,7 @@ public class RagDocumentIngestionService {
                     ? sourcePdf.getFileName().toString()
                     : originalFilename);
         } catch (IOException e) {
-            throw new ResponseStatusException(BAD_REQUEST, "Failed to persist uploaded PDF", e);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Failed to persist uploaded PDF");
         }
     }
 
@@ -318,21 +316,21 @@ public class RagDocumentIngestionService {
 
     private void validateUpload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ResponseStatusException(BAD_REQUEST, "PDF file is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "PDF file is required");
         }
         String filename = originalFilename(file).toLowerCase(Locale.ROOT);
         if (!filename.endsWith(".pdf")) {
-            throw new ResponseStatusException(BAD_REQUEST, "Only PDF uploads are supported");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Only PDF uploads are supported");
         }
     }
 
     private void validateStoredPdf(Path pdfPath) {
         if (pdfPath == null || !Files.isRegularFile(pdfPath)) {
-            throw new ResponseStatusException(BAD_REQUEST, "PDF file does not exist: " + pdfPath);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "PDF file does not exist: " + pdfPath);
         }
         String filename = pdfPath.getFileName().toString().toLowerCase(Locale.ROOT);
         if (!filename.endsWith(".pdf")) {
-            throw new ResponseStatusException(BAD_REQUEST, "Only PDF files are supported: " + pdfPath.getFileName());
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Only PDF files are supported: " + pdfPath.getFileName());
         }
     }
 

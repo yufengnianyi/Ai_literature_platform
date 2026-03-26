@@ -1,14 +1,14 @@
 package com.example.demo_01.conversation;
 
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.data.message.UserMessage;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -81,13 +81,13 @@ public class ConversationService {
                 where user_id = ? and conversation_id = ?
                 """, userId, normalizedConversationId);
         if (deleted == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found");
         }
     }
 
     public ConversationResponse renameConversation(String userId, String conversationId, RenameConversationRequest request) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "request body is required");
         }
         String normalizedConversationId = normalizeConversationId(conversationId);
         String normalizedTitle = normalizeRenameTitle(request.title());
@@ -101,14 +101,14 @@ public class ConversationService {
                 """, (rs, rowNum) -> mapConversationResponse(rs), normalizedTitle, now, userId, normalizedConversationId);
 
         if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found");
         }
         return rows.get(0);
     }
 
     public ConversationResponse pinConversation(String userId, String conversationId, PinConversationRequest request) {
         if (request == null || request.pinned() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "pinned is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pinned is required");
         }
         String normalizedConversationId = normalizeConversationId(conversationId);
 
@@ -120,18 +120,18 @@ public class ConversationService {
                 """, (rs, rowNum) -> mapConversationResponse(rs), request.pinned(), userId, normalizedConversationId);
 
         if (rows.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found");
         }
         return rows.get(0);
     }
 
     public String normalizeConversationId(String conversationId) {
         if (conversationId == null || conversationId.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "conversationId is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "conversationId is required");
         }
         String normalized = conversationId.trim();
         if (!SAFE_CONVERSATION_ID.matcher(normalized).matches()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "conversationId is invalid");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "conversationId is invalid");
         }
         return normalized;
     }
@@ -153,18 +153,18 @@ public class ConversationService {
         }
         String normalized = title.trim();
         if (normalized.length() > TITLE_MAX_LENGTH) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title length must be <= 255");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "title length must be <= 255");
         }
         return normalized;
     }
 
     private String normalizeRenameTitle(String title) {
         if (title == null || title.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "title is required");
         }
         String normalized = title.trim();
         if (normalized.length() > TITLE_MAX_LENGTH) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title length must be <= 255");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "title length must be <= 255");
         }
         return normalized;
     }
@@ -180,7 +180,7 @@ public class ConversationService {
                 where user_id = ? and conversation_id = ?
                 """, Integer.class, userId, conversationId);
         if (count == null || count == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found");
         }
     }
 

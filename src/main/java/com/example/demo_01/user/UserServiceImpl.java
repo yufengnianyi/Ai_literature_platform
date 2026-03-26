@@ -2,6 +2,8 @@ package com.example.demo_01.user;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
 import com.example.demo_01.user.constant.UserConstant;
 import com.example.demo_01.user.mapper.UserMapper;
 import com.example.demo_01.user.model.dto.UserAddRequest;
@@ -19,10 +21,8 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -47,13 +47,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public String userRegister(UserRegisterRequest request) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "request body is required");
         }
         String userAccount = normalizeAccount(request.getUserAccount());
         String userPassword = normalizePassword(request.getUserPassword());
         String checkPassword = request.getCheckPassword();
         if (!userPassword.equals(checkPassword)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "passwords do not match");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "passwords do not match");
         }
         ensureAccountAvailable(userAccount, null);
 
@@ -76,7 +76,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public LoginUserVO userLogin(UserLoginRequest request, HttpServletRequest httpServletRequest) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "request body is required");
         }
         String userAccount = normalizeAccount(request.getUserAccount());
         String userPassword = normalizePassword(request.getUserPassword());
@@ -87,7 +87,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = getMapper().selectOneByQuery(queryWrapper);
         if (user == null || StrUtil.isBlank(user.getUserPassword())
                 || !passwordEncoder.matches(userPassword, user.getUserPassword())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid account or password");
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "invalid account or password");
         }
 
         LoginUserVO loginUserVO = getLoginUserVO(user);
@@ -103,20 +103,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public User getLoginUser(HttpServletRequest request) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login required");
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required");
         }
         HttpSession session = request.getSession(false);
         if (session == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login required");
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required");
         }
         Object sessionValue = session.getAttribute(UserConstant.USER_LOGIN_STATE);
         if (!(sessionValue instanceof LoginUserVO loginUserVO) || StrUtil.isBlank(loginUserVO.getUserId())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login required");
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required");
         }
         User user = getById(loginUserVO.getUserId());
         if (user == null || user.getIsDelete() != null && user.getIsDelete() == 1) {
             session.removeAttribute(UserConstant.USER_LOGIN_STATE);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "login required");
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required");
         }
         return user;
     }
@@ -137,7 +137,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public String addUser(UserAddRequest request) {
         if (request == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "request body is required");
         }
         String userAccount = normalizeAccount(request.getUserAccount());
         String userPassword = normalizePassword(request.getUserPassword());
@@ -164,11 +164,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public UserVO getUserById(String userId) {
         if (StrUtil.isBlank(userId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userId is required");
         }
         User user = getById(userId.trim());
         if (user == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "user not found");
         }
         return getUserVO(user);
     }
@@ -176,11 +176,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean updateUser(UserUpdateRequest request) {
         if (request == null || StrUtil.isBlank(request.getUserId())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userId is required");
         }
         User existing = getById(request.getUserId().trim());
         if (existing == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "user not found");
         }
         if (StrUtil.isNotBlank(request.getUserAccount())) {
             String normalizedAccount = normalizeAccount(request.getUserAccount());
@@ -209,11 +209,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public boolean deleteUser(String userId) {
         if (StrUtil.isBlank(userId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userId is required");
         }
         User existing = getById(userId.trim());
         if (existing == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "user not found");
         }
         existing.setEditTime(OffsetDateTime.now());
         return removeById(existing.getUserId());
@@ -281,14 +281,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return queryWrapper;
     }
 
+/**
+ * 解析排序字段，将前端传递的排序字段转换为数据库对应的字段名
+ * @param sortField 前端传递的排序字段
+ * @return 返回数据库对应的字段名，如果前端传递的字段不在允许的列表中，则返回默认的"created_at"
+ */
     private String resolveSortColumn(String sortField) {
+        // 定义允许的排序字段映射关系，将前端字段映射为数据库字段
         Map<String, String> allowedSortFields = Map.of(
-                "userAccount", "user_account",
-                "userName", "user_name",
-                "userRole", "user_role",
-                "createdAt", "created_at",
-                "updatedAt", "updated_at"
+                "userAccount", "user_account",    // 用户账号字段映射
+                "userName", "user_name",          // 用户名字段映射
+                "userRole", "user_role",          // 用户角色字段映射
+                "createdAt", "created_at",        // 创建时间字段映射
+                "updatedAt", "updated_at"         // 更新时间字段映射
         );
+        if (sortField == null || sortField.isBlank()){
+            return "created_at";
+        }
+
+        // 返回映射后的字段名，如果找不到对应的映射则返回默认的created_at
         return allowedSortFields.getOrDefault(sortField, "created_at");
     }
 
@@ -299,28 +310,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private void ensureAccountAvailable(String userAccount, String excludeUserId) {
         User existing = getMapper().selectOneByMap(Map.of("user_account", userAccount));
         if (existing != null && !existing.getUserId().equals(excludeUserId)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "user account already exists");
+            throw new BusinessException(ErrorCode.CONFLICT_ERROR, "user account already exists");
         }
     }
 
     private String normalizeAccount(String userAccount) {
         if (StrUtil.isBlank(userAccount)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userAccount is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userAccount is required");
         }
         String normalized = userAccount.trim();
         if (normalized.length() < ACCOUNT_MIN_LENGTH) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userAccount length must be at least 4");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userAccount length must be at least 4");
         }
         return normalized;
     }
 
     private String normalizePassword(String userPassword) {
         if (StrUtil.isBlank(userPassword)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userPassword is required");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userPassword is required");
         }
         String normalized = userPassword.trim();
         if (normalized.length() < PASSWORD_MIN_LENGTH) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userPassword length must be at least 8");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userPassword length must be at least 8");
         }
         return normalized;
     }
@@ -331,7 +342,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         UserRoleEnum roleEnum = UserRoleEnum.fromValue(userRole.trim());
         if (roleEnum == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userRole is invalid");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "userRole is invalid");
         }
         return roleEnum.getValue();
     }

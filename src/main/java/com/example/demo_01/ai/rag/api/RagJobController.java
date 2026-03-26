@@ -2,6 +2,8 @@ package com.example.demo_01.ai.rag.api;
 
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionJobRecord;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
+import com.example.demo_01.common.BaseResponse;
+import com.example.demo_01.common.ResultUtils;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,7 +20,7 @@ public class RagJobController {
     private RagDocumentIngestionService ragDocumentIngestionService;
 
     @GetMapping("/{jobId}")
-    public RagIngestionJobRecord getJob(@PathVariable UUID jobId) {
-        return ragDocumentIngestionService.getJob(jobId);
+    public BaseResponse<RagIngestionJobRecord> getJob(@PathVariable UUID jobId) {
+        return ResultUtils.success(ragDocumentIngestionService.getJob(jobId));
     }
 }

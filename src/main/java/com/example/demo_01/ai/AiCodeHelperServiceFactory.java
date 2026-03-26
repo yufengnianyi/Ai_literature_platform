@@ -1,7 +1,6 @@
 package com.example.demo_01.ai;
 
 import com.example.demo_01.ai.memory.PersistentChatMemoryStore;
-import com.example.demo_01.ai.tools.InterviewQuestionTool;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;

@@ -4,6 +4,12 @@ import { API_BASE_URL } from '@/constants/user';
 
 const PUBLIC_PATHS = new Set(['/user/login', '/user/register']);
 
+interface BaseResponse<T> {
+  code: number;
+  data: T;
+  message: string;
+}
+
 const getRelativePath = () => {
   if (typeof window === 'undefined') {
     return '/';
@@ -35,7 +41,19 @@ const myAxios = axios.create({
 });
 
 myAxios.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const payload = response.data as BaseResponse<unknown> | undefined;
+    if (payload && typeof payload === 'object' && 'code' in payload && 'message' in payload) {
+      if (payload.code !== 0) {
+        if (payload.message) {
+          message.error(payload.message);
+        }
+        return Promise.reject(new Error(payload.message || 'Request failed'));
+      }
+      response.data = payload.data;
+    }
+    return response;
+  },
   (error) => {
     if (error?.response?.status === 401) {
       if (typeof window !== 'undefined' && !PUBLIC_PATHS.has(getRelativePath())) {

@@ -1,5 +1,8 @@
 package com.example.demo_01.ai.rag.service;
 
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
+import com.example.demo_01.exception.ThrowUtils;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.repository.RagIngestionBatchRepository;
 import jakarta.annotation.Resource;
@@ -7,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,9 +20,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
-
-import static org.springframework.http.HttpStatus.BAD_REQUEST;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
 public class RagBatchIngestionService {
@@ -39,9 +38,7 @@ public class RagBatchIngestionService {
     public RagBatchAcceptedResponse ingestFolder(String folderPath) {
         Path folder = resolveFolder(folderPath);
         List<Path> pdfFiles = listPdfFiles(folder);
-        if (pdfFiles.isEmpty()) {
-            throw new ResponseStatusException(BAD_REQUEST, "No PDF files found under folder: " + folder);
-        }
+        ThrowUtils.throwIf(pdfFiles.isEmpty(), ErrorCode.PARAMS_ERROR, "No PDF files found under folder: " + folder);
 
         UUID batchId = UUID.randomUUID();
         batchRepository.insert(batchId, folder.toAbsolutePath().toString(), RagBatchStatus.QUEUED, pdfFiles.size());
@@ -51,7 +48,7 @@ public class RagBatchIngestionService {
 
     public RagIngestionBatchRecord getBatch(UUID batchId) {
         return batchRepository.findById(batchId)
-                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Batch not found: " + batchId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Batch not found: " + batchId));
     }
 
     private void processBatch(UUID batchId, Path folder, List<Path> pdfFiles) {
@@ -152,16 +149,12 @@ public class RagBatchIngestionService {
     }
 
     private Path resolveFolder(String folderPath) {
-        if (folderPath == null || folderPath.isBlank()) {
-            throw new ResponseStatusException(BAD_REQUEST, "folderPath is required");
-        }
+        ThrowUtils.throwIf(folderPath == null || folderPath.isBlank(), ErrorCode.PARAMS_ERROR, "folderPath is required");
         Path path = Path.of(folderPath);
         if (!path.isAbsolute()) {
             path = Path.of("").toAbsolutePath().resolve(path).normalize();
         }
-        if (!Files.isDirectory(path)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Folder does not exist: " + path);
-        }
+        ThrowUtils.throwIf(!Files.isDirectory(path), ErrorCode.PARAMS_ERROR, "Folder does not exist: " + path);
         return path;
     }
 
@@ -172,7 +165,7 @@ public class RagBatchIngestionService {
                     .sorted(Comparator.comparing(Path::toString))
                     .toList();
         } catch (IOException e) {
-            throw new ResponseStatusException(BAD_REQUEST, "Failed to scan folder: " + folder, e);
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "Failed to scan folder: " + folder);
         }
     }
 

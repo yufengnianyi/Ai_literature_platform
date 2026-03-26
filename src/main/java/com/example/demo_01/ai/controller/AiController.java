@@ -4,17 +4,17 @@ import com.example.demo_01.ai.AiCodeHelperService;
 import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.memory.UserConversationKey;
 import com.example.demo_01.conversation.ConversationService;
+import com.example.demo_01.exception.ErrorCode;
+import com.example.demo_01.exception.ThrowUtils;
 import com.example.demo_01.user.UserService;
 import com.example.demo_01.user.model.entity.User;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 @RestController
@@ -69,9 +69,9 @@ public class AiController {
         if (conversationId != null && !conversationId.isBlank()) {
             return conversationService.normalizeConversationId(conversationId);
         }
-        if (legacyMemoryId != null) {
-            return conversationService.normalizeConversationId("legacy-" + legacyMemoryId);
-        }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "conversationId or memory_id is required");
+        ThrowUtils.throwIf((conversationId == null || conversationId.isBlank()) && legacyMemoryId == null,
+                ErrorCode.PARAMS_ERROR,
+                "conversationId or memory_id is required");
+        return conversationService.normalizeConversationId("legacy-" + legacyMemoryId);
     }
 }

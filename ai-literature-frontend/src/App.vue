@@ -14,7 +14,6 @@ const theme = {
 
 <template>
   <a-config-provider :theme="theme">
-    // 根据路由动态切换页面
     <router-view />
   </a-config-provider>
 </template>

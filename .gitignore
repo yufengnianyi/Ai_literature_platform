@@ -46,3 +46,6 @@ node_modules
 # RAG artifacts (generated data)
 /data/rag/
 data/rag/
+# GitNexus local index (generated)
+/.gitnexus/
+.gitnexus/

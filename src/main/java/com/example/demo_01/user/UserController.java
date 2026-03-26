@@ -1,6 +1,8 @@
 package com.example.demo_01.user;
 
 import com.example.demo_01.annotation.AuthCheck;
+import com.example.demo_01.common.BaseResponse;
+import com.example.demo_01.common.ResultUtils;
 import com.example.demo_01.user.constant.UserConstant;
 import com.example.demo_01.user.model.dto.UserAddRequest;
 import com.example.demo_01.user.model.dto.UserDeleteRequest;
@@ -28,52 +30,52 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public String register(@RequestBody UserRegisterRequest request) {
-        return userService.userRegister(request);
+    public BaseResponse<String> register(@RequestBody UserRegisterRequest request) {
+        return ResultUtils.success(userService.userRegister(request));
     }
 
     @PostMapping("/login")
-    public LoginUserVO login(@RequestBody UserLoginRequest request, HttpServletRequest httpServletRequest) {
-        return userService.userLogin(request, httpServletRequest);
+    public BaseResponse<LoginUserVO> login(@RequestBody UserLoginRequest request, HttpServletRequest httpServletRequest) {
+        return ResultUtils.success(userService.userLogin(request, httpServletRequest));
     }
 
     @GetMapping("/get/login")
-    public LoginUserVO getLoginUser(HttpServletRequest request) {
-        return userService.getCurrentLoginUser(request);
+    public BaseResponse<LoginUserVO> getLoginUser(HttpServletRequest request) {
+        return ResultUtils.success(userService.getCurrentLoginUser(request));
     }
 
     @PostMapping("/logout")
-    public Boolean logout(HttpServletRequest request) {
-        return userService.userLogout(request);
+    public BaseResponse<Boolean> logout(HttpServletRequest request) {
+        return ResultUtils.success(userService.userLogout(request));
     }
 
     @PostMapping("/add")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public String addUser(@RequestBody UserAddRequest request) {
-        return userService.addUser(request);
+    public BaseResponse<String> addUser(@RequestBody UserAddRequest request) {
+        return ResultUtils.success(userService.addUser(request));
     }
 
     @GetMapping("/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public UserVO getUser(@RequestParam("id") String userId) {
-        return userService.getUserById(userId);
+    public BaseResponse<UserVO> getUser(@RequestParam("id") String userId) {
+        return ResultUtils.success(userService.getUserById(userId));
     }
 
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public Boolean updateUser(@RequestBody UserUpdateRequest request) {
-        return userService.updateUser(request);
+    public BaseResponse<Boolean> updateUser(@RequestBody UserUpdateRequest request) {
+        return ResultUtils.success(userService.updateUser(request));
     }
 
     @PostMapping("/delete")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public Boolean deleteUser(@RequestBody UserDeleteRequest request) {
-        return userService.deleteUser(request == null ? null : request.getUserId());
+    public BaseResponse<Boolean> deleteUser(@RequestBody UserDeleteRequest request) {
+        return ResultUtils.success(userService.deleteUser(request == null ? null : request.getUserId()));
     }
 
     @PostMapping("/list/page/vo")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public Page<UserVO> listUserByPage(@RequestBody(required = false) UserQueryRequest request) {
-        return userService.listUserByPage(request);
+    public BaseResponse<Page<UserVO>> listUserByPage(@RequestBody(required = false) UserQueryRequest request) {
+        return ResultUtils.success(userService.listUserByPage(request));
     }
 }

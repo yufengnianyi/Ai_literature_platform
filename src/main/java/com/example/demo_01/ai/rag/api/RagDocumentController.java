@@ -3,6 +3,8 @@ package com.example.demo_01.ai.rag.api;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagUploadAcceptedResponse;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
+import com.example.demo_01.common.BaseResponse;
+import com.example.demo_01.common.ResultUtils;
 import jakarta.annotation.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,12 +25,12 @@ public class RagDocumentController {
     private RagDocumentIngestionService ragDocumentIngestionService;
 
     @PostMapping(consumes = "multipart/form-data")
-    public ResponseEntity<RagUploadAcceptedResponse> upload(@RequestPart("file") MultipartFile file) {
-        return ResponseEntity.accepted().body(ragDocumentIngestionService.upload(file));
+    public ResponseEntity<BaseResponse<RagUploadAcceptedResponse>> upload(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.accepted().body(ResultUtils.success(ragDocumentIngestionService.upload(file)));
     }
 
     @GetMapping("/{documentId}")
-    public RagDocumentRecord getDocument(@PathVariable UUID documentId) {
-        return ragDocumentIngestionService.getDocument(documentId);
+    public BaseResponse<RagDocumentRecord> getDocument(@PathVariable UUID documentId) {
+        return ResultUtils.success(ragDocumentIngestionService.getDocument(documentId));
     }
 }
