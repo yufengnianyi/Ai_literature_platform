@@ -3,6 +3,7 @@ package com.example.demo_01.ai.rag.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import jakarta.annotation.Resource;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -32,13 +33,14 @@ public class RagDocumentRepository {
     public void insertInitial(UUID documentId, String sourceFilename, String storageRoot, RagDocumentStatus status) {
         jdbcTemplate.update("""
                 insert into rag_document (
-                    document_id, source_filename, storage_root, status, created_at, updated_at
-                ) values (?, ?, ?, ?, ?, ?)
+                    document_id, source_filename, storage_root, status, preprocess_status, created_at, updated_at
+                ) values (?, ?, ?, ?, ?, ?, ?)
                 """,
                 documentId,
                 sourceFilename,
                 storageRoot,
                 status.name(),
+                PreprocessStatus.QUEUED.name(),
                 Timestamp.from(Instant.now()),
                 Timestamp.from(Instant.now()));
     }
@@ -82,6 +84,46 @@ public class RagDocumentRepository {
                 set status = ?, updated_at = ?
                 where document_id = ?
                 """, RagDocumentStatus.FAILED.name(), Timestamp.from(Instant.now()), documentId);
+    }
+
+    public void updatePreprocessState(UUID documentId,
+                                      UUID latestPreprocessJobId,
+                                      PreprocessStatus preprocessStatus) {
+        jdbcTemplate.update("""
+                update rag_document
+                set latest_preprocess_job_id = ?,
+                    preprocess_status = ?,
+                    updated_at = ?
+                where document_id = ?
+                """,
+                latestPreprocessJobId,
+                preprocessStatus == null ? null : preprocessStatus.name(),
+                Timestamp.from(Instant.now()),
+                documentId);
+    }
+
+    public void updatePreprocessState(UUID documentId, PreprocessStatus preprocessStatus) {
+        updatePreprocessState(documentId, null, preprocessStatus);
+    }
+
+    public boolean isPreprocessCompleted(UUID documentId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                select preprocess_status = ?
+                from rag_document
+                where document_id = ?
+                """, Boolean.class, PreprocessStatus.COMPLETED.name(), documentId));
+    }
+
+    public PreprocessStatus findPreprocessStatus(UUID documentId) {
+        List<String> rows = jdbcTemplate.query("""
+                select preprocess_status
+                from rag_document
+                where document_id = ?
+                """, (rs, rowNum) -> rs.getString(1), documentId);
+        if (rows.isEmpty() || rows.get(0) == null) {
+            return null;
+        }
+        return PreprocessStatus.valueOf(rows.get(0));
     }
 
     private void updateDocument(UUID documentId,

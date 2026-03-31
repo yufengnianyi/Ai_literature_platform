@@ -1,6 +1,6 @@
 package com.example.demo_01.ai.rag.client;
 
-import com.example.demo_01.ai.config.AiPersistenceProperties;
+import com.example.demo_01.ai.preprocessing.PreprocessingProperties;
 import jakarta.annotation.Resource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
@@ -19,7 +19,7 @@ public class GrobidClient {
     private RestClient grobidRestClient;
 
     @Resource
-    private AiPersistenceProperties properties;
+    private PreprocessingProperties properties;
 
     public String processHeaderDocument(Path pdfPath) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
@@ -36,7 +36,7 @@ public class GrobidClient {
     }
 
     private String execute(String uri, MultiValueMap<String, Object> body) {
-        int attempts = properties.getRag().getGrobid().getMaxRetries() + 1;
+        int attempts = properties.getGrobid().getMaxRetries() + 1;
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
                 return grobidRestClient.post()
@@ -59,7 +59,7 @@ public class GrobidClient {
 
     private void sleepBeforeRetry() {
         try {
-            Thread.sleep(properties.getRag().getGrobid().getRetryBackoffMs());
+            Thread.sleep(properties.getGrobid().getRetryBackoffMs());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while retrying GROBID", e);

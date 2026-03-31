@@ -1,6 +1,6 @@
 package com.example.demo_01.ai.rag.chunk;
 
-import com.example.demo_01.ai.config.AiPersistenceProperties;
+import com.example.demo_01.ai.preprocessing.PreprocessingProperties;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import dev.langchain4j.model.TokenCountEstimator;
 import jakarta.annotation.Resource;
@@ -18,7 +18,7 @@ import java.util.UUID;
 public class TeiChunker {
 
     @Resource
-    private AiPersistenceProperties properties;
+    private PreprocessingProperties properties;
 
     @Resource
     private TokenCountEstimator tokenCountEstimator;
@@ -59,13 +59,13 @@ public class TeiChunker {
                     continue;
                 }
                 int candidateTokens = estimateTokens(metadata, buffer, candidateUnit);
-                if (candidateTokens <= properties.getRag().getChunking().getTargetTokens()) {
+                if (candidateTokens <= properties.getChunking().getTargetTokens()) {
                     buffer.add(candidateUnit);
                     continue;
                 }
                 int currentTokens = estimateTokens(metadata, buffer);
-                if (candidateTokens <= properties.getRag().getChunking().getMaxTokens()
-                        && currentTokens < properties.getRag().getChunking().getTargetTokens() / 2) {
+                if (candidateTokens <= properties.getChunking().getMaxTokens()
+                        && currentTokens < properties.getChunking().getTargetTokens() / 2) {
                     buffer.add(candidateUnit);
                     continue;
                 }
@@ -81,12 +81,12 @@ public class TeiChunker {
 
     private List<ChunkUnit> seedNextBuffer(RagDocumentMetadata metadata, List<ChunkUnit> previous, ChunkUnit next) {
         List<ChunkUnit> buffer = new ArrayList<>();
-        int overlap = properties.getRag().getChunking().getOverlapSentences();
+        int overlap = properties.getChunking().getOverlapSentences();
         if (overlap > 0 && !previous.isEmpty()) {
             int start = Math.max(0, previous.size() - overlap);
             buffer.addAll(previous.subList(start, previous.size()));
         }
-        while (!buffer.isEmpty() && estimateTokens(metadata, buffer, next) > properties.getRag().getChunking().getMaxTokens()) {
+        while (!buffer.isEmpty() && estimateTokens(metadata, buffer, next) > properties.getChunking().getMaxTokens()) {
             buffer.remove(0);
         }
         buffer.add(next);
@@ -123,12 +123,12 @@ public class TeiChunker {
                 text,
                 sourcePdf.toAbsolutePath().toString(),
                 sourceTei.toAbsolutePath().toString(),
-                properties.getRag().getChunking().getStrategyVersion()));
+                properties.getChunking().getStrategyVersion()));
         return nextIndex;
     }
 
     private List<ChunkUnit> splitOversizedUnit(RagDocumentMetadata metadata, ChunkUnit unit) {
-        if (estimateTokens(metadata, List.of(unit)) <= properties.getRag().getChunking().getMaxTokens()) {
+        if (estimateTokens(metadata, List.of(unit)) <= properties.getChunking().getMaxTokens()) {
             return List.of(unit);
         }
         String[] tokens = unit.text().split("\\s+");
@@ -138,7 +138,7 @@ public class TeiChunker {
             String candidate = builder.isEmpty() ? token : builder + " " + token;
             ChunkUnit candidateUnit = new ChunkUnit(unit.contentType(), unit.sectionPath(), unit.paragraphIndex(), unit.sentenceIndex(), candidate);
             if (!builder.isEmpty()
-                    && estimateTokens(metadata, List.of(candidateUnit)) > properties.getRag().getChunking().getMaxTokens()) {
+                    && estimateTokens(metadata, List.of(candidateUnit)) > properties.getChunking().getMaxTokens()) {
                 parts.add(new ChunkUnit(unit.contentType(), unit.sectionPath(), unit.paragraphIndex(), unit.sentenceIndex(), builder.toString()));
                 builder = new StringBuilder(token);
             } else {
@@ -188,3 +188,4 @@ public class TeiChunker {
         return UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
     }
 }
+

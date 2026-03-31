@@ -2,17 +2,21 @@ package com.example.demo_01.ai.controller;
 
 import com.example.demo_01.ai.AiCodeHelperService;
 import com.example.demo_01.conversation.ConversationService;
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
+import com.example.demo_01.exception.GlobalExceptionHandler;
 import com.example.demo_01.user.UserService;
+import com.example.demo_01.user.mapper.UserMapper;
+import com.example.demo_01.user.model.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AiController.class)
+@org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
 class AiControllerTest {
 
     @Autowired
@@ -35,13 +40,18 @@ class AiControllerTest {
     @MockBean
     private ConversationService conversationService;
 
+    @MockBean
+    private UserMapper userMapper;
+
     @Test
     void shouldChatWithUserConversationScopedMemory() throws Exception {
+        User loginUser = new User();
+        loginUser.setUserId("u-1");
+        when(userService.getLoginUser(any())).thenReturn(loginUser);
         when(conversationService.normalizeConversationId("conv-1")).thenReturn("conv-1");
         when(aiCodeHelperService.chatWithFlux("u-1::conv-1", "hello")).thenReturn(Flux.just("hi"));
 
         mockMvc.perform(get("/ai")
-                        .header("X-User-Id", "u-1")
                         .param("conversationId", "conv-1")
                         .param("prompt", "hello")
                         .accept(MediaType.TEXT_EVENT_STREAM))
@@ -52,28 +62,21 @@ class AiControllerTest {
                         org.hamcrest.Matchers.containsString("event:complete")
                 )));
 
-        verify(userService).assertUserExists("u-1");
         verify(conversationService).createConversationIfAbsent("u-1", "conv-1");
         verify(aiCodeHelperService).chatWithFlux("u-1::conv-1", "hello");
     }
 
     @Test
-    void shouldReturnBadRequestWhenUserHeaderMissing() throws Exception {
+    void shouldReturnUnauthorizedWhenNotLoggedIn() throws Exception {
+        doThrow(new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required"))
+                .when(userService).getLoginUser(any());
+
         mockMvc.perform(get("/ai")
                         .param("conversationId", "conv-1")
                         .param("prompt", "hello"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void shouldReturnNotFoundWhenUserMissing() throws Exception {
-        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"))
-                .when(userService).assertUserExists("missing-user");
-
-        mockMvc.perform(get("/ai")
-                        .header("X-User-Id", "missing-user")
-                        .param("conversationId", "conv-1")
-                        .param("prompt", "hello"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().json("""
+                        {"code":40100,"data":null,"message":"login required"}
+                        """));
     }
 }

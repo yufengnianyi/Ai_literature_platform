@@ -33,6 +33,22 @@ const updateAssistantMessage = (
   }
 };
 
+const attachGraphPrompts = (messages: Message[]) => {
+  let latestUserPrompt = '';
+
+  return messages.map((message) => {
+    if (message.role === 'user') {
+      latestUserPrompt = message.content;
+      return message;
+    }
+
+    return {
+      ...message,
+      graphPrompt: message.graphPrompt ?? latestUserPrompt,
+    };
+  });
+};
+
 const toUiMessage = (conversationId: string, message: ConversationHistoryMessage): Message => {
   if (message.role === 'assistant') {
     return {
@@ -80,7 +96,9 @@ export function useChat() {
         return;
       }
 
-      messages.value = historyMessages.map((message) => toUiMessage(conversationId, message));
+      messages.value = attachGraphPrompts(
+        historyMessages.map((message) => toUiMessage(conversationId, message)),
+      );
       if (onScrollToBottom) {
         onScrollToBottom();
       }
@@ -119,6 +137,7 @@ export function useChat() {
       id: aiMessageId,
       role: 'assistant',
       content: '',
+      graphPrompt: text,
       rawContent: '',
       stableContent: '',
       pendingTail: '',

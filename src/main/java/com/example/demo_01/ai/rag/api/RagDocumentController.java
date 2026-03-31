@@ -3,6 +3,7 @@ package com.example.demo_01.ai.rag.api;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagUploadAcceptedResponse;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
+import com.example.demo_01.ai.rag.service.RagIngestionFromArtifactService;
 import com.example.demo_01.common.BaseResponse;
 import com.example.demo_01.common.ResultUtils;
 import jakarta.annotation.Resource;
@@ -24,9 +25,17 @@ public class RagDocumentController {
     @Resource
     private RagDocumentIngestionService ragDocumentIngestionService;
 
+    @Resource
+    private RagIngestionFromArtifactService ragIngestionFromArtifactService;
+
     @PostMapping(consumes = "multipart/form-data")
     public ResponseEntity<BaseResponse<RagUploadAcceptedResponse>> upload(@RequestPart("file") MultipartFile file) {
         return ResponseEntity.accepted().body(ResultUtils.success(ragDocumentIngestionService.upload(file)));
+    }
+
+    @PostMapping("/{documentId}/ingest")
+    public ResponseEntity<BaseResponse<RagUploadAcceptedResponse>> ingest(@PathVariable UUID documentId) {
+        return ResponseEntity.accepted().body(ResultUtils.success(ragIngestionFromArtifactService.enqueueDocument(documentId, null)));
     }
 
     @GetMapping("/{documentId}")

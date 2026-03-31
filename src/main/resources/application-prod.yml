@@ -1,0 +1,51 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  neo4j:
+    uri: ${SPRING_NEO4J_URI:}
+    authentication:
+      username: ${SPRING_NEO4J_USERNAME:}
+      password: ${SPRING_NEO4J_PASSWORD:}
+
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        api-key: ${DASHSCOPE_API_KEY}
+        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+      embedding-model:
+        api-key: ${DASHSCOPE_API_KEY}
+        model-name: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}
+      streaming-chat-model:
+        api-key: ${DASHSCOPE_API_KEY}
+        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+
+app:
+  user:
+    init-admin:
+      enabled: ${APP_USER_INIT_ADMIN_ENABLED:false}
+      user-account: ${APP_USER_INIT_ADMIN_ACCOUNT:}
+      user-password: ${APP_USER_INIT_ADMIN_PASSWORD:}
+      user-name: ${APP_USER_INIT_ADMIN_NAME:}
+  ai:
+    preprocessing:
+      storage-root: /app/data/rag
+      grobid:
+        base-url: ${APP_AI_RAG_GROBID_BASE_URL}
+    rag:
+      storage-root: /app/data/rag
+      grobid:
+        base-url: ${APP_AI_RAG_GROBID_BASE_URL}
+    kg:
+      enabled: ${APP_AI_KG_ENABLED:false}
+      graph-builder:
+        enabled: ${APP_AI_KG_GRAPH_BUILDER_ENABLED:false}
+        endpoint: ${APP_AI_KG_GRAPH_BUILDER_ENDPOINT:}
+  web:
+    cors:
+      allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:}
+
+bigmodel:
+  api-key: ${BIGMODEL_API_KEY:}

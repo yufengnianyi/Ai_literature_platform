@@ -1,0 +1,84 @@
+spring:
+  application:
+    name: demo_01
+  profiles:
+    default: local
+  flyway:
+    placeholders:
+      embeddingDimension: ${app.ai.rag.embedding-dimension:1024}
+      vectorTable: ${app.ai.rag.vector-table:embedding_store}
+
+mybatis-flex:
+  global-config:
+    print-banner: false
+    normal-value-of-logic-delete: 0
+    deleted-value-of-logic-delete: 1
+
+server:
+  port: 8081
+  forward-headers-strategy: framework
+  servlet:
+    context-path: /api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  user:
+    init-admin:
+      enabled: false
+      user-account:
+      user-password:
+      user-name:
+  ai:
+    memory:
+      max-tokens: 4000
+    preprocessing:
+      storage-root: ${app.ai.rag.storage-root:data/rag}
+      async-threads: ${app.ai.rag.async-threads:2}
+      version: preprocess-v1
+      grobid:
+        base-url: ${app.ai.rag.grobid.base-url:http://localhost:8070}
+        connect-timeout-ms: ${app.ai.rag.grobid.connect-timeout-ms:5000}
+        read-timeout-ms: ${app.ai.rag.grobid.read-timeout-ms:180000}
+        max-retries: ${app.ai.rag.grobid.max-retries:2}
+        retry-backoff-ms: ${app.ai.rag.grobid.retry-backoff-ms:1000}
+      chunking:
+        target-tokens: ${app.ai.rag.chunking.target-tokens:700}
+        max-tokens: ${app.ai.rag.chunking.max-tokens:900}
+        overlap-sentences: ${app.ai.rag.chunking.overlap-sentences:1}
+        strategy-version: ${app.ai.rag.chunking.strategy-version:grobid-section-sentence-v1}
+    rag:
+      embedding-dimension: 1024
+      vector-table: embedding_store
+      retrieval:
+        dense-max-results: 5
+        dense-min-score: 0.6
+        bm25-max-results: 8
+        fused-max-results: 5
+        rrf-k: 60
+        bm25-index-path: ${app.ai.rag.retrieval.bm25-index-root:data/bm25-index}
+    kg:
+      enabled: true
+      async-threads: 2
+      entity-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
+      relation-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
+      schema-version: v1
+      entity-confidence-threshold: 0.6
+      relation-confidence-threshold: 0.6
+      graph-max-results: 4
+      graph-builder:
+        enabled: false
+        endpoint:
+        model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
+        batch-size: 1
+        max-retries: 2
+        connect-timeout-ms: 5000
+        read-timeout-ms: 30000

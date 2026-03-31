@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.config;
 
+import com.example.demo_01.ai.preprocessing.PreprocessingProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
@@ -12,14 +13,25 @@ import org.springframework.web.client.RestTemplate;
 public class RagProcessingConfig {
 
     @Bean
-    public RestClient grobidRestClient(AiPersistenceProperties properties) {
+    public RestClient grobidRestClient(PreprocessingProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout((int) properties.getRag().getGrobid().getConnectTimeoutMs());
-        requestFactory.setReadTimeout((int) properties.getRag().getGrobid().getReadTimeoutMs());
+        requestFactory.setConnectTimeout((int) properties.getGrobid().getConnectTimeoutMs());
+        requestFactory.setReadTimeout((int) properties.getGrobid().getReadTimeoutMs());
         RestTemplate restTemplate = new RestTemplate(requestFactory);
         return RestClient.builder(restTemplate)
-                .baseUrl(properties.getRag().getGrobid().getBaseUrl())
+                .baseUrl(properties.getGrobid().getBaseUrl())
                 .build();
+    }
+
+    @Bean("preprocessTaskExecutor")
+    public TaskExecutor preprocessTaskExecutor(PreprocessingProperties properties) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("preprocess-pipeline-");
+        executor.setCorePoolSize(properties.getAsyncThreads());
+        executor.setMaxPoolSize(properties.getAsyncThreads());
+        executor.setQueueCapacity(32);
+        executor.initialize();
+        return executor;
     }
 
     @Bean("ragTaskExecutor")

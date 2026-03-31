@@ -6,7 +6,7 @@
     <div class="message-stack">
       <div class="message-content">
         <div v-if="message.role === 'user'" class="text-content">
-          {{ message.content }}
+          <div class="question-text">{{ message.content }}</div>
         </div>
 
         <template v-else>
@@ -49,6 +49,12 @@
               </li>
             </ol>
           </div>
+
+          <QuestionKnowledgeGraphPopover
+            v-if="message.graphPrompt?.trim()"
+            class="answer-graph"
+            :prompt="message.graphPrompt"
+          />
         </template>
       </div>
     </div>
@@ -60,6 +66,7 @@ import { computed } from 'vue';
 
 import type { Message } from '../../types/chat';
 import { parseAIResponse } from '../../utils/markdown';
+import QuestionKnowledgeGraphPopover from './QuestionKnowledgeGraphPopover.vue';
 
 const props = defineProps<{
   message: Message;
@@ -174,6 +181,10 @@ const parsed = computed(() => {
 }
 
 .text-content {
+  white-space: pre-wrap;
+}
+
+.question-text {
   white-space: pre-wrap;
 }
 
@@ -312,6 +323,10 @@ const parsed = computed(() => {
   border-top: 1px solid #eff6ff;
 }
 
+.answer-graph {
+  margin-top: 18px;
+}
+
 .citations-list {
   list-style: none;
   padding: 0;
@@ -361,6 +376,10 @@ const parsed = computed(() => {
 @media (max-width: 960px) {
   .message-wrapper {
     max-width: 100%;
+  }
+
+  .answer-graph {
+    margin-top: 16px;
   }
 }
 </style>

@@ -3,6 +3,8 @@ package com.example.demo_01.ai.rag.service;
 import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.rag.chunk.TeiChunker;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
+import com.example.demo_01.ai.rag.retrieval.Bm25IndexEntry;
+import com.example.demo_01.ai.rag.retrieval.Bm25IndexService;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
@@ -47,6 +49,9 @@ public class RagVectorIngestionService {
 
     @Resource
     private TeiChunker teiChunker;
+
+    @Resource
+    private Bm25IndexService bm25IndexService;
 
     @Value("${langchain4j.community.dashscope.embedding-model.model-name}")
     private String embeddingModelName;
@@ -103,6 +108,7 @@ public class RagVectorIngestionService {
 
     public void removeDocument(UUID documentId) {
         jdbcTemplate.update("delete from " + vectorTable() + " where metadata ->> 'document_id' = ?", documentId.toString());
+        bm25IndexService.removeByDocumentId(documentId.toString());
     }
 
     private RagVectorIngestionResult ingestSegments(List<TextSegment> segments, List<String> ids, long estimatedTokensTotal) {
@@ -130,6 +136,7 @@ public class RagVectorIngestionService {
 
             Instant persistStart = Instant.now();
             embeddingStore.addAll(batchIds, response.content(), batchSegments);
+            bm25IndexService.index(toBm25IndexEntries(batchIds, batchSegments));
             persistMs += Duration.between(persistStart, Instant.now()).toMillis();
         }
         return new RagVectorIngestionResult(segments.size(), estimatedTokensTotal, providerTokensTotal, embedMs, persistMs);
@@ -175,5 +182,23 @@ public class RagVectorIngestionService {
         }
         String message = current.getMessage();
         return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+    }
+
+    private List<Bm25IndexEntry> toBm25IndexEntries(List<String> ids, List<TextSegment> segments) {
+        List<Bm25IndexEntry> entries = new ArrayList<>(segments.size());
+        for (int i = 0; i < segments.size(); i++) {
+            TextSegment segment = segments.get(i);
+            Metadata metadata = segment.metadata() == null ? new Metadata() : segment.metadata().copy();
+            entries.add(new Bm25IndexEntry(
+                    ids.get(i),
+                    metadata.getString("document_id"),
+                    metadata.getString("chunk_id"),
+                    metadata.getString("title"),
+                    metadata.getString("section_path"),
+                    segment.text(),
+                    metadata
+            ));
+        }
+        return entries;
     }
 }

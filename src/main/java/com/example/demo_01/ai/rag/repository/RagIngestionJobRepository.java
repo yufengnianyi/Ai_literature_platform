@@ -37,6 +37,10 @@ public class RagIngestionJobRepository {
                 Timestamp.from(now));
     }
 
+    public void insert(UUID jobId, UUID documentId, UUID batchId, RagJobStatus status, RagIngestionStage stage) {
+        insert(jobId, documentId, batchId, status, stage, null);
+    }
+
     public Optional<RagIngestionJobRecord> findById(UUID jobId) {
         List<RagIngestionJobRecord> rows = jdbcTemplate.query("select * from rag_ingestion_job where job_id = ?", this::mapRow, jobId);
         return rows.stream().findFirst();

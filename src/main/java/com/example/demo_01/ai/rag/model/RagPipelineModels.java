@@ -33,6 +33,7 @@ public final class RagPipelineModels {
         TEI_PARSING,
         JSONL_WRITING,
         EMBEDDING,
+        PERSISTING,
         COMPLETED,
         FAILED
     }
