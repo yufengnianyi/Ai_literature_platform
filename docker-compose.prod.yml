@@ -20,6 +20,14 @@ services:
     image: lfoppiano/grobid:0.8.2
     restart: unless-stopped
 
+  neo4j:
+    image: neo4j:5.26.22
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/demo_01_graph}
+    volumes:
+      - neo4j-data:/data
+
   backend:
     build:
       context: .
@@ -41,6 +49,12 @@ services:
       BIGMODEL_API_KEY: ${BIGMODEL_API_KEY:-}
       APP_AI_RAG_BOOTSTRAP_MODE: ${APP_AI_RAG_BOOTSTRAP_MODE:-if-empty}
       APP_AI_RAG_GROBID_BASE_URL: ${APP_AI_RAG_GROBID_BASE_URL:-http://grobid:8070}
+      APP_AI_KG_ENABLED: ${APP_AI_KG_ENABLED:-false}
+      APP_AI_KG_GRAPH_BUILDER_ENABLED: ${APP_AI_KG_GRAPH_BUILDER_ENABLED:-false}
+      APP_AI_KG_GRAPH_BUILDER_ENDPOINT: ${APP_AI_KG_GRAPH_BUILDER_ENDPOINT:-}
+      SPRING_NEO4J_URI: ${SPRING_NEO4J_URI:-bolt://neo4j:7687}
+      SPRING_NEO4J_USERNAME: ${SPRING_NEO4J_USERNAME:-neo4j}
+      SPRING_NEO4J_PASSWORD: ${SPRING_NEO4J_PASSWORD:-demo_01_graph}
       APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
 
   web:
@@ -59,3 +73,4 @@ services:
 
 volumes:
   postgres-data:
+  neo4j-data:

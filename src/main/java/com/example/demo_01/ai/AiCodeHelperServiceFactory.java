@@ -19,7 +19,7 @@ public class AiCodeHelperServiceFactory {
     @Resource(name = "ragContentRetriever")
     private ContentRetriever ragContentRetriever;
 
-    @Resource
+    @Resource(name = "qwenStreamingChatModel")
     private StreamingChatModel streamingChatModel;
 
     @Resource

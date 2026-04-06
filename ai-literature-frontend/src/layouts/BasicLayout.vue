@@ -14,6 +14,7 @@
       <div class="header-actions">
         <a-space :size="12">
           <a-button :type="isHomeRoute ? 'primary' : 'default'" @click="goHome">Chat</a-button>
+          <a-button :type="isReviewRoute ? 'primary' : 'default'" @click="goReview">Review</a-button>
           <a-button
             v-if="isAdmin"
             :type="isAdminRoute ? 'primary' : 'default'"
@@ -37,6 +38,7 @@
           <template #overlay>
             <a-menu @click="handleUserMenuClick">
               <a-menu-item key="chat">Chat</a-menu-item>
+              <a-menu-item key="review">Review</a-menu-item>
               <a-menu-item v-if="isAdmin" key="manage">User Manage</a-menu-item>
               <a-menu-divider />
               <a-menu-item key="logout" danger>Logout</a-menu-item>
@@ -256,6 +258,7 @@ const loginUser = computed(() => loginUserStore.loginUser);
 const isAdmin = computed(() => loginUser.value?.userRole === USER_ROLE_ADMIN);
 const displayName = computed(() => loginUser.value?.userName || loginUser.value?.userAccount || 'Workspace user');
 const isHomeRoute = computed(() => route.path === '/');
+const isReviewRoute = computed(() => route.path === '/review');
 const isAdminRoute = computed(() => route.path.startsWith('/admin'));
 
 const pinnedConversations = computed(() => conversations.value.filter((item) => item.pinned));
@@ -434,6 +437,10 @@ const goHome = async () => {
   await router.push('/');
 };
 
+const goReview = async () => {
+  await router.push('/review');
+};
+
 const goUserManage = async () => {
   if (isAdmin.value) {
     await router.push('/admin/user-manage');
@@ -453,6 +460,10 @@ const handleLogout = async () => {
 const handleUserMenuClick = async ({ key }: MenuClickEvent) => {
   if (key === 'chat') {
     await goHome();
+    return;
+  }
+  if (key === 'review') {
+    await goReview();
     return;
   }
   if (key === 'manage') {
@@ -883,6 +894,7 @@ onMounted(async () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   background: #ffffff;
 }
 

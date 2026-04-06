@@ -65,6 +65,25 @@ app:
         fused-max-results: 5
         rrf-k: 60
         bm25-index-path: ${app.ai.rag.retrieval.bm25-index-root:data/bm25-index}
+    review:
+      enabled: true
+      async-threads: 2
+      retrieval:
+        doc-fts-max-results: 50
+        doc-expand-top: 20
+        dense-max-results: 20
+        dense-min-score: 0.3
+        bm25-max-results: 30
+        fused-max-results: 50
+        max-candidates: 800
+      rerank:
+        top-k: 60
+        batch-size: 5
+        min-relevance: MEDIUM
+      extraction:
+        batch-size: 3
+      report:
+        max-tokens: 8000
     kg:
       enabled: true
       async-threads: 2

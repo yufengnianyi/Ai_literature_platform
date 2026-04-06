@@ -1,0 +1,159 @@
+terms:
+  # ── RLK core ──
+  - canonical: "receptor-like kinase"
+    aliases: ["RLK", "receptor like kinase", "receptor kinase", "RLKs"]
+    related: ["LRR-RLK", "WAK", "PERK", "CRK", "LecRLK"]
+
+  - canonical: "leucine-rich repeat receptor-like kinase"
+    aliases: ["LRR-RLK", "LRR RLK", "LRR-RLKs", "LRR receptor kinase"]
+    related: ["receptor-like kinase", "extracellular domain"]
+
+  - canonical: "wall-associated kinase"
+    aliases: ["WAK", "WAKs", "wall-associated receptor kinase"]
+    related: ["receptor-like kinase", "cell wall"]
+
+  - canonical: "cysteine-rich receptor-like kinase"
+    aliases: ["CRK", "CRKs", "cysteine-rich RLK"]
+    related: ["receptor-like kinase", "defense response"]
+
+  - canonical: "lectin receptor-like kinase"
+    aliases: ["LecRLK", "lectin RLK", "L-type LecRLK", "G-type LecRLK"]
+    related: ["receptor-like kinase", "lectin domain"]
+
+  - canonical: "S-domain receptor-like kinase"
+    aliases: ["SDRLK", "S-domain RLK", "SD-RLK"]
+    related: ["receptor-like kinase", "self-incompatibility"]
+
+  - canonical: "proline-rich extensin-like receptor kinase"
+    aliases: ["PERK", "PERKs"]
+    related: ["receptor-like kinase"]
+
+  # ── Domains & structure ──
+  - canonical: "kinase domain"
+    aliases: ["KD", "protein kinase domain", "catalytic domain"]
+    related: ["DFG motif", "HRD motif", "activation loop"]
+
+  - canonical: "extracellular domain"
+    aliases: ["ECD", "ectodomain", "extracellular region"]
+    related: ["LRR", "lectin domain", "signal peptide"]
+
+  - canonical: "leucine-rich repeat"
+    aliases: ["LRR", "LRRs", "leucine rich repeat"]
+    related: ["LRR-RLK", "extracellular domain"]
+
+  - canonical: "transmembrane domain"
+    aliases: ["TM", "TMD", "transmembrane region", "transmembrane helix"]
+    related: ["receptor-like kinase"]
+
+  - canonical: "signal peptide"
+    aliases: ["SP", "signal sequence", "leader peptide"]
+    related: ["extracellular domain"]
+
+  # ── Evolution ──
+  - canonical: "whole genome duplication"
+    aliases: ["WGD", "polyploidy", "genome doubling", "paleopolyploidy"]
+    related: ["tandem duplication", "gene family expansion"]
+
+  - canonical: "tandem duplication"
+    aliases: ["tandem repeat", "tandem gene duplication", "local duplication"]
+    related: ["gene cluster", "gene family expansion"]
+
+  - canonical: "segmental duplication"
+    aliases: ["block duplication", "large-scale duplication"]
+    related: ["whole genome duplication", "synteny"]
+
+  - canonical: "gene family expansion"
+    aliases: ["family expansion", "lineage-specific expansion", "gene amplification"]
+    related: ["whole genome duplication", "tandem duplication"]
+
+  - canonical: "positive selection"
+    aliases: ["adaptive evolution", "diversifying selection"]
+    related: ["dN/dS ratio", "branch-site model"]
+
+  - canonical: "purifying selection"
+    aliases: ["negative selection", "stabilizing selection"]
+    related: ["dN/dS ratio", "functional constraint"]
+
+  - canonical: "dN/dS ratio"
+    aliases: ["omega", "Ka/Ks", "nonsynonymous/synonymous ratio", "ω"]
+    related: ["positive selection", "purifying selection"]
+
+  - canonical: "synteny"
+    aliases: ["collinearity", "conserved synteny", "syntenic block"]
+    related: ["whole genome duplication", "chromosomal rearrangement"]
+
+  - canonical: "ortholog"
+    aliases: ["orthologue", "orthologous gene", "1:1 ortholog"]
+    related: ["paralog", "phylogenetic analysis"]
+
+  - canonical: "paralog"
+    aliases: ["paralogue", "paralogous gene", "duplicate gene"]
+    related: ["ortholog", "gene duplication"]
+
+  # ── Phylogenetics ──
+  - canonical: "phylogenetic analysis"
+    aliases: ["phylogeny", "phylogenetic tree", "evolutionary tree", "tree construction"]
+    related: ["maximum likelihood", "Bayesian inference"]
+
+  - canonical: "maximum likelihood"
+    aliases: ["ML", "ML tree", "ML analysis"]
+    related: ["phylogenetic analysis", "bootstrap"]
+
+  - canonical: "Bayesian inference"
+    aliases: ["BI", "Bayesian phylogenetics", "MrBayes"]
+    related: ["phylogenetic analysis", "posterior probability"]
+
+  - canonical: "bootstrap"
+    aliases: ["bootstrap support", "BS", "bootstrap value"]
+    related: ["phylogenetic analysis", "statistical support"]
+
+  # ── Function & defense ──
+  - canonical: "pattern recognition receptor"
+    aliases: ["PRR", "PRRs", "immune receptor"]
+    related: ["PAMP", "innate immunity", "PTI"]
+
+  - canonical: "pathogen-associated molecular pattern"
+    aliases: ["PAMP", "MAMP", "microbe-associated molecular pattern"]
+    related: ["pattern recognition receptor", "PTI"]
+
+  - canonical: "PAMP-triggered immunity"
+    aliases: ["PTI", "basal immunity", "pattern-triggered immunity"]
+    related: ["pattern recognition receptor", "defense response"]
+
+  - canonical: "defense response"
+    aliases: ["disease resistance", "immune response", "plant immunity"]
+    related: ["receptor-like kinase", "PTI"]
+
+  # ── Species ──
+  - canonical: "Arabidopsis thaliana"
+    aliases: ["Arabidopsis", "A. thaliana", "thale cress"]
+    related: ["model organism"]
+
+  - canonical: "Oryza sativa"
+    aliases: ["rice", "O. sativa"]
+    related: ["monocot", "crop species"]
+
+  - canonical: "Phaeodactylum tricornutum"
+    aliases: ["P. tricornutum"]
+    related: ["diatom", "stramenopile"]
+
+  # ── Methods ──
+  - canonical: "Hidden Markov Model"
+    aliases: ["HMM", "profile HMM", "HMMER"]
+    related: ["domain annotation", "protein family"]
+
+  - canonical: "multiple sequence alignment"
+    aliases: ["MSA", "sequence alignment", "MAFFT", "MUSCLE", "ClustalW"]
+    related: ["phylogenetic analysis"]
+
+  - canonical: "domain annotation"
+    aliases: ["domain prediction", "InterPro", "Pfam", "SMART"]
+    related: ["Hidden Markov Model", "protein domain"]
+
+  - canonical: "transcriptome"
+    aliases: ["RNA-seq", "transcriptomic", "gene expression profiling"]
+    related: ["expression analysis", "differential expression"]
+
+  - canonical: "genome-wide analysis"
+    aliases: ["genome-wide identification", "genome-wide survey", "whole-genome analysis"]
+    related: ["gene family", "phylogenomic"]

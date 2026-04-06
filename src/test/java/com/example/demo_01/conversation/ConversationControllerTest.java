@@ -2,7 +2,12 @@ package com.example.demo_01.conversation;
 
 import com.example.demo_01.ai.memory.PersistentChatMemoryStore;
 import com.example.demo_01.ai.memory.UserConversationKey;
+import com.example.demo_01.exception.BusinessException;
+import com.example.demo_01.exception.ErrorCode;
+import com.example.demo_01.exception.GlobalExceptionHandler;
 import com.example.demo_01.user.UserService;
+import com.example.demo_01.user.mapper.UserMapper;
+import com.example.demo_01.user.model.entity.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -15,7 +20,6 @@ import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -24,7 +28,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
-import org.springframework.web.server.ResponseStatusException;
 
 import javax.sql.DataSource;
 import java.sql.Timestamp;
@@ -33,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -40,11 +44,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ConversationController.class)
+@org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
 class ConversationControllerTest {
 
     @Autowired
@@ -59,8 +63,19 @@ class ConversationControllerTest {
     @MockBean
     private UserService userService;
 
+    @MockBean
+    private UserMapper userMapper;
+
+    private User mockLoginUser() {
+        User user = new User();
+        user.setUserId("u-1");
+        user.setUserRole("user");
+        return user;
+    }
+
     @Test
     void shouldCreateConversation() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         ConversationService.ConversationResponse response = new ConversationService.ConversationResponse(
                 "c-1", "New conversation-20260312120000", false,
                 Instant.parse("2026-03-12T04:00:00Z"), Instant.parse("2026-03-12T04:00:00Z"));
@@ -68,62 +83,70 @@ class ConversationControllerTest {
                 .thenReturn(response);
 
         mockMvc.perform(post("/conversations")
-                        .header("X-User-Id", "u-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ConversationService.CreateConversationRequest("my title"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.conversationId").value("c-1"));
-
-        verify(userService).assertUserExists("u-1");
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.conversationId").value("c-1"));
     }
 
     @Test
     void shouldListConversations() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         when(conversationService.listConversations("u-1")).thenReturn(List.of(
                 new ConversationService.ConversationResponse("c-1", "title", true,
                         Instant.parse("2026-03-12T04:00:00Z"), Instant.parse("2026-03-12T04:00:00Z"))
         ));
 
-        mockMvc.perform(get("/conversations").header("X-User-Id", "u-1"))
+        mockMvc.perform(get("/conversations"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].conversationId").value("c-1"))
-                .andExpect(jsonPath("$[0].pinned").value(true));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].conversationId").value("c-1"))
+                .andExpect(jsonPath("$.data[0].pinned").value(true));
     }
 
     @Test
     void shouldListConversationMessages() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         when(conversationService.listConversationMessages("u-1", "c-1")).thenReturn(List.of(
                 new ConversationService.ConversationMessageResponse(1L, "user", "hello", Instant.parse("2026-03-12T04:00:00Z")),
                 new ConversationService.ConversationMessageResponse(2L, "assistant", "hi", Instant.parse("2026-03-12T04:00:02Z"))
         ));
 
-        mockMvc.perform(get("/conversations/c-1/messages").header("X-User-Id", "u-1"))
+        mockMvc.perform(get("/conversations/c-1/messages"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].seqNo").value(1))
-                .andExpect(jsonPath("$[0].role").value("user"))
-                .andExpect(jsonPath("$[1].role").value("assistant"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].seqNo").value(1))
+                .andExpect(jsonPath("$.data[0].role").value("user"))
+                .andExpect(jsonPath("$.data[1].role").value("assistant"));
     }
 
     @Test
     void shouldReturnEmptyConversationMessages() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         when(conversationService.listConversationMessages("u-1", "c-empty")).thenReturn(List.of());
 
-        mockMvc.perform(get("/conversations/c-empty/messages").header("X-User-Id", "u-1"))
+        mockMvc.perform(get("/conversations/c-empty/messages"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("[]"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
     void shouldReturnNotFoundWhenConversationMessagesMissing() throws Exception {
-        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found"))
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
+        doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found"))
                 .when(conversationService).listConversationMessages("u-1", "missing");
 
-        mockMvc.perform(get("/conversations/missing/messages").header("X-User-Id", "u-1"))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/conversations/missing/messages"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND_ERROR.getCode()));
     }
 
     @Test
     void shouldRenameConversation() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         ConversationService.RenameConversationRequest request = new ConversationService.RenameConversationRequest("new title");
         ConversationService.ConversationResponse response = new ConversationService.ConversationResponse(
                 "c-1", "new title", false, Instant.parse("2026-03-12T04:00:00Z"),
@@ -132,15 +155,16 @@ class ConversationControllerTest {
         when(conversationService.renameConversation("u-1", "c-1", request)).thenReturn(response);
 
         mockMvc.perform(patch("/conversations/c-1")
-                        .header("X-User-Id", "u-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.title").value("new title"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.title").value("new title"));
     }
 
     @Test
     void shouldPinConversation() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         ConversationService.PinConversationRequest request = new ConversationService.PinConversationRequest(true);
         ConversationService.ConversationResponse response = new ConversationService.ConversationResponse(
                 "c-1", "title", true, Instant.parse("2026-03-12T04:00:00Z"),
@@ -149,47 +173,45 @@ class ConversationControllerTest {
         when(conversationService.pinConversation("u-1", "c-1", request)).thenReturn(response);
 
         mockMvc.perform(patch("/conversations/c-1/pin")
-                        .header("X-User-Id", "u-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.pinned").value(true));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.pinned").value(true));
     }
 
     @Test
     void shouldReturnNotFoundWhenPinningMissingConversation() throws Exception {
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         ConversationService.PinConversationRequest request = new ConversationService.PinConversationRequest(true);
-        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "conversation not found"))
+        doThrow(new BusinessException(ErrorCode.NOT_FOUND_ERROR, "conversation not found"))
                 .when(conversationService).pinConversation("u-1", "missing", request);
 
         mockMvc.perform(patch("/conversations/missing/pin")
-                        .header("X-User-Id", "u-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_FOUND_ERROR.getCode()));
     }
 
     @Test
     void shouldDeleteConversation() throws Exception {
-        mockMvc.perform(delete("/conversations/c-1").header("X-User-Id", "u-1"))
-                .andExpect(status().isOk());
+        when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
+        mockMvc.perform(delete("/conversations/c-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").value(true));
 
         verify(conversationService).deleteConversation("u-1", "c-1");
     }
 
     @Test
-    void shouldRejectWhenHeaderMissing() throws Exception {
+    void shouldRejectWhenNotLoggedIn() throws Exception {
+        doThrow(new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required"))
+                .when(userService).getLoginUser(any());
         mockMvc.perform(get("/conversations"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void shouldReturnNotFoundWhenUserMissing() throws Exception {
-        doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"))
-                .when(userService).assertUserExists("missing-user");
-
-        mockMvc.perform(get("/conversations").header("X-User-Id", "missing-user"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(ErrorCode.NOT_LOGIN_ERROR.getCode()));
     }
 }
 
