@@ -5,8 +5,8 @@
       <p class="subtitle">Enter a research question to generate a comprehensive systematic review report</p>
     </div>
 
-    <!-- Input Section -->
-    <div class="input-section" v-if="!isGenerating && !reportContent">
+    <!-- Stage: Input -->
+    <div class="input-section" v-if="stage === 'inputting'">
       <a-textarea
         v-model:value="question"
         placeholder="Enter your research question, e.g.: What is the evolutionary origin and diversification pattern of the LRR-RLK gene family across land plants?"
@@ -20,19 +20,93 @@
           type="primary"
           size="large"
           :disabled="!question.trim()"
-          :loading="isSubmitting"
-          @click="handleSubmit"
+          :loading="isAnalyzing"
+          @click="handleAnalyze"
         >
-          Generate Report
+          <ThunderboltOutlined />
+          Analyze & Configure
         </a-button>
-        <a-button size="large" @click="handleAsyncSubmit" :disabled="!question.trim()" :loading="isSubmitting">
+        <a-button size="large" @click="handleDirectSubmit" :disabled="!question.trim()" :loading="isAnalyzing">
+          Quick Generate (Skip Config)
+        </a-button>
+        <a-button size="large" @click="handleAsyncSubmit" :disabled="!question.trim()" :loading="isAnalyzing">
           Submit (Background)
         </a-button>
       </div>
     </div>
 
-    <!-- Progress Section -->
-    <div class="progress-section" v-if="isGenerating">
+    <!-- Stage: Analyzing -->
+    <div class="progress-section" v-if="stage === 'analyzing'">
+      <a-card class="progress-card">
+        <div class="progress-info">
+          <a-spin size="large" />
+          <div class="progress-text">
+            <h3>Analyzing Question...</h3>
+            <p class="stage-text">Decomposing your question into sub-questions, entities, and concepts</p>
+          </div>
+        </div>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+      </a-card>
+    </div>
+
+    <!-- Stage: Confirming (Interactive Analysis Panel) -->
+    <div class="confirming-section" v-if="stage === 'confirming' && analysisResult">
+      <ReviewAnalysisPanel
+        :analysis="analysisResult"
+        :original-question="question"
+        @confirm="handleConfirmAndRetrieve"
+        @cancel="handleBackToInput"
+      />
+    </div>
+
+    <!-- Stage: Retrieving (Segment A running) -->
+    <div class="progress-section" v-if="stage === 'retrieving'">
+      <a-card class="progress-card">
+        <div class="progress-info">
+          <a-spin size="large" />
+          <div class="progress-text">
+            <h3>Retrieving & Reranking Literature...</h3>
+            <p class="stage-text">{{ stageLabel }}</p>
+          </div>
+        </div>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+      </a-card>
+    </div>
+
+    <!-- Stage: Reviewing Candidates (Checkpoint 1) -->
+    <div class="confirming-section" v-if="stage === 'reviewingCandidates' && candidateList.length > 0">
+      <CandidateReviewPanel
+        :candidates="candidateList"
+        @confirm="handleConfirmCandidates"
+        @cancel="handleBackToInput"
+      />
+    </div>
+
+    <!-- Stage: Extracting (Segment B running) -->
+    <div class="progress-section" v-if="stage === 'extracting'">
+      <a-card class="progress-card">
+        <div class="progress-info">
+          <a-spin size="large" />
+          <div class="progress-text">
+            <h3>Extracting & Fusing Evidence...</h3>
+            <p class="stage-text">{{ stageLabel }}</p>
+          </div>
+        </div>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+      </a-card>
+    </div>
+
+    <!-- Stage: Reviewing Evidence (Checkpoint 2) -->
+    <div class="confirming-section" v-if="stage === 'reviewingEvidence' && evidenceList.length > 0">
+      <EvidenceReviewPanel
+        :evidence="evidenceList"
+        @confirm="handleConfirmEvidence"
+        @cancel="handleBackToInput"
+      />
+    </div>
+
+    <!-- Stage: Generating -->
+    <div class="progress-section" v-if="stage === 'generating' && !reportContent">
       <a-card class="progress-card">
         <div class="progress-info">
           <a-spin size="large" />
@@ -45,11 +119,18 @@
       </a-card>
     </div>
 
-    <!-- Report Section -->
+    <!-- Stage: Completed / Report Display -->
     <div class="report-section" v-if="reportContent">
       <div class="report-toolbar">
         <a-button @click="handleNewReport">New Report</a-button>
-        <a-button @click="handleCopyReport">Copy Markdown</a-button>
+        <a-button @click="handleCopyReport">
+          <CopyOutlined />
+          Copy Markdown
+        </a-button>
+        <a-button v-if="xlsxDownloadUrl" type="primary" ghost @click="handleDownloadXlsx">
+          <FileExcelOutlined />
+          Download Summary Table (xlsx)
+        </a-button>
       </div>
       <a-card class="report-card">
         <div class="report-content markdown-body" v-html="renderedReport"></div>
@@ -57,7 +138,7 @@
     </div>
 
     <!-- Task History -->
-    <div class="history-section" v-if="!isGenerating && !reportContent">
+    <div class="history-section" v-if="stage === 'inputting'">
       <h3>Recent Tasks</h3>
       <a-list
         :data-source="taskHistory"
@@ -72,7 +153,7 @@
               </template>
               <template #description>
                 <a-space>
-                  <a-tag :color="statusColor(item.status)">{{ item.status }}</a-tag>
+                  <a-tag :color="statusColor(item.status)">{{ statusLabel(item) }}</a-tag>
                   <span v-if="item.metrics?.totalMs">{{ (item.metrics.totalMs / 1000).toFixed(1) }}s</span>
                   <span>{{ formatTime(item.createdAt) }}</span>
                 </a-space>
@@ -104,19 +185,55 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { message, Modal } from 'ant-design-vue';
-import { reviewService, type ReviewTaskRecord, type ReviewStreamHandle } from '@/services/review';
+import {
+  DeleteOutlined,
+  ReloadOutlined,
+  ThunderboltOutlined,
+  CopyOutlined,
+  FileExcelOutlined,
+} from '@ant-design/icons-vue';
+import {
+  reviewService,
+  type ReviewTaskRecord,
+  type ReviewStreamHandle,
+  type QueryAnalysis,
+  type ReviewGenerateRequest,
+  type ReviewCandidate,
+  type ReviewEvidenceRecord,
+  type CandidateReviewRequest,
+  type EvidenceReviewRequest,
+} from '@/services/review';
 import { renderMarkdown } from '@/utils/markdown';
-import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons-vue';
+import ReviewAnalysisPanel from '@/components/review/ReviewAnalysisPanel.vue';
+import CandidateReviewPanel from '@/components/review/CandidateReviewPanel.vue';
+import EvidenceReviewPanel from '@/components/review/EvidenceReviewPanel.vue';
 
+type ReviewStage =
+  | 'inputting'
+  | 'analyzing'
+  | 'confirming'
+  | 'retrieving'
+  | 'reviewingCandidates'
+  | 'extracting'
+  | 'reviewingEvidence'
+  | 'generating'
+  | 'completed';
+
+const stage = ref<ReviewStage>('inputting');
 const question = ref('');
-const isSubmitting = ref(false);
-const isGenerating = ref(false);
+const isAnalyzing = ref(false);
+const analysisResult = ref<QueryAnalysis | null>(null);
+const currentTaskId = ref<string>('');
+const candidateList = ref<ReviewCandidate[]>([]);
+const evidenceList = ref<ReviewEvidenceRecord[]>([]);
 const reportContent = ref('');
 const stageLabel = ref('Initializing...');
 const errorMessage = ref('');
+const xlsxDownloadUrl = ref('');
 const taskHistory = ref<ReviewTaskRecord[]>([]);
 const loadingHistory = ref(false);
 let streamHandle: ReviewStreamHandle | null = null;
+let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 const renderedReport = computed(() => {
   return reportContent.value ? renderMarkdown(reportContent.value) : '';
@@ -127,9 +244,15 @@ const statusColor = (status: string) => {
     case 'COMPLETED': return 'green';
     case 'RUNNING': return 'blue';
     case 'QUEUED': return 'orange';
+    case 'AWAITING_USER': return 'purple';
     case 'FAILED': return 'red';
     default: return 'default';
   }
+};
+
+const statusLabel = (task: ReviewTaskRecord) => {
+  if (task.status === 'AWAITING_USER') return 'Awaiting your review';
+  return task.status;
 };
 
 const formatTime = (iso: string) => {
@@ -138,6 +261,28 @@ const formatTime = (iso: string) => {
   } catch {
     return iso;
   }
+};
+
+const cleanupPolling = () => {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+};
+
+const resetState = () => {
+  stage.value = 'inputting';
+  analysisResult.value = null;
+  currentTaskId.value = '';
+  candidateList.value = [];
+  evidenceList.value = [];
+  reportContent.value = '';
+  xlsxDownloadUrl.value = '';
+  stageLabel.value = 'Initializing...';
+  errorMessage.value = '';
+  streamHandle?.close();
+  streamHandle = null;
+  cleanupPolling();
 };
 
 const loadTaskHistory = async () => {
@@ -151,29 +296,147 @@ const loadTaskHistory = async () => {
   }
 };
 
-const handleSubmit = () => {
+// ── Checkpoint 0: Query Analysis ──
+
+const handleAnalyze = async () => {
   if (!question.value.trim()) return;
-  isSubmitting.value = true;
-  isGenerating.value = true;
+  isAnalyzing.value = true;
+  stage.value = 'analyzing';
+  errorMessage.value = '';
+
+  try {
+    analysisResult.value = await reviewService.analyzeQuestion(question.value);
+    stage.value = 'confirming';
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : 'Failed to analyze question';
+    stage.value = 'inputting';
+  } finally {
+    isAnalyzing.value = false;
+  }
+};
+
+// ── Segment A: Retrieval (after confirming analysis) ──
+
+const handleConfirmAndRetrieve = async (request: ReviewGenerateRequest) => {
+  stage.value = 'retrieving';
+  stageLabel.value = 'Expanding queries & retrieving literature...';
+  errorMessage.value = '';
+  const taskId = crypto.randomUUID();
+  currentTaskId.value = taskId;
+
+  try {
+    await reviewService.startRetrieval(taskId, request);
+    pollForCheckpoint(taskId, 'RERANKING', 'reviewingCandidates', async () => {
+      candidateList.value = await reviewService.getCandidates(taskId);
+    });
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : 'Failed to start retrieval';
+    stage.value = 'inputting';
+  }
+};
+
+// ── Checkpoint 1: Candidate Review ──
+
+const handleConfirmCandidates = async (request: CandidateReviewRequest) => {
+  stage.value = 'extracting';
+  stageLabel.value = 'Extracting evidence from selected literature...';
+  errorMessage.value = '';
+
+  try {
+    await reviewService.startExtraction(currentTaskId.value, request);
+    pollForCheckpoint(currentTaskId.value, 'EVIDENCE_FUSION', 'reviewingEvidence', async () => {
+      evidenceList.value = await reviewService.getEvidence(currentTaskId.value);
+    });
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : 'Failed to start extraction';
+    stage.value = 'inputting';
+  }
+};
+
+// ── Checkpoint 2: Evidence Review ──
+
+const handleConfirmEvidence = (request: EvidenceReviewRequest) => {
+  stage.value = 'generating';
   reportContent.value = '';
+  xlsxDownloadUrl.value = '';
+  stageLabel.value = 'Generating report with your guidance...';
+
+  streamHandle = reviewService.startGeneration({
+    taskId: currentTaskId.value,
+    request,
+    onMessage: (data: string) => {
+      stageLabel.value = 'Generating report...';
+      reportContent.value += data;
+    },
+    onXlsxReady: (downloadUrl: string) => {
+      xlsxDownloadUrl.value = downloadUrl;
+    },
+    onError: (error: unknown) => {
+      stage.value = reportContent.value ? 'completed' : 'inputting';
+      errorMessage.value = error instanceof Error ? error.message : 'Report generation failed';
+    },
+    onComplete: () => {
+      stage.value = 'completed';
+      if (!reportContent.value) {
+        errorMessage.value = 'No report content received';
+      }
+      loadTaskHistory();
+    },
+  });
+};
+
+// ── Polling helper for segment completion ──
+
+const pollForCheckpoint = (
+  taskId: string,
+  expectedStage: string,
+  nextUiStage: ReviewStage,
+  onReady: () => Promise<void>,
+) => {
+  cleanupPolling();
+  pollInterval = setInterval(async () => {
+    try {
+      const task = await reviewService.getTask(taskId);
+      stageLabel.value = task.stage ?? 'Processing...';
+
+      if (task.status === 'AWAITING_USER' && task.stage === expectedStage) {
+        cleanupPolling();
+        await onReady();
+        stage.value = nextUiStage;
+      } else if (task.status === 'FAILED') {
+        cleanupPolling();
+        stage.value = 'inputting';
+        errorMessage.value = task.errorMessage ?? 'Task failed';
+      }
+    } catch {
+      cleanupPolling();
+      stage.value = 'inputting';
+      errorMessage.value = 'Lost connection to server';
+    }
+  }, 3000);
+};
+
+// ── Original flows (Quick Generate, Background Submit) ──
+
+const handleDirectSubmit = () => {
+  if (!question.value.trim()) return;
+  stage.value = 'generating';
+  reportContent.value = '';
+  xlsxDownloadUrl.value = '';
   stageLabel.value = 'Analyzing question...';
 
   streamHandle = reviewService.streamReport({
     question: question.value,
     onMessage: (data: string) => {
-      isSubmitting.value = false;
       stageLabel.value = 'Generating report...';
       reportContent.value += data;
-      isGenerating.value = false;
     },
     onError: (error: unknown) => {
-      isSubmitting.value = false;
-      isGenerating.value = false;
+      stage.value = reportContent.value ? 'completed' : 'inputting';
       errorMessage.value = error instanceof Error ? error.message : 'Report generation failed';
     },
     onComplete: () => {
-      isSubmitting.value = false;
-      isGenerating.value = false;
+      stage.value = 'completed';
       if (!reportContent.value) {
         errorMessage.value = 'No report content received';
       }
@@ -184,7 +447,7 @@ const handleSubmit = () => {
 
 const handleAsyncSubmit = async () => {
   if (!question.value.trim()) return;
-  isSubmitting.value = true;
+  isAnalyzing.value = true;
   try {
     const result = await reviewService.submitTask(question.value);
     message.success(`Task submitted: ${result.taskId}`);
@@ -192,18 +455,27 @@ const handleAsyncSubmit = async () => {
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : 'Submit failed';
   } finally {
-    isSubmitting.value = false;
+    isAnalyzing.value = false;
   }
 };
 
 const handleCancel = () => {
   streamHandle?.close();
-  isGenerating.value = false;
-  isSubmitting.value = false;
+  streamHandle = null;
+  cleanupPolling();
+  if (reportContent.value) {
+    stage.value = 'completed';
+  } else {
+    stage.value = 'inputting';
+  }
+};
+
+const handleBackToInput = () => {
+  resetState();
 };
 
 const handleNewReport = () => {
-  reportContent.value = '';
+  resetState();
   question.value = '';
 };
 
@@ -213,6 +485,12 @@ const handleCopyReport = async () => {
     message.success('Report copied to clipboard');
   } catch {
     message.error('Copy failed');
+  }
+};
+
+const handleDownloadXlsx = () => {
+  if (xlsxDownloadUrl.value) {
+    window.open(xlsxDownloadUrl.value, '_blank');
   }
 };
 
@@ -248,9 +526,21 @@ const handleRetry = async (task: ReviewTaskRecord) => {
 const loadTask = async (taskId: string) => {
   try {
     const task = await reviewService.getTask(taskId);
+    question.value = task.question;
+    currentTaskId.value = taskId;
+
     if (task.reportMarkdown) {
       reportContent.value = task.reportMarkdown;
-      question.value = task.question;
+      stage.value = 'completed';
+      xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
+    } else if (task.status === 'AWAITING_USER') {
+      if (task.stage === 'RERANKING') {
+        candidateList.value = await reviewService.getCandidates(taskId);
+        stage.value = 'reviewingCandidates';
+      } else if (task.stage === 'EVIDENCE_FUSION') {
+        evidenceList.value = await reviewService.getEvidence(taskId);
+        stage.value = 'reviewingEvidence';
+      }
     } else if (task.status === 'RUNNING' || task.status === 'QUEUED') {
       message.info('Task is still running, please wait...');
       pollTask(taskId);
@@ -263,26 +553,40 @@ const loadTask = async (taskId: string) => {
 };
 
 const pollTask = (taskId: string) => {
-  isGenerating.value = true;
-  const interval = setInterval(async () => {
+  stage.value = 'generating';
+  stageLabel.value = 'Processing...';
+  cleanupPolling();
+  pollInterval = setInterval(async () => {
     try {
       const task = await reviewService.getTask(taskId);
       stageLabel.value = task.stage ?? 'Processing...';
       if (task.status === 'COMPLETED') {
-        clearInterval(interval);
-        isGenerating.value = false;
+        cleanupPolling();
         if (task.reportMarkdown) {
           reportContent.value = task.reportMarkdown;
           question.value = task.question;
+          xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
+        }
+        stage.value = 'completed';
+      } else if (task.status === 'AWAITING_USER') {
+        cleanupPolling();
+        currentTaskId.value = taskId;
+        question.value = task.question;
+        if (task.stage === 'RERANKING') {
+          candidateList.value = await reviewService.getCandidates(taskId);
+          stage.value = 'reviewingCandidates';
+        } else if (task.stage === 'EVIDENCE_FUSION') {
+          evidenceList.value = await reviewService.getEvidence(taskId);
+          stage.value = 'reviewingEvidence';
         }
       } else if (task.status === 'FAILED') {
-        clearInterval(interval);
-        isGenerating.value = false;
+        cleanupPolling();
+        stage.value = 'inputting';
         errorMessage.value = task.errorMessage ?? 'Task failed';
       }
     } catch {
-      clearInterval(interval);
-      isGenerating.value = false;
+      cleanupPolling();
+      stage.value = 'inputting';
     }
   }, 3000);
 };
@@ -347,6 +651,10 @@ onMounted(() => {
 .stage-text {
   color: #888;
   margin: 4px 0 0;
+}
+
+.confirming-section {
+  margin-bottom: 24px;
 }
 
 .report-toolbar {

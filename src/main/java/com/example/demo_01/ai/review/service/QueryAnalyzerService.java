@@ -18,19 +18,25 @@ import java.util.List;
 public class QueryAnalyzerService {
 
     private static final String SYSTEM_PROMPT = """
-            You are a scientific research question analyzer. Given a user's research question,
-            decompose it into structured components for systematic literature review.
+            You are a scientific review request normalizer. Given a user's raw prompt,
+            recover the underlying scientific review question and decompose it into structured
+            components for systematic literature review.
             
             Return JSON only with this exact shape:
             {
-              "mainQuestion": "the original question rephrased clearly",
+              "mainQuestion": "one concise scientific review question",
               "subQuestions": ["sub-question 1", "sub-question 2", ...],
               "keyEntities": ["entity1", "entity2", ...],
               "keyConcepts": ["concept1", "concept2", ...]
             }
             
             Rules:
+            - The raw prompt may include formatting instructions, output schema, JSON examples,
+              extraction rules, or field definitions. Ignore all of that meta-instruction content.
+            - mainQuestion must capture only the underlying scientific objective, not the requested
+              output format or extraction schema.
             - subQuestions: 3-5 different angles or aspects of the main question
+            - subQuestions must be scientific questions, not field names or reporting instructions
             - keyEntities: specific biological entities (gene names, species, protein families, etc.)
             - keyConcepts: abstract concepts (evolution events, analysis methods, biological processes, etc.)
             - All text should be in the same language as the input question
@@ -43,6 +49,9 @@ public class QueryAnalyzerService {
     @Resource
     private ObjectMapper objectMapper;
 
+    @Resource
+    private ReviewPromptCanonicalizer reviewPromptCanonicalizer;
+
     public QueryAnalysis analyze(String question) {
         log.info("Analyzing question: {}", truncate(question, 100));
         ChatResponse response = chatModel.chat(
@@ -53,14 +62,7 @@ public class QueryAnalyzerService {
         String raw = (aiMessage != null && aiMessage.text() != null) ? aiMessage.text() : "{}";
         try {
             QueryAnalysis analysis = objectMapper.readValue(extractJson(raw), QueryAnalysis.class);
-            if (analysis.subQuestions() == null || analysis.subQuestions().isEmpty()) {
-                analysis = new QueryAnalysis(
-                        analysis.mainQuestion() != null ? analysis.mainQuestion() : question,
-                        List.of(question),
-                        analysis.keyEntities() != null ? analysis.keyEntities() : List.of(),
-                        analysis.keyConcepts() != null ? analysis.keyConcepts() : List.of()
-                );
-            }
+            analysis = reviewPromptCanonicalizer.canonicalize(question, analysis);
             log.info("Query analysis complete: {} sub-questions, {} entities, {} concepts",
                     analysis.subQuestions().size(),
                     analysis.keyEntities().size(),
@@ -68,7 +70,10 @@ public class QueryAnalyzerService {
             return analysis;
         } catch (Exception e) {
             log.warn("Failed to parse query analysis, using fallback: {}", e.getMessage());
-            return new QueryAnalysis(question, List.of(question), List.of(), List.of());
+            return reviewPromptCanonicalizer.canonicalize(
+                    question,
+                    new QueryAnalysis(question, List.of(question), List.of(), List.of())
+            );
         }
     }
 

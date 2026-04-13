@@ -19,6 +19,12 @@ server:
   forward-headers-strategy: framework
   servlet:
     context-path: /api
+    session:
+      timeout: ${app.user.session.timeout:24h}
+      cookie:
+        http-only: true
+        max-age: ${app.user.session.timeout:24h}
+        same-site: lax
 
 management:
   endpoints:
@@ -32,6 +38,8 @@ management:
 
 app:
   user:
+    session:
+      timeout: 24h
     init-admin:
       enabled: false
       user-account:

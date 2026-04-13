@@ -4,6 +4,8 @@ import com.example.demo_01.ai.rag.api.RagDocumentController;
 import com.example.demo_01.ai.rag.api.RagJobController;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
+import com.example.demo_01.ai.rag.service.RagIngestionFromArtifactService;
+import com.example.demo_01.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -18,10 +20,12 @@ import java.util.UUID;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({RagDocumentController.class, RagJobController.class})
+@org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
 class RagDocumentApiControllerTest {
 
     @Autowired
@@ -29,6 +33,9 @@ class RagDocumentApiControllerTest {
 
     @MockBean
     private RagDocumentIngestionService ragDocumentIngestionService;
+
+    @MockBean
+    private RagIngestionFromArtifactService ragIngestionFromArtifactService;
 
     @Test
     void uploadShouldReturnAcceptedPayload() throws Exception {
@@ -41,10 +48,26 @@ class RagDocumentApiControllerTest {
 
         mockMvc.perform(multipart("/rag/documents").file(file))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.jobId").value(jobId.toString()))
-                .andExpect(jsonPath("$.documentId").value(documentId.toString()))
-                .andExpect(jsonPath("$.status").value("QUEUED"))
-                .andExpect(jsonPath("$.stage").value("UPLOAD"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.jobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"))
+                .andExpect(jsonPath("$.data.stage").value("UPLOAD"));
+    }
+
+    @Test
+    void ingestShouldReturnAcceptedPayload() throws Exception {
+        UUID jobId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        when(ragIngestionFromArtifactService.enqueueDocument(documentId, null))
+                .thenReturn(new RagUploadAcceptedResponse(jobId, documentId, RagJobStatus.QUEUED, RagIngestionStage.EMBEDDING));
+
+        mockMvc.perform(post("/rag/documents/{documentId}/ingest", documentId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.jobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
+                .andExpect(jsonPath("$.data.stage").value("EMBEDDING"));
     }
 
     @Test
@@ -75,10 +98,11 @@ class RagDocumentApiControllerTest {
 
         mockMvc.perform(get("/rag/documents/{documentId}", documentId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.documentId").value(documentId.toString()))
-                .andExpect(jsonPath("$.latestJobId").value(latestJobId.toString()))
-                .andExpect(jsonPath("$.canonicalKey").value("doi:10.1000/test"))
-                .andExpect(jsonPath("$.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
+                .andExpect(jsonPath("$.data.latestJobId").value(latestJobId.toString()))
+                .andExpect(jsonPath("$.data.canonicalKey").value("doi:10.1000/test"))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
 
     @Test
@@ -112,10 +136,11 @@ class RagDocumentApiControllerTest {
 
         mockMvc.perform(get("/rag/jobs/{jobId}", jobId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.jobId").value(jobId.toString()))
-                .andExpect(jsonPath("$.documentId").value(documentId.toString()))
-                .andExpect(jsonPath("$.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.stage").value("COMPLETED"))
-                .andExpect(jsonPath("$.providerTokensTotal").value(1200));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.jobId").value(jobId.toString()))
+                .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.stage").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.providerTokensTotal").value(1200));
     }
 }

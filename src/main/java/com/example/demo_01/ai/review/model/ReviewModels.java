@@ -14,7 +14,7 @@ public final class ReviewModels {
     // ── Enums ──
 
     public enum ReviewTaskStatus {
-        QUEUED, RUNNING, COMPLETED, FAILED
+        QUEUED, RUNNING, AWAITING_USER, COMPLETED, FAILED
     }
 
     public enum ReviewStage {
@@ -77,6 +77,29 @@ public final class ReviewModels {
     }
 
     public record ReviewTaskSubmitRequest(String question) {
+    }
+
+    public record ReviewGenerateRequest(
+            String question,
+            String mainQuestion,
+            List<String> selectedSubQuestions,
+            List<String> selectedEntities,
+            List<String> selectedConcepts,
+            List<String> customSubQuestions
+    ) {
+        public QueryAnalysis toFilteredAnalysis() {
+            List<String> allSubQuestions = new java.util.ArrayList<>(
+                    selectedSubQuestions != null ? selectedSubQuestions : List.of());
+            if (customSubQuestions != null) {
+                allSubQuestions.addAll(customSubQuestions);
+            }
+            return new QueryAnalysis(
+                    mainQuestion != null ? mainQuestion : question,
+                    allSubQuestions,
+                    selectedEntities != null ? selectedEntities : List.of(),
+                    selectedConcepts != null ? selectedConcepts : List.of()
+            );
+        }
     }
 
     public record ReviewTaskAcceptedResponse(UUID taskId, ReviewTaskStatus status) {
@@ -186,6 +209,19 @@ public final class ReviewModels {
             List<Citation> references
     ) {
     }
+
+    // ── Checkpoint requests ──
+
+    public record CandidateReviewRequest(
+            List<String> excludedChunkIds,
+            List<String> prioritizedChunkIds
+    ) {}
+
+    public record EvidenceReviewRequest(
+            List<Long> excludedEvidenceIds,
+            List<String> focusSubQuestions,
+            String userGuidance
+    ) {}
 
     // ── Retrieval intermediates ──
 

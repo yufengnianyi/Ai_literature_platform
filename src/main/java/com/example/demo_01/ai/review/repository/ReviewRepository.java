@@ -183,6 +183,33 @@ public class ReviewRepository {
                 """, this::mapCandidate, taskId);
     }
 
+    public List<ReviewCandidate> findUserApprovedCandidates(UUID taskId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM review_candidate
+                WHERE task_id = ? AND included = TRUE AND user_excluded = FALSE
+                ORDER BY CASE WHEN user_prioritized = TRUE THEN 0 ELSE 1 END,
+                         rerank_score DESC NULLS LAST
+                """, this::mapCandidate, taskId);
+    }
+
+    public void updateCandidateUserExcluded(UUID taskId, List<String> chunkIds, boolean excluded) {
+        if (chunkIds == null || chunkIds.isEmpty()) return;
+        for (String chunkId : chunkIds) {
+            jdbcTemplate.update("""
+                    UPDATE review_candidate SET user_excluded = ? WHERE task_id = ? AND chunk_id = ?
+                    """, excluded, taskId, chunkId);
+        }
+    }
+
+    public void updateCandidateUserPrioritized(UUID taskId, List<String> chunkIds, boolean prioritized) {
+        if (chunkIds == null || chunkIds.isEmpty()) return;
+        for (String chunkId : chunkIds) {
+            jdbcTemplate.update("""
+                    UPDATE review_candidate SET user_prioritized = ? WHERE task_id = ? AND chunk_id = ?
+                    """, prioritized, taskId, chunkId);
+        }
+    }
+
     // ── Evidence ──
 
     public void insertEvidence(UUID taskId, ExtractedEvidence e) {
@@ -210,6 +237,28 @@ public class ReviewRepository {
         return jdbcTemplate.query("""
                 SELECT * FROM review_evidence WHERE task_id = ? ORDER BY id
                 """, this::mapEvidence, taskId);
+    }
+
+    public List<ReviewEvidenceRecord> findUserApprovedEvidence(UUID taskId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM review_evidence WHERE task_id = ? AND user_excluded = FALSE ORDER BY id
+                """, this::mapEvidence, taskId);
+    }
+
+    public void updateEvidenceUserExcluded(UUID taskId, List<Long> evidenceIds, boolean excluded) {
+        if (evidenceIds == null || evidenceIds.isEmpty()) return;
+        for (Long evidenceId : evidenceIds) {
+            jdbcTemplate.update("""
+                    UPDATE review_evidence SET user_excluded = ? WHERE task_id = ? AND id = ?
+                    """, excluded, taskId, evidenceId);
+        }
+    }
+
+    public void updateTaskUserGuidance(UUID taskId, String guidance, List<String> focusSubQuestions) {
+        jdbcTemplate.update("""
+                UPDATE review_task SET user_guidance = ?, focus_sub_questions = cast(? as jsonb), updated_at = ?
+                WHERE task_id = ?
+                """, guidance, toJson(focusSubQuestions), Timestamp.from(Instant.now()), taskId);
     }
 
     // ── Document FTS (Phase 1) ──

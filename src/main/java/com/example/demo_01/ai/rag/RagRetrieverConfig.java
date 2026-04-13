@@ -1,7 +1,5 @@
 package com.example.demo_01.ai.rag;
 
-import com.example.demo_01.ai.kg.retrieval.GraphHybridRetriever;
-import com.example.demo_01.ai.kg.retrieval.Neo4jGraphContentRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25ContentRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25IndexService;
 import com.example.demo_01.ai.rag.retrieval.EmbeddingStoreTextRepository;
@@ -13,7 +11,6 @@ import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,8 +39,7 @@ public class RagRetrieverConfig {
     @Bean("ragContentRetriever")
     @DependsOnDatabaseInitialization
     public ContentRetriever ragContentRetriever(Bm25IndexService bm25IndexService,
-                                                ObjectMapper objectMapper,
-                                                ObjectProvider<Neo4jGraphContentRetriever> graphContentRetrieverProvider) {
+                                                ObjectMapper objectMapper) {
         ContentRetriever denseRetriever = EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(embeddingStore)
                 .embeddingModel(quwenEmbeddingModel)
@@ -61,15 +57,6 @@ public class RagRetrieverConfig {
                 ragRetrievalProperties.getRrfK(),
                 ragRetrievalProperties.getFusedMaxResults()
         );
-        ContentRetriever graphRetriever = graphContentRetrieverProvider.getIfAvailable();
-        if (graphRetriever == null) {
-            graphRetriever = query -> java.util.List.of();
-        }
-        return new GraphHybridRetriever(
-                textRetriever,
-                graphRetriever,
-                ragRetrievalProperties.getRrfK(),
-                ragRetrievalProperties.getFusedMaxResults()
-        );
+        return textRetriever;
     }
 }

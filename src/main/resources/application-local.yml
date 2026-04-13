@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:55432/demo_01
-    username: demo_01
-    password: demo_01
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:55432/demo_01}
+    username: ${SPRING_DATASOURCE_USERNAME:demo_01}
+    password: ${SPRING_DATASOURCE_PASSWORD:demo_01}
   neo4j:
     uri: ${SPRING_NEO4J_URI:bolt://localhost:7687}
     authentication:

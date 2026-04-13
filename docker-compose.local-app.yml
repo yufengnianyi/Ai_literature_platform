@@ -1,0 +1,44 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      grobid:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-demo_01}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-demo_01}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-demo_01}
+      SPRING_NEO4J_URI: ${SPRING_NEO4J_URI:-bolt://neo4j:7687}
+      SPRING_NEO4J_USERNAME: ${SPRING_NEO4J_USERNAME:-neo4j}
+      SPRING_NEO4J_PASSWORD: ${SPRING_NEO4J_PASSWORD:-demo_01_graph}
+      APP_AI_RAG_GROBID_BASE_URL: ${APP_AI_RAG_GROBID_BASE_URL:-http://grobid:8070}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:5173,http://127.0.0.1:5173}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_CHAT_MODEL: ${DASHSCOPE_CHAT_MODEL:-qwen-max}
+      DASHSCOPE_EMBEDDING_MODEL: ${DASHSCOPE_EMBEDDING_MODEL:-text-embedding-v4}
+      BIGMODEL_API_KEY: ${BIGMODEL_API_KEY:-}
+      APP_AI_KG_ENABLED: ${APP_AI_KG_ENABLED:-true}
+      APP_AI_KG_GRAPH_BUILDER_ENABLED: ${APP_AI_KG_GRAPH_BUILDER_ENABLED:-false}
+      APP_AI_KG_GRAPH_BUILDER_ENDPOINT: ${APP_AI_KG_GRAPH_BUILDER_ENDPOINT:-}
+    ports:
+      - "8081:8081"
+
+  web:
+    build:
+      context: ./ai-literature-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_BASE_PATH: ${VITE_APP_BASE_PATH:-/}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8088}:80"

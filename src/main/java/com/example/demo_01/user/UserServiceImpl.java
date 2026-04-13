@@ -21,9 +21,11 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,9 +41,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private static final int MAX_PAGE_SIZE = 50;
 
     private final BCryptPasswordEncoder passwordEncoder;
+    private final Duration sessionTimeout;
 
-    public UserServiceImpl(BCryptPasswordEncoder passwordEncoder) {
+    public UserServiceImpl(BCryptPasswordEncoder passwordEncoder,
+                           @Value("${app.user.session.timeout:24h}") Duration sessionTimeout) {
         this.passwordEncoder = passwordEncoder;
+        this.sessionTimeout = sessionTimeout;
     }
 
     @Override
@@ -90,8 +95,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "invalid account or password");
         }
 
+        HttpSession existingSession = httpServletRequest.getSession(false);
+        if (existingSession != null) {
+            existingSession.invalidate();
+        }
+
+        HttpSession session = httpServletRequest.getSession(true);
+        refreshSession(session);
         LoginUserVO loginUserVO = getLoginUserVO(user);
-        httpServletRequest.getSession(true).setAttribute(UserConstant.USER_LOGIN_STATE, loginUserVO);
+        session.setAttribute(UserConstant.USER_LOGIN_STATE, loginUserVO);
         return loginUserVO;
     }
 
@@ -113,6 +125,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (!(sessionValue instanceof LoginUserVO loginUserVO) || StrUtil.isBlank(loginUserVO.getUserId())) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR, "login required");
         }
+        refreshSession(session);
         User user = getById(loginUserVO.getUserId());
         if (user == null || user.getIsDelete() != null && user.getIsDelete() == 1) {
             session.removeAttribute(UserConstant.USER_LOGIN_STATE);
@@ -130,8 +143,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (session == null) {
             return true;
         }
-        session.removeAttribute(UserConstant.USER_LOGIN_STATE);
+        session.invalidate();
         return true;
+    }
+
+    private void refreshSession(HttpSession session) {
+        if (session == null) {
+            return;
+        }
+        long seconds = Math.max(1L, sessionTimeout.toSeconds());
+        session.setMaxInactiveInterval((int) Math.min(Integer.MAX_VALUE, seconds));
     }
 
     @Override

@@ -11,7 +11,6 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  graphPrompt?: string;
   rawContent?: string;
   stableContent?: string;
   pendingTail?: string;

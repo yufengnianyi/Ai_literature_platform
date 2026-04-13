@@ -5,6 +5,7 @@ import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchAcceptedRespon
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionBatchRecord;
 import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
+import com.example.demo_01.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -22,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(RagBatchController.class)
+@org.springframework.context.annotation.Import(GlobalExceptionHandler.class)
 class RagBatchApiControllerTest {
 
     @Autowired
@@ -42,9 +44,10 @@ class RagBatchApiControllerTest {
                                 {"folderPath":"docs/pdfs"}
                                 """))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.batchId").value(batchId.toString()))
-                .andExpect(jsonPath("$.status").value("QUEUED"))
-                .andExpect(jsonPath("$.totalFiles").value(12));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"))
+                .andExpect(jsonPath("$.data.totalFiles").value(12));
     }
 
     @Test
@@ -78,9 +81,10 @@ class RagBatchApiControllerTest {
 
         mockMvc.perform(get("/rag/batches/{batchId}", batchId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.batchId").value(batchId.toString()))
-                .andExpect(jsonPath("$.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.providerTokensTotal").value(1480))
-                .andExpect(jsonPath("$.totalElapsedMs").value(1360));
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.providerTokensTotal").value(1480))
+                .andExpect(jsonPath("$.data.totalElapsedMs").value(1360));
     }
 }

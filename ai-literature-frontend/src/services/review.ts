@@ -11,12 +11,73 @@ export interface ReviewTaskAcceptedResponse {
   status: string;
 }
 
+export interface QueryAnalysis {
+  mainQuestion: string;
+  subQuestions: string[];
+  keyEntities: string[];
+  keyConcepts: string[];
+}
+
+export interface ReviewGenerateRequest {
+  question: string;
+  mainQuestion: string;
+  selectedSubQuestions: string[];
+  selectedEntities: string[];
+  selectedConcepts: string[];
+  customSubQuestions: string[];
+}
+
+export interface CandidateReviewRequest {
+  excludedChunkIds: string[];
+  prioritizedChunkIds: string[];
+}
+
+export interface EvidenceReviewRequest {
+  excludedEvidenceIds: number[];
+  focusSubQuestions: string[];
+  userGuidance: string;
+}
+
+export interface ReviewCandidate {
+  id: number;
+  taskId: string;
+  chunkId: string;
+  documentId: string | null;
+  documentTitle: string | null;
+  retrievalScore: number;
+  retrievalSource: string | null;
+  rerankScore: number | null;
+  relevance: 'HIGH' | 'MEDIUM' | 'LOW' | 'IRRELEVANT' | null;
+  screeningReason: string | null;
+  included: boolean;
+  chunkText: string | null;
+}
+
+export interface ReviewEvidenceRecord {
+  id: number;
+  taskId: string;
+  candidateId: number | null;
+  chunkId: string | null;
+  documentId: string | null;
+  claim: string | null;
+  finding: string | null;
+  methodology: string | null;
+  entities: string[];
+  evidenceType: string | null;
+  confidence: number;
+  originalText: string | null;
+  normalizedGroup: string | null;
+  subQuestion: string | null;
+  consistency: string | null;
+}
+
 export interface ReviewTaskRecord {
   taskId: string;
   userId: string;
   question: string;
-  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: 'QUEUED' | 'RUNNING' | 'AWAITING_USER' | 'COMPLETED' | 'FAILED';
   stage: string | null;
+  queryAnalysis: QueryAnalysis | null;
   reportMarkdown: string | null;
   candidateCount: number | null;
   evidenceCount: number | null;
@@ -73,6 +134,11 @@ const decodePayload = (rawData: string): string => {
 };
 
 export const reviewService = {
+  async analyzeQuestion(question: string): Promise<QueryAnalysis> {
+    const { data } = await myAxios.post('/review/analyze', { question });
+    return data as QueryAnalysis;
+  },
+
   async submitTask(question: string): Promise<ReviewTaskAcceptedResponse> {
     const { data } = await myAxios.post('/review/tasks', { question });
     return data as ReviewTaskAcceptedResponse;
@@ -101,6 +167,133 @@ export const reviewService = {
   async retryTask(taskId: string): Promise<ReviewTaskAcceptedResponse> {
     const { data } = await myAxios.post(`/review/tasks/${taskId}/retry`);
     return data as ReviewTaskAcceptedResponse;
+  },
+
+  async startRetrieval(taskId: string, request: ReviewGenerateRequest): Promise<ReviewTaskAcceptedResponse> {
+    const { data } = await myAxios.post(`/review/tasks/${taskId}/retrieve`, request);
+    return data as ReviewTaskAcceptedResponse;
+  },
+
+  async getCandidates(taskId: string): Promise<ReviewCandidate[]> {
+    const { data } = await myAxios.get(`/review/tasks/${taskId}/candidates`);
+    return data as ReviewCandidate[];
+  },
+
+  async startExtraction(taskId: string, request: CandidateReviewRequest): Promise<ReviewTaskAcceptedResponse> {
+    const { data } = await myAxios.post(`/review/tasks/${taskId}/extract`, request);
+    return data as ReviewTaskAcceptedResponse;
+  },
+
+  async getEvidence(taskId: string): Promise<ReviewEvidenceRecord[]> {
+    const { data } = await myAxios.get(`/review/tasks/${taskId}/evidence`);
+    return data as ReviewEvidenceRecord[];
+  },
+
+  startGeneration(params: {
+    taskId: string;
+    request: EvidenceReviewRequest;
+    onMessage: (data: string) => void;
+    onXlsxReady: (downloadUrl: string) => void;
+    onError: (error: unknown) => void;
+    onComplete: () => void;
+  }): ReviewStreamHandle {
+    const url = `${API_BASE_URL}/review/tasks/${params.taskId}/generate`;
+    const controller = new AbortController();
+    let completed = false;
+
+    const finalize = () => {
+      if (!completed) {
+        completed = true;
+        params.onComplete();
+      }
+    };
+
+    void (async () => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          },
+          credentials: 'include',
+          signal: controller.signal,
+          body: JSON.stringify(params.request),
+        });
+
+        if (response.status === 401) {
+          redirectToLogin();
+          throw new Error('Unauthorized');
+        }
+
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error('Response body is empty');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+          let separatorIndex = buffer.indexOf('\n\n');
+
+          while (separatorIndex >= 0) {
+            const rawBlock = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+
+            const parsed = parseEventBlock(rawBlock);
+            if (parsed) {
+              if (parsed.eventName === 'complete') {
+                finalize();
+                return;
+              }
+              if (parsed.eventName === 'xlsx_ready') {
+                params.onXlsxReady(reviewService.getXlsxDownloadUrl(params.taskId));
+                continue;
+              }
+              params.onMessage(decodePayload(parsed.data));
+            }
+            separatorIndex = buffer.indexOf('\n\n');
+          }
+        }
+
+        finalize();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          finalize();
+          return;
+        }
+        params.onError(error);
+      }
+    })();
+
+    return {
+      close: () => {
+        if (!controller.signal.aborted) controller.abort();
+      },
+    };
+  },
+
+  getXlsxDownloadUrl(taskId: string): string {
+    return `${API_BASE_URL}/review/tasks/${taskId}/xlsx`;
+  },
+
+  downloadXlsx(taskId: string): void {
+    const url = `${API_BASE_URL}/review/tasks/${taskId}/xlsx`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `review-summary-${taskId}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   },
 
   streamReport(params: {
@@ -164,6 +357,99 @@ export const reviewService = {
               if (parsed.eventName === 'complete') {
                 finalize();
                 return;
+              }
+              params.onMessage(decodePayload(parsed.data));
+            }
+            separatorIndex = buffer.indexOf('\n\n');
+          }
+        }
+
+        finalize();
+      } catch (error) {
+        if (controller.signal.aborted) {
+          finalize();
+          return;
+        }
+        params.onError(error);
+      }
+    })();
+
+    return {
+      close: () => {
+        if (!controller.signal.aborted) controller.abort();
+      },
+    };
+  },
+
+  streamReportWithSelections(params: {
+    request: ReviewGenerateRequest;
+    onMessage: (data: string) => void;
+    onXlsxReady: (downloadUrl: string) => void;
+    onError: (error: unknown) => void;
+    onComplete: () => void;
+  }): ReviewStreamHandle {
+    const taskId = crypto.randomUUID();
+    const url = `${API_BASE_URL}/review/tasks/${taskId}/stream`;
+    const controller = new AbortController();
+    let completed = false;
+
+    const finalize = () => {
+      if (!completed) {
+        completed = true;
+        params.onComplete();
+      }
+    };
+
+    void (async () => {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          },
+          credentials: 'include',
+          signal: controller.signal,
+          body: JSON.stringify(params.request),
+        });
+
+        if (response.status === 401) {
+          redirectToLogin();
+          throw new Error('Unauthorized');
+        }
+
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error('Response body is empty');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+          let separatorIndex = buffer.indexOf('\n\n');
+
+          while (separatorIndex >= 0) {
+            const rawBlock = buffer.slice(0, separatorIndex);
+            buffer = buffer.slice(separatorIndex + 2);
+
+            const parsed = parseEventBlock(rawBlock);
+            if (parsed) {
+              if (parsed.eventName === 'complete') {
+                finalize();
+                return;
+              }
+              if (parsed.eventName === 'xlsx_ready') {
+                params.onXlsxReady(reviewService.getXlsxDownloadUrl(taskId));
+                continue;
               }
               params.onMessage(decodePayload(parsed.data));
             }
