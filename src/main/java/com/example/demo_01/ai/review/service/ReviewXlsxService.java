@@ -1,14 +1,32 @@
 package com.example.demo_01.ai.review.service;
 
-import com.example.demo_01.ai.review.model.ReviewModels.*;
+import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskRecord;
+import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -19,7 +37,16 @@ public class ReviewXlsxService {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             CellStyle headerStyle = createHeaderStyle(workbook);
 
-            createEntitySheet(workbook, headerStyle, evidenceRecords);
+            createCompoundActivitySheet(workbook, headerStyle, evidenceRecords);
+            createGeneProteinSheet(workbook, headerStyle, evidenceRecords);
+            createCategorySheet(workbook, headerStyle, "Process-Pathway Summary", evidenceRecords,
+                    typed -> merge(typed.pathwayOrProcess(), typed.phenotype()), "Process/Pathway");
+            createCategorySheet(workbook, headerStyle, "Stage Summary", evidenceRecords,
+                    TypedEntities::developmentalStage, "Developmental Stage");
+            createCategorySheet(workbook, headerStyle, "Species Summary", evidenceRecords,
+                    TypedEntities::species, "Species");
+            createCategorySheet(workbook, headerStyle, "Method Summary", evidenceRecords,
+                    TypedEntities::method, "Method");
             createConceptSheet(workbook, headerStyle, task, evidenceRecords);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -31,77 +58,128 @@ public class ReviewXlsxService {
         }
     }
 
-    private void createEntitySheet(Workbook workbook, CellStyle headerStyle,
-                                   List<ReviewEvidenceRecord> evidenceRecords) {
-        Sheet sheet = workbook.createSheet("Gene-Protein Summary");
-
+    private void createCompoundActivitySheet(Workbook workbook, CellStyle headerStyle,
+                                             List<ReviewEvidenceRecord> evidenceRecords) {
+        Sheet sheet = workbook.createSheet("Compound Activity Summary");
         String[] headers = {
-                "Gene/Protein", "Related Sub-question", "Evidence Count",
-                "Key Finding", "Source Papers", "Evidence Type", "Methodology",
-                "Confidence (avg)"
+                "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "实验手段",
+                "作用目标", "可能的作用靶标和作用机制", "参考文献", "专利情况"
         };
         createHeaderRow(sheet, headerStyle, headers);
 
-        Map<String, List<ReviewEvidenceRecord>> byEntity = new LinkedHashMap<>();
-        for (ReviewEvidenceRecord e : evidenceRecords) {
-            if (e.entities() != null) {
-                for (String entity : e.entities()) {
-                    byEntity.computeIfAbsent(entity, k -> new ArrayList<>()).add(e);
-                }
+        Map<String, List<ReviewEvidenceRecord>> byCompound = new LinkedHashMap<>();
+        for (ReviewEvidenceRecord evidence : evidenceRecords) {
+            for (String compound : typedList(evidence.typedEntities(), TypedEntities::moleculeOrMetabolite)) {
+                byCompound.computeIfAbsent(compound, key -> new ArrayList<>()).add(evidence);
             }
         }
 
         int rowIdx = 1;
-        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byEntity.entrySet()) {
-            String entity = entry.getKey();
+        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCompound.entrySet()) {
             List<ReviewEvidenceRecord> records = entry.getValue();
-
-            Set<String> subQuestions = records.stream()
-                    .map(ReviewEvidenceRecord::subQuestion)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            String keyFinding = records.stream()
-                    .map(ReviewEvidenceRecord::finding)
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse("");
-
-            Set<String> sources = records.stream()
-                    .map(r -> r.documentId() != null ? r.documentId().toString() : "")
-                    .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            Set<String> evidenceTypes = records.stream()
-                    .map(ReviewEvidenceRecord::evidenceType)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            Set<String> methodologies = records.stream()
-                    .map(ReviewEvidenceRecord::methodology)
-                    .filter(Objects::nonNull)
-                    .filter(s -> !s.isBlank())
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-
-            double avgConfidence = records.stream()
-                    .mapToDouble(ReviewEvidenceRecord::confidence)
-                    .average()
-                    .orElse(0.0);
-
             Row row = sheet.createRow(rowIdx++);
-            row.createCell(0).setCellValue(entity);
-            row.createCell(1).setCellValue(String.join("; ", subQuestions));
-            row.createCell(2).setCellValue(records.size());
-            row.createCell(3).setCellValue(truncate(keyFinding, 500));
-            row.createCell(4).setCellValue(String.join(", ", sources));
-            row.createCell(5).setCellValue(String.join(", ", evidenceTypes));
-            row.createCell(6).setCellValue(String.join("; ", methodologies));
-            row.createCell(7).setCellValue(Math.round(avgConfidence * 100.0) / 100.0);
+            row.createCell(0).setCellValue(entry.getKey());
+            row.createCell(1).setCellValue(joinDistinct(records,
+                    r -> typedList(r.typedEntities(), TypedEntities::compoundStructureType)));
+            row.createCell(2).setCellValue(joinDistinct(records,
+                    r -> typedList(r.typedEntities(), TypedEntities::compoundSource)));
+            row.createCell(3).setCellValue(valueOrFallback(
+                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::antimicrobialActivity)),
+                    truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500)));
+            row.createCell(4).setCellValue(valueOrFallback(
+                    joinDistinct(records, r -> merge(
+                            typedList(r.typedEntities(), TypedEntities::assayMethod),
+                            typedList(r.typedEntities(), TypedEntities::method))),
+                    joinDistinct(records, r -> listOf(r.methodology()))));
+            row.createCell(5).setCellValue(valueOrFallback(
+                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::targetOrganism)),
+                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::species))));
+            row.createCell(6).setCellValue(joinDistinct(records, r -> merge(
+                    typedList(r.typedEntities(), TypedEntities::proposedTarget),
+                    typedList(r.typedEntities(), TypedEntities::mechanism))));
+            row.createCell(7).setCellValue(valueOrFallback(
+                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::reference)),
+                    joinDistinct(records, r -> listOf(documentLabel(r)))));
+            row.createCell(8).setCellValue(valueOrFallback(
+                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::patentStatus)),
+                    "未提及"));
         }
 
-        for (int i = 0; i < headers.length; i++) {
-            sheet.autoSizeColumn(i);
+        autoSize(sheet, headers.length);
+    }
+
+    private void createGeneProteinSheet(Workbook workbook, CellStyle headerStyle,
+                                        List<ReviewEvidenceRecord> evidenceRecords) {
+        Sheet sheet = workbook.createSheet("Gene-Protein Summary");
+        String[] headers = {
+                "Gene/Protein", "Species", "Related Sub-question", "Evidence Count",
+                "Key Finding", "Process/Stage", "Source Papers", "Evidence Type",
+                "Methodology", "Confidence (avg)"
+        };
+        createHeaderRow(sheet, headerStyle, headers);
+
+        Map<String, List<ReviewEvidenceRecord>> byGene = new LinkedHashMap<>();
+        for (ReviewEvidenceRecord evidence : evidenceRecords) {
+            for (String gene : typedList(evidence.typedEntities(), TypedEntities::geneOrProtein)) {
+                byGene.computeIfAbsent(gene, key -> new ArrayList<>()).add(evidence);
+            }
         }
+
+        int rowIdx = 1;
+        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byGene.entrySet()) {
+            List<ReviewEvidenceRecord> records = entry.getValue();
+            Row row = sheet.createRow(rowIdx++);
+            row.createCell(0).setCellValue(entry.getKey());
+            row.createCell(1).setCellValue(joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::species)));
+            row.createCell(2).setCellValue(joinDistinct(records, r -> listOf(r.subQuestion())));
+            row.createCell(3).setCellValue(records.size());
+            row.createCell(4).setCellValue(truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500));
+            row.createCell(5).setCellValue(joinDistinct(records, r -> merge(
+                    typedList(r.typedEntities(), TypedEntities::pathwayOrProcess),
+                    typedList(r.typedEntities(), TypedEntities::developmentalStage),
+                    typedList(r.typedEntities(), TypedEntities::phenotype))));
+            row.createCell(6).setCellValue(joinDistinct(records, r -> listOf(documentLabel(r))));
+            row.createCell(7).setCellValue(joinDistinct(records, r -> listOf(r.evidenceType())));
+            row.createCell(8).setCellValue(joinDistinct(records, r -> listOf(r.methodology())));
+            row.createCell(9).setCellValue(avgConfidence(records));
+        }
+
+        autoSize(sheet, headers.length);
+    }
+
+    private void createCategorySheet(Workbook workbook, CellStyle headerStyle,
+                                     String sheetName,
+                                     List<ReviewEvidenceRecord> evidenceRecords,
+                                     Function<TypedEntities, List<String>> extractor,
+                                     String label) {
+        Sheet sheet = workbook.createSheet(sheetName);
+        String[] headers = {
+                label, "Related Sub-question", "Evidence Count", "Linked Gene/Protein",
+                "Key Finding", "Source Papers", "Confidence (avg)"
+        };
+        createHeaderRow(sheet, headerStyle, headers);
+
+        Map<String, List<ReviewEvidenceRecord>> byCategory = new LinkedHashMap<>();
+        for (ReviewEvidenceRecord evidence : evidenceRecords) {
+            for (String item : typedList(evidence.typedEntities(), extractor)) {
+                byCategory.computeIfAbsent(item, key -> new ArrayList<>()).add(evidence);
+            }
+        }
+
+        int rowIdx = 1;
+        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCategory.entrySet()) {
+            List<ReviewEvidenceRecord> records = entry.getValue();
+            Row row = sheet.createRow(rowIdx++);
+            row.createCell(0).setCellValue(entry.getKey());
+            row.createCell(1).setCellValue(joinDistinct(records, r -> listOf(r.subQuestion())));
+            row.createCell(2).setCellValue(records.size());
+            row.createCell(3).setCellValue(joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::geneOrProtein)));
+            row.createCell(4).setCellValue(truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500));
+            row.createCell(5).setCellValue(joinDistinct(records, r -> listOf(documentLabel(r))));
+            row.createCell(6).setCellValue(avgConfidence(records));
+        }
+
+        autoSize(sheet, headers.length);
     }
 
     private void createConceptSheet(Workbook workbook, CellStyle headerStyle,
@@ -119,11 +197,6 @@ public class ReviewXlsxService {
         List<String> concepts = analysis != null && analysis.keyConcepts() != null
                 ? analysis.keyConcepts()
                 : List.of();
-
-        Map<String, List<ReviewEvidenceRecord>> bySubQuestion = evidenceRecords.stream()
-                .filter(e -> e.subQuestion() != null)
-                .collect(Collectors.groupingBy(ReviewEvidenceRecord::subQuestion,
-                        LinkedHashMap::new, Collectors.toList()));
 
         int rowIdx = 1;
         for (String concept : concepts) {
@@ -165,53 +238,22 @@ public class ReviewXlsxService {
             row.createCell(5).setCellValue(consensusStatus);
         }
 
-        if (analysis != null && analysis.keyEntities() != null) {
-            for (String entity : analysis.keyEntities()) {
-                if (concepts.contains(entity)) continue;
-                String entityLower = entity.toLowerCase();
-                List<ReviewEvidenceRecord> related = evidenceRecords.stream()
-                        .filter(e -> mentionsEntity(e, entityLower))
-                        .toList();
-
-                if (related.isEmpty()) continue;
-
-                String relatedSubQuestions = related.stream()
-                        .map(ReviewEvidenceRecord::subQuestion)
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .collect(Collectors.joining("; "));
-
-                Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(entity);
-                row.createCell(1).setCellValue(relatedSubQuestions);
-                row.createCell(2).setCellValue(related.size());
-                row.createCell(3).setCellValue(0);
-                row.createCell(4).setCellValue(0);
-                row.createCell(5).setCellValue("See Gene/Protein sheet");
-            }
-        }
-
-        for (int i = 0; i < headers.length; i++) {
-            sheet.autoSizeColumn(i);
-        }
+        autoSize(sheet, headers.length);
     }
 
-    private boolean mentionsConcept(ReviewEvidenceRecord e, String conceptLower) {
-        String claim = e.claim() != null ? e.claim().toLowerCase() : "";
-        String finding = e.finding() != null ? e.finding().toLowerCase() : "";
-        String subQ = e.subQuestion() != null ? e.subQuestion().toLowerCase() : "";
+    private boolean mentionsConcept(ReviewEvidenceRecord evidence, String conceptLower) {
+        String claim = evidence.claim() != null ? evidence.claim().toLowerCase() : "";
+        String finding = evidence.finding() != null ? evidence.finding().toLowerCase() : "";
+        String subQuestion = evidence.subQuestion() != null ? evidence.subQuestion().toLowerCase() : "";
+        String typed = String.join(" ", merge(
+                typedList(evidence.typedEntities(), TypedEntities::pathwayOrProcess),
+                typedList(evidence.typedEntities(), TypedEntities::developmentalStage),
+                typedList(evidence.typedEntities(), TypedEntities::phenotype),
+                typedList(evidence.typedEntities(), TypedEntities::method)));
         return claim.contains(conceptLower)
                 || finding.contains(conceptLower)
-                || subQ.contains(conceptLower);
-    }
-
-    private boolean mentionsEntity(ReviewEvidenceRecord e, String entityLower) {
-        if (e.entities() != null) {
-            for (String ent : e.entities()) {
-                if (ent.toLowerCase().contains(entityLower)) return true;
-            }
-        }
-        return false;
+                || subQuestion.contains(conceptLower)
+                || typed.toLowerCase().contains(conceptLower);
     }
 
     private CellStyle createHeaderStyle(Workbook workbook) {
@@ -232,6 +274,65 @@ public class ReviewXlsxService {
             cell.setCellValue(headers[i]);
             cell.setCellStyle(headerStyle);
         }
+    }
+
+    private void autoSize(Sheet sheet, int width) {
+        for (int i = 0; i < width; i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private List<String> typedList(TypedEntities typedEntities, Function<TypedEntities, List<String>> extractor) {
+        if (typedEntities == null) {
+            return List.of();
+        }
+        List<String> values = extractor.apply(typedEntities);
+        return values == null ? List.of() : values;
+    }
+
+    private String joinDistinct(List<ReviewEvidenceRecord> records,
+                                Function<ReviewEvidenceRecord, List<String>> extractor) {
+        Set<String> values = new LinkedHashSet<>();
+        for (ReviewEvidenceRecord record : records) {
+            values.addAll(extractor.apply(record));
+        }
+        values.removeIf(item -> item == null || item.isBlank());
+        return String.join("; ", values);
+    }
+
+    @SafeVarargs
+    private final List<String> merge(List<String>... lists) {
+        Set<String> merged = new LinkedHashSet<>();
+        for (List<String> list : lists) {
+            if (list != null) {
+                merged.addAll(list);
+            }
+        }
+        merged.removeIf(item -> item == null || item.isBlank());
+        return new ArrayList<>(merged);
+    }
+
+    private List<String> listOf(String value) {
+        return value == null || value.isBlank() ? List.of() : List.of(value);
+    }
+
+    private String documentLabel(ReviewEvidenceRecord record) {
+        if (record.documentTitle() != null && !record.documentTitle().isBlank()) {
+            return record.documentTitle();
+        }
+        return record.documentId() != null ? record.documentId().toString() : "-";
+    }
+
+    private String firstNonBlank(List<String> values) {
+        return values.stream().filter(item -> item != null && !item.isBlank()).findFirst().orElse("");
+    }
+
+    private String valueOrFallback(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private double avgConfidence(List<ReviewEvidenceRecord> records) {
+        return Math.round(records.stream().mapToDouble(ReviewEvidenceRecord::confidence).average().orElse(0.0) * 100.0) / 100.0;
     }
 
     private String truncate(String s, int max) {

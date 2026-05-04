@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.kg.service;
 
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.kg.KgProperties;
 import com.example.demo_01.ai.kg.model.KgModels.ChunkEntityExtraction;
 import com.example.demo_01.ai.kg.model.KgModels.EntityType;
@@ -22,6 +23,9 @@ import java.util.Locale;
 
 @Service
 public class ChunkEntityExtractionService {
+
+    private static final String ENTITY_SYSTEM_PROMPT_PATH = "prompts/kg/chunk-entity-extraction-system.txt";
+    private static final String ENTITY_USER_PROMPT_PATH = "prompts/kg/chunk-entity-extraction-user.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -69,25 +73,8 @@ public class ChunkEntityExtractionService {
 
     private String prompt(RagChunk chunk) {
         ChatResponse response = chatModel.chat(
-                SystemMessage.from("""
-                        You extract biological knowledge graph entities from one document chunk.
-                        Return JSON only with shape {"entities":[...]}.
-                        Allowed entity_type values: PAPER, SPECIES, GENE_OR_PROTEIN, RLK_FAMILY, DOMAIN_OR_MOTIF,
-                        TRAIT_OR_PHENOTYPE, STRESS_OR_PATHOGEN, METHOD, DATABASE_OR_DATASET.
-                        Every entity must include mention_text, canonical_name, entity_type, normalized_key,
-                        aliases, evidence_text, confidence.
-                        evidence_text must be copied from the chunk verbatim.
-                        normalized_key must be lowercase snake_case style and stable across papers.
-                        Do not include explanations or markdown fences.
-                        """),
-                UserMessage.from("""
-                        schema_version=%s
-                        title=%s
-                        section_path=%s
-                        chunk_id=%s
-                        chunk_text:
-                        %s
-                        """.formatted(
+                SystemMessage.from(PromptResources.load(ENTITY_SYSTEM_PROMPT_PATH)),
+                UserMessage.from(PromptResources.format(ENTITY_USER_PROMPT_PATH,
                         properties.getSchemaVersion(),
                         safe(chunk.title()),
                         safe(chunk.sectionPath()),

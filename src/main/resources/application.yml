@@ -77,15 +77,17 @@ app:
       enabled: true
       async-threads: 2
       retrieval:
-        doc-fts-max-results: 50
-        doc-expand-top: 20
-        dense-max-results: 20
-        dense-min-score: 0.3
-        bm25-max-results: 30
+        seed-fts-max-results: 60
+        document-shortlist-top: 24
+        document-expand-top: 8
+        document-expand-chunk-limit: 12
+        seed-dense-max-results: 30
+        seed-dense-min-score: 0.3
+        seed-bm25-max-results: 40
         fused-max-results: 50
-        max-candidates: 800
+        max-candidates: 300
       rerank:
-        top-k: 60
+        top-k: 80
         batch-size: 5
         min-relevance: MEDIUM
       extraction:

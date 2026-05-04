@@ -1,11 +1,13 @@
 package com.example.demo_01.ai.rag;
 
+import com.example.demo_01.annotation.AuthCheck;
 import com.example.demo_01.ai.rag.api.RagBatchController;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchAcceptedResponse;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionBatchRecord;
 import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
 import com.example.demo_01.exception.GlobalExceptionHandler;
+import com.example.demo_01.user.constant.UserConstant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -13,9 +15,11 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -31,6 +35,12 @@ class RagBatchApiControllerTest {
 
     @MockBean
     private RagBatchIngestionService ragBatchIngestionService;
+
+    @Test
+    void batchImportEndpointsShouldRequireAdminRole() throws Exception {
+        assertAdminOnly(RagBatchController.class.getMethod("ingestFolder", com.example.demo_01.ai.rag.model.RagPipelineModels.RagFolderBatchRequest.class));
+        assertAdminOnly(RagBatchController.class.getMethod("getBatch", UUID.class));
+    }
 
     @Test
     void folderBatchShouldReturnAcceptedPayload() throws Exception {
@@ -86,5 +96,11 @@ class RagBatchApiControllerTest {
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.providerTokensTotal").value(1480))
                 .andExpect(jsonPath("$.data.totalElapsedMs").value(1360));
+    }
+
+    private static void assertAdminOnly(Method method) {
+        AuthCheck authCheck = method.getAnnotation(AuthCheck.class);
+        assertThat(authCheck).isNotNull();
+        assertThat(authCheck.mustRole()).isEqualTo(UserConstant.ADMIN_ROLE);
     }
 }

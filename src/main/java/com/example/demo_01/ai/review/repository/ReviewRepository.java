@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.review.repository;
 
 import com.example.demo_01.ai.config.AiPersistenceProperties;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentSynopsis;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -13,7 +14,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -33,8 +37,6 @@ public class ReviewRepository {
 
     @Resource
     private AiPersistenceProperties aiProperties;
-
-    // ── Task ──
 
     public void insertTask(UUID taskId, String userId, String question) {
         jdbcTemplate.update("""
@@ -58,10 +60,12 @@ public class ReviewRepository {
                 """, toJson(analysis), Timestamp.from(Instant.now()), taskId);
     }
 
-    public void updateTaskCounts(UUID taskId, int candidateCount, int evidenceCount) {
+    public void updateTaskCounts(UUID taskId, int candidateCount, int documentCount, int evidenceCount) {
         jdbcTemplate.update("""
-                UPDATE review_task SET candidate_count = ?, evidence_count = ?, updated_at = ? WHERE task_id = ?
-                """, candidateCount, evidenceCount, Timestamp.from(Instant.now()), taskId);
+                UPDATE review_task
+                SET candidate_count = ?, document_count = ?, evidence_count = ?, updated_at = ?
+                WHERE task_id = ?
+                """, candidateCount, documentCount, evidenceCount, Timestamp.from(Instant.now()), taskId);
     }
 
     public void updateTaskReport(UUID taskId, String reportMarkdown, String reportJson) {
@@ -72,15 +76,16 @@ public class ReviewRepository {
                 """, reportMarkdown, reportJson, Timestamp.from(Instant.now()), taskId);
     }
 
-    public void updateTaskMetrics(UUID taskId, ReviewTaskMetrics m) {
+    public void updateTaskMetrics(UUID taskId, ReviewTaskMetrics metrics) {
         jdbcTemplate.update("""
                 UPDATE review_task
-                SET retrieval_ms = ?, rerank_ms = ?, extraction_ms = ?,
+                SET retrieval_ms = ?, document_promotion_ms = ?, rerank_ms = ?, extraction_ms = ?,
                     fusion_ms = ?, report_ms = ?, total_ms = ?, updated_at = ?
                 WHERE task_id = ?
-                """, m.retrievalMs(), m.rerankMs(), m.extractionMs(),
-                m.fusionMs(), m.reportMs(), m.totalMs(),
-                Timestamp.from(Instant.now()), taskId);
+                """,
+                metrics.retrievalMs(), metrics.documentPromotionMs(), metrics.rerankMs(),
+                metrics.extractionMs(), metrics.fusionMs(), metrics.reportMs(),
+                metrics.totalMs(), Timestamp.from(Instant.now()), taskId);
     }
 
     public void completeTask(UUID taskId) {
@@ -124,38 +129,97 @@ public class ReviewRepository {
     }
 
     public void resetTaskForRetry(UUID taskId) {
-        jdbcTemplate.update("""
-                DELETE FROM review_evidence WHERE task_id = ?
-                """, taskId);
-        jdbcTemplate.update("""
-                DELETE FROM review_candidate WHERE task_id = ?
-                """, taskId);
+        jdbcTemplate.update("DELETE FROM review_document_candidate WHERE task_id = ?", taskId);
+        jdbcTemplate.update("DELETE FROM review_evidence WHERE task_id = ?", taskId);
+        jdbcTemplate.update("DELETE FROM review_candidate WHERE task_id = ?", taskId);
         jdbcTemplate.update("""
                 UPDATE review_task
                 SET status = ?, stage = ?, query_analysis = NULL,
                     report_json = NULL, report_markdown = NULL,
-                    candidate_count = NULL, evidence_count = NULL,
-                    retrieval_ms = NULL, rerank_ms = NULL, extraction_ms = NULL,
+                    candidate_count = NULL, document_count = NULL, evidence_count = NULL,
+                    retrieval_ms = NULL, document_promotion_ms = NULL, rerank_ms = NULL, extraction_ms = NULL,
                     fusion_ms = NULL, report_ms = NULL, total_ms = NULL,
                     error_code = NULL, error_message = NULL,
                     finished_at = NULL, updated_at = ?
                 WHERE task_id = ?
-                """, ReviewTaskStatus.QUEUED.name(), ReviewStage.QUERY_ANALYSIS.name(),
-                Timestamp.from(Instant.now()), taskId);
+                """,
+                ReviewTaskStatus.QUEUED.name(),
+                ReviewStage.QUERY_ANALYSIS.name(),
+                Timestamp.from(Instant.now()),
+                taskId);
     }
 
-    // ── Candidate ──
-
     public void insertCandidates(UUID taskId, List<ReviewCandidate> candidates) {
-        for (ReviewCandidate c : candidates) {
+        for (ReviewCandidate candidate : candidates) {
             jdbcTemplate.update("""
                     INSERT INTO review_candidate
-                        (task_id, chunk_id, document_id, document_title,
-                         retrieval_score, retrieval_source, chunk_text)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                        (task_id, chunk_id, document_id, document_title, retrieval_score, retrieval_source,
+                         section_path, retrieval_phase, document_score, document_relevance, document_reason,
+                         chunk_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    taskId, c.chunkId(), c.documentId(), c.documentTitle(),
-                    c.retrievalScore(), c.retrievalSource(), c.chunkText());
+                    taskId,
+                    candidate.chunkId(),
+                    candidate.documentId(),
+                    candidate.documentTitle(),
+                    candidate.retrievalScore(),
+                    candidate.retrievalSource(),
+                    candidate.sectionPath(),
+                    candidate.retrievalPhase(),
+                    candidate.documentScore(),
+                    candidate.documentRelevance() == null ? null : candidate.documentRelevance().name(),
+                    candidate.documentReason(),
+                    candidate.chunkText());
+        }
+    }
+
+    public void insertDocumentCandidates(UUID taskId, List<ReviewDocumentCandidate> candidates) {
+        for (ReviewDocumentCandidate candidate : candidates) {
+            jdbcTemplate.update("""
+                    INSERT INTO review_document_candidate
+                        (task_id, document_id, document_title, seed_chunk_count, seed_chunk_ids,
+                         seed_max_score, seed_avg_top3_score, section_prior_score,
+                         entity_coverage_score, contribution_score, final_score,
+                         relevance, promotion_reason, synopsis_summary,
+                         innovation_points, key_findings, expanded, selected)
+                    VALUES (?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb),
+                            cast(? as jsonb), ?, ?)
+                    ON CONFLICT (task_id, document_id) DO UPDATE
+                    SET document_title = EXCLUDED.document_title,
+                        seed_chunk_count = EXCLUDED.seed_chunk_count,
+                        seed_chunk_ids = EXCLUDED.seed_chunk_ids,
+                        seed_max_score = EXCLUDED.seed_max_score,
+                        seed_avg_top3_score = EXCLUDED.seed_avg_top3_score,
+                        section_prior_score = EXCLUDED.section_prior_score,
+                        entity_coverage_score = EXCLUDED.entity_coverage_score,
+                        contribution_score = EXCLUDED.contribution_score,
+                        final_score = EXCLUDED.final_score,
+                        relevance = EXCLUDED.relevance,
+                        promotion_reason = EXCLUDED.promotion_reason,
+                        synopsis_summary = EXCLUDED.synopsis_summary,
+                        innovation_points = EXCLUDED.innovation_points,
+                        key_findings = EXCLUDED.key_findings,
+                        expanded = EXCLUDED.expanded,
+                        selected = EXCLUDED.selected
+                    """,
+                    taskId,
+                    candidate.documentId(),
+                    candidate.documentTitle(),
+                    candidate.seedChunkCount(),
+                    toJson(candidate.seedChunkIds()),
+                    candidate.seedMaxScore(),
+                    candidate.seedAvgTop3Score(),
+                    candidate.sectionPriorScore(),
+                    candidate.entityCoverageScore(),
+                    candidate.contributionScore(),
+                    candidate.finalScore(),
+                    candidate.relevance() == null ? null : candidate.relevance().name(),
+                    candidate.promotionReason(),
+                    candidate.synopsisSummary(),
+                    toJson(candidate.innovationPoints()),
+                    toJson(candidate.keyFindings()),
+                    candidate.expanded(),
+                    candidate.selected());
         }
     }
 
@@ -179,7 +243,7 @@ public class ReviewRepository {
     public List<ReviewCandidate> findAllCandidates(UUID taskId) {
         return jdbcTemplate.query("""
                 SELECT * FROM review_candidate WHERE task_id = ?
-                ORDER BY retrieval_score DESC NULLS LAST
+                ORDER BY coalesce(document_score, retrieval_score) DESC NULLS LAST, retrieval_score DESC NULLS LAST
                 """, this::mapCandidate, taskId);
     }
 
@@ -192,8 +256,18 @@ public class ReviewRepository {
                 """, this::mapCandidate, taskId);
     }
 
+    public List<ReviewDocumentCandidate> findDocumentCandidates(UUID taskId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM review_document_candidate
+                WHERE task_id = ?
+                ORDER BY final_score DESC NULLS LAST, seed_max_score DESC NULLS LAST
+                """, this::mapDocumentCandidate, taskId);
+    }
+
     public void updateCandidateUserExcluded(UUID taskId, List<String> chunkIds, boolean excluded) {
-        if (chunkIds == null || chunkIds.isEmpty()) return;
+        if (chunkIds == null || chunkIds.isEmpty()) {
+            return;
+        }
         for (String chunkId : chunkIds) {
             jdbcTemplate.update("""
                     UPDATE review_candidate SET user_excluded = ? WHERE task_id = ? AND chunk_id = ?
@@ -202,7 +276,9 @@ public class ReviewRepository {
     }
 
     public void updateCandidateUserPrioritized(UUID taskId, List<String> chunkIds, boolean prioritized) {
-        if (chunkIds == null || chunkIds.isEmpty()) return;
+        if (chunkIds == null || chunkIds.isEmpty()) {
+            return;
+        }
         for (String chunkId : chunkIds) {
             jdbcTemplate.update("""
                     UPDATE review_candidate SET user_prioritized = ? WHERE task_id = ? AND chunk_id = ?
@@ -210,21 +286,26 @@ public class ReviewRepository {
         }
     }
 
-    // ── Evidence ──
-
-    public void insertEvidence(UUID taskId, ExtractedEvidence e) {
+    public void insertEvidence(UUID taskId, ExtractedEvidence evidence) {
         jdbcTemplate.update("""
                 INSERT INTO review_evidence
-                    (task_id, chunk_id, document_id, claim, finding, methodology,
-                     entities, evidence_type, confidence, original_text,
-                     sub_question)
-                VALUES (?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?)
+                    (task_id, chunk_id, document_id, document_title, claim, finding, methodology,
+                     typed_entities, entities, evidence_type, confidence, original_text, sub_question)
+                VALUES (?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), ?, ?, ?, ?)
                 """,
-                taskId, e.chunkId(),
-                e.documentId() != null ? UUID.fromString(e.documentId()) : null,
-                e.claim(), e.finding(), e.methodology(),
-                toJson(e.entities()), e.evidenceType(), e.confidence(),
-                e.originalText(), e.subQuestion());
+                taskId,
+                evidence.chunkId(),
+                evidence.documentId() != null ? UUID.fromString(evidence.documentId()) : null,
+                evidence.documentTitle(),
+                evidence.claim(),
+                evidence.finding(),
+                evidence.methodology(),
+                toJson(evidence.typedEntities()),
+                toJson(evidence.entities()),
+                evidence.evidenceType(),
+                evidence.confidence(),
+                evidence.originalText(),
+                evidence.subQuestion());
     }
 
     public void updateEvidenceFusion(Long evidenceId, String normalizedGroup, String consistency) {
@@ -246,7 +327,9 @@ public class ReviewRepository {
     }
 
     public void updateEvidenceUserExcluded(UUID taskId, List<Long> evidenceIds, boolean excluded) {
-        if (evidenceIds == null || evidenceIds.isEmpty()) return;
+        if (evidenceIds == null || evidenceIds.isEmpty()) {
+            return;
+        }
         for (Long evidenceId : evidenceIds) {
             jdbcTemplate.update("""
                     UPDATE review_evidence SET user_excluded = ? WHERE task_id = ? AND id = ?
@@ -261,8 +344,6 @@ public class ReviewRepository {
                 """, guidance, toJson(focusSubQuestions), Timestamp.from(Instant.now()), taskId);
     }
 
-    // ── Document FTS (Phase 1) ──
-
     public List<UUID> searchDocumentsByFts(String query, int maxResults) {
         return jdbcTemplate.query("""
                 SELECT document_id
@@ -276,7 +357,29 @@ public class ReviewRepository {
                 query, query, maxResults);
     }
 
-    // ── Chunk retrieval by document IDs (Phase 3) ──
+    public Map<UUID, DocumentSynopsisRecord> findDocumentSynopsisByIds(Set<UUID> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", documentIds.stream().map(id -> "?").toList());
+        String sql = """
+                SELECT document_id, title, synopsis_json
+                FROM rag_document
+                WHERE document_id IN (%s)
+                """.formatted(placeholders);
+        Object[] params = documentIds.toArray();
+        List<DocumentSynopsisRecord> rows = jdbcTemplate.query(sql, (rs, rowNum) ->
+                new DocumentSynopsisRecord(
+                        rs.getObject("document_id", UUID.class),
+                        rs.getString("title"),
+                        fromJsonSynopsis(rs.getString("synopsis_json"))
+                ), params);
+        Map<UUID, DocumentSynopsisRecord> result = new LinkedHashMap<>();
+        for (DocumentSynopsisRecord row : rows) {
+            result.put(row.documentId(), row);
+        }
+        return result;
+    }
 
     public List<RetrievedChunk> findChunksByDocumentIds(Set<UUID> documentIds) {
         if (documentIds == null || documentIds.isEmpty()) {
@@ -292,40 +395,64 @@ public class ReviewRepository {
                 WHERE metadata->>'document_id' IN (%s)
                 """.formatted(table, placeholders);
         Object[] params = documentIds.stream().map(UUID::toString).toArray();
-        return jdbcTemplate.query(sql, (rs, rowNum) -> {
-            String metaJson = rs.getString("metadata_json");
-            var meta = parseMetadataMap(metaJson);
-            return new RetrievedChunk(
-                    getStr(meta, "chunk_id"),
-                    parseUuid(getStr(meta, "document_id")),
-                    getStr(meta, "title"),
-                    rs.getString("text"),
-                    getStr(meta, "section_path"),
-                    0.0,
-                    "DOC_EXPAND"
-            );
-        }, params);
+        return jdbcTemplate.query(sql, (rs, rowNum) -> mapRetrievedChunk(rs, "DOC_EXPAND"), params);
     }
 
-    // ── Row mappers ──
+    public List<RetrievedChunk> findPriorityChunksByDocumentIds(Set<UUID> documentIds, int perDocLimit) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return List.of();
+        }
+        String table = vectorTable();
+        String placeholders = String.join(",", documentIds.stream().map(id -> "?").toList());
+        String sql = """
+                WITH ranked AS (
+                    SELECT embedding_id::text AS embedding_id,
+                           coalesce(text, '') AS text,
+                           metadata::text AS metadata_json,
+                           row_number() OVER (
+                               PARTITION BY metadata->>'document_id'
+                               ORDER BY CASE
+                                   WHEN lower(coalesce(metadata->>'section_path', '')) LIKE '%%result%%' THEN 1
+                                   WHEN lower(coalesce(metadata->>'section_path', '')) LIKE '%%discussion%%' THEN 2
+                                   WHEN lower(coalesce(metadata->>'section_path', '')) LIKE '%%conclusion%%' THEN 3
+                                   WHEN lower(coalesce(metadata->>'section_path', '')) LIKE '%%abstract%%' THEN 4
+                                   WHEN lower(coalesce(metadata->>'section_path', '')) LIKE '%%intro%%' THEN 5
+                                   ELSE 6
+                               END,
+                               embedding_id::text
+                           ) AS rn
+                    FROM %s
+                    WHERE metadata->>'document_id' IN (%s)
+                )
+                SELECT embedding_id, text, metadata_json
+                FROM ranked
+                WHERE rn <= ?
+                """.formatted(table, placeholders);
+        List<Object> params = new ArrayList<>();
+        documentIds.stream().map(UUID::toString).forEach(params::add);
+        params.add(perDocLimit);
+        return jdbcTemplate.query(sql, (rs, rowNum) -> mapRetrievedChunk(rs, "DOC_PROMOTED"), params.toArray());
+    }
 
     private ReviewTaskRecord mapTask(ResultSet rs, int rowNum) throws SQLException {
         Timestamp createdAt = rs.getTimestamp("created_at");
         Timestamp updatedAt = rs.getTimestamp("updated_at");
         Timestamp finishedAt = rs.getTimestamp("finished_at");
-        String qaJson = rs.getString("query_analysis");
+        String queryAnalysisJson = rs.getString("query_analysis");
         return new ReviewTaskRecord(
                 rs.getObject("task_id", UUID.class),
                 rs.getString("user_id"),
                 rs.getString("question"),
                 ReviewTaskStatus.valueOf(rs.getString("status")),
                 rs.getString("stage") == null ? null : ReviewStage.valueOf(rs.getString("stage")),
-                qaJson == null ? null : fromJson(qaJson, QueryAnalysis.class),
+                queryAnalysisJson == null ? null : fromJson(queryAnalysisJson, QueryAnalysis.class),
                 rs.getString("report_markdown"),
                 (Integer) rs.getObject("candidate_count"),
+                (Integer) rs.getObject("document_count"),
                 (Integer) rs.getObject("evidence_count"),
                 new ReviewTaskMetrics(
                         (Long) rs.getObject("retrieval_ms"),
+                        (Long) rs.getObject("document_promotion_ms"),
                         (Long) rs.getObject("rerank_ms"),
                         (Long) rs.getObject("extraction_ms"),
                         (Long) rs.getObject("fusion_ms"),
@@ -341,7 +468,8 @@ public class ReviewRepository {
     }
 
     private ReviewCandidate mapCandidate(ResultSet rs, int rowNum) throws SQLException {
-        String relStr = rs.getString("relevance");
+        String relevance = rs.getString("relevance");
+        String documentRelevance = rs.getString("document_relevance");
         return new ReviewCandidate(
                 rs.getLong("id"),
                 rs.getObject("task_id", UUID.class),
@@ -350,11 +478,41 @@ public class ReviewRepository {
                 rs.getString("document_title"),
                 rs.getDouble("retrieval_score"),
                 rs.getString("retrieval_source"),
+                rs.getString("section_path"),
+                rs.getString("retrieval_phase"),
+                (Double) rs.getObject("document_score"),
+                documentRelevance == null ? null : Relevance.valueOf(documentRelevance),
+                rs.getString("document_reason"),
                 (Double) rs.getObject("rerank_score"),
-                relStr == null ? null : Relevance.valueOf(relStr),
+                relevance == null ? null : Relevance.valueOf(relevance),
                 rs.getString("screening_reason"),
                 rs.getBoolean("included"),
                 rs.getString("chunk_text")
+        );
+    }
+
+    private ReviewDocumentCandidate mapDocumentCandidate(ResultSet rs, int rowNum) throws SQLException {
+        String relevance = rs.getString("relevance");
+        return new ReviewDocumentCandidate(
+                rs.getLong("id"),
+                rs.getObject("task_id", UUID.class),
+                rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
+                rs.getInt("seed_chunk_count"),
+                fromJsonList(rs.getString("seed_chunk_ids")),
+                (Double) rs.getObject("seed_max_score"),
+                (Double) rs.getObject("seed_avg_top3_score"),
+                (Double) rs.getObject("section_prior_score"),
+                (Double) rs.getObject("entity_coverage_score"),
+                (Double) rs.getObject("contribution_score"),
+                (Double) rs.getObject("final_score"),
+                relevance == null ? null : Relevance.valueOf(relevance),
+                rs.getString("promotion_reason"),
+                rs.getString("synopsis_summary"),
+                fromJsonList(rs.getString("innovation_points")),
+                fromJsonList(rs.getString("key_findings")),
+                rs.getBoolean("expanded"),
+                rs.getBoolean("selected")
         );
     }
 
@@ -365,9 +523,11 @@ public class ReviewRepository {
                 (Long) rs.getObject("candidate_id"),
                 rs.getString("chunk_id"),
                 rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
                 rs.getString("claim"),
                 rs.getString("finding"),
                 rs.getString("methodology"),
+                fromJson(rs.getString("typed_entities"), TypedEntities.class),
                 fromJsonList(rs.getString("entities")),
                 rs.getString("evidence_type"),
                 rs.getDouble("confidence"),
@@ -378,7 +538,18 @@ public class ReviewRepository {
         );
     }
 
-    // ── Helpers ──
+    private RetrievedChunk mapRetrievedChunk(ResultSet rs, String source) throws SQLException {
+        Map<String, Object> metadata = parseMetadataMap(rs.getString("metadata_json"));
+        return new RetrievedChunk(
+                getStr(metadata, "chunk_id"),
+                parseUuid(getStr(metadata, "document_id")),
+                getStr(metadata, "title"),
+                rs.getString("text"),
+                getStr(metadata, "section_path"),
+                0.0,
+                source
+        );
+    }
 
     private String vectorTable() {
         String table = aiProperties.getRag().getVectorTable();
@@ -388,23 +559,31 @@ public class ReviewRepository {
         return table;
     }
 
-    private java.util.Map<String, Object> parseMetadataMap(String json) {
-        if (json == null || json.isBlank()) return java.util.Map.of();
+    private Map<String, Object> parseMetadataMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
         try {
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
-            return java.util.Map.of();
+            return Map.of();
         }
     }
 
-    private String getStr(java.util.Map<String, Object> map, String key) {
-        Object v = map.get(key);
-        return v == null ? null : v.toString();
+    private String getStr(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        return value == null ? null : value.toString();
     }
 
-    private UUID parseUuid(String s) {
-        if (s == null || s.isBlank()) return null;
-        try { return UUID.fromString(s); } catch (Exception e) { return null; }
+    private UUID parseUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String toJson(Object value) {
@@ -423,8 +602,21 @@ public class ReviewRepository {
         }
     }
 
+    private RagDocumentSynopsis fromJsonSynopsis(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, RagDocumentSynopsis.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON deserialization failed", e);
+        }
+    }
+
     private List<String> fromJsonList(String json) {
-        if (json == null || json.isBlank()) return List.of();
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
         try {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException e) {
@@ -432,8 +624,17 @@ public class ReviewRepository {
         }
     }
 
-    private String truncate(String s, int max) {
-        if (s == null) return null;
-        return s.length() <= max ? s : s.substring(0, max);
+    private String truncate(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    public record DocumentSynopsisRecord(
+            UUID documentId,
+            String title,
+            RagDocumentSynopsis synopsis
+    ) {
     }
 }

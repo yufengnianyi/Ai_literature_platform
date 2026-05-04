@@ -26,11 +26,14 @@
           </div>
 
           <div v-if="parsed.citations.length > 0" class="citations-section">
-            <div class="citations-header">References</div>
+            <div class="citations-header">
+              <span>引用来源</span>
+              <span class="citations-count">{{ parsed.citations.length }}</span>
+            </div>
             <ol class="citations-list">
               <li
                 v-for="cite in parsed.citations"
-                :key="`${cite.index}-${cite.source}-${cite.chunk ?? ''}-${cite.page ?? ''}`"
+                :key="`${cite.index}-${cite.source}-${cite.chunk ?? ''}-${cite.page ?? ''}-${cite.excerpt ?? ''}`"
                 class="citation-item"
                 :id="cite.referenceId"
               >
@@ -45,6 +48,9 @@
                     <span v-if="cite.chunk">chunk {{ cite.chunk }}</span>
                     <span v-if="cite.page">page {{ cite.page }}</span>
                   </span>
+                  <p v-if="cite.excerpt" class="citation-excerpt">
+                    {{ cite.excerpt }}
+                  </p>
                 </div>
               </li>
             </ol>
@@ -145,9 +151,27 @@ const parsed = computed(() => {
 }
 
 .citations-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #334155;
+}
+
+.citations-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .message-content {
@@ -249,20 +273,37 @@ const parsed = computed(() => {
 }
 
 .markdown-content :deep(.citation-marker) {
-  margin-left: 1px;
-  font-size: 0.72em;
+  margin-left: 3px;
+  margin-right: 1px;
+  font-size: 0.68em;
   vertical-align: super;
   line-height: 0;
 }
 
 .markdown-content :deep(.citation-link) {
-  color: #2563eb;
+  min-width: 1.35em;
+  height: 1.35em;
+  padding: 0 0.34em;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1d4ed8;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.18);
+  transform: translateY(-0.05em);
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
 .markdown-content :deep(.citation-link:hover) {
-  text-decoration: underline;
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  text-decoration: none;
+  transform: translateY(-0.15em);
 }
 
 .plaintext-content {
@@ -313,8 +354,12 @@ const parsed = computed(() => {
 
 .citations-section {
   margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #eff6ff;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.78)),
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 38%);
 }
 
 .citations-list {
@@ -328,21 +373,37 @@ const parsed = computed(() => {
 
 .citation-item {
   position: relative;
-  padding-left: 24px;
+  padding: 10px 10px 10px 36px;
+  border: 1px solid rgba(191, 219, 254, 0.75);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   color: #475569;
   line-height: 1.6;
   scroll-margin-top: 24px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.citation-item:target {
+  border-color: #2563eb;
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
 }
 
 .citation-index {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 10px;
+  top: 10px;
   width: 18px;
-  text-align: right;
-  font-weight: 600;
-  color: #64748b;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .citation-body {
@@ -353,7 +414,7 @@ const parsed = computed(() => {
 
 .citation-source {
   color: #111827;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .citation-meta {
@@ -361,6 +422,26 @@ const parsed = computed(() => {
   flex-wrap: wrap;
   gap: 6px;
   color: #64748b;
+}
+
+.citation-meta span {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.citation-excerpt {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid #38bdf8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 @media (max-width: 960px) {

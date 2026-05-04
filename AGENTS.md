@@ -1,3 +1,87 @@
+<!-- project-spec:start -->
+# demo_01 AI Coding Project Rules
+
+This file is the first project-level instruction source for AI coding agents working in this repository. Apply these rules before making code changes, then follow the GitNexus section below for symbol navigation, impact analysis, and pre-commit checks.
+
+## Project Snapshot
+
+- Backend: Spring Boot 3.5.x on Java 21, Maven, MyBatis-Flex, Flyway, PostgreSQL with pgvector, LangChain4j, DashScope/Qwen models, Lucene BM25, Neo4j, GROBID, Knife4j/OpenAPI.
+- Frontend: `ai-literature-frontend`, Vue 3, Vite, TypeScript, Pinia, Vue Router, Ant Design Vue, generated OpenAPI client files.
+- Core domains: user/session/auth, conversation memory, AI chat, RAG ingestion and retrieval, literature preprocessing, review pipeline, evidence fusion, report generation, knowledge graph extraction/querying.
+- Runtime data and generated artifacts include `data/`, `target/`, `node_modules/`, `ai-literature-frontend/dist/`, `.npm-cache/`, and presentation output. Do not treat these as source unless the user explicitly asks.
+
+## Working Principles
+
+- State assumptions before coding when requirements are ambiguous. If two interpretations are plausible, ask or document the chosen one.
+- Prefer the smallest change that satisfies the request. Do not add speculative extension points, new frameworks, or broad rewrites.
+- Keep edits surgical: touch only files that directly support the task, and preserve existing style even when it differs from personal preference.
+- Do not clean up unrelated code, generated files, caches, indexes, or formatting drift unless the user asks.
+- Define a verification target before implementation: unit test, integration test, build command, manual endpoint check, or documented reason why verification is not possible.
+
+## Repository Boundaries
+
+- Backend source lives under `src/main/java/com/example/demo_01`.
+- Backend config lives under `src/main/resources`; profile-specific config belongs in `application-local.yml`, `application-prod.yml`, or `application-test.yml`.
+- Database schema changes must be Flyway migrations in `src/main/resources/db/migration`; never edit an already-applied migration casually. Add a new versioned migration instead.
+- Frontend source lives under `ai-literature-frontend/src`; generated API clients live under `ai-literature-frontend/src/api`.
+- Do not manually edit generated API typings/client files if the change should come from OpenAPI generation. Update backend contract and regenerate instead.
+- Avoid committing runtime/cache output such as `.npm-cache`, `data/bm25-index`, `target`, `node_modules`, local logs, and built frontend output unless explicitly requested.
+
+## Backend Conventions
+
+- Follow existing layering: controller/API classes handle HTTP contracts, services own business flow, repositories own persistence queries, config classes own beans/properties.
+- Use existing response and error patterns: `BaseResponse`, `ResultUtils`, `BusinessException`, `ErrorCode`, and `ThrowUtils`.
+- Validate request DTOs with Jakarta validation where possible; keep controller logic thin.
+- Keep AI/RAG/review/KG behavior deterministic around boundaries: normalize inputs, validate structured LLM outputs, record failed artifacts where existing support classes do so, and avoid hiding partial failures.
+- Use existing property classes for configurable behavior. Add new `@ConfigurationProperties` fields rather than scattering `@Value` strings.
+- For persistence, prefer existing MyBatis-Flex repository/mapper patterns. Schema changes and repository changes must be reviewed together.
+- Do not hard-code API keys, model credentials, local absolute paths, or machine-specific endpoints. Use environment variables or Spring configuration placeholders.
+
+## AI Agent And LLM-Specific Rules
+
+- Treat prompts, retrieval thresholds, token budgets, chunking strategy, reranking, and KG extraction schema as product behavior, not incidental strings.
+- When changing prompts or structured output models, update tests or add focused fixtures that cover malformed, partial, and low-confidence outputs.
+- Keep model/provider assumptions explicit. Existing defaults use DashScope/Qwen-style configuration; do not silently switch provider semantics.
+- RAG changes must consider ingestion, storage, retrieval, reranking, and downstream citation/report behavior together.
+- KG changes must consider Neo4j schema/write path, extraction confidence thresholds, graph retrieval, and query service behavior together.
+
+## Frontend Conventions
+
+- Use Vue 3 Composition API, TypeScript, Pinia, Vue Router, and Ant Design Vue in the established style.
+- Keep page components workflow-oriented and move reusable logic to `components`, `composables`, `services`, `stores`, `types`, or `utils` only when reuse is real.
+- Use service modules for API calls; do not scatter raw `axios` calls through pages.
+- Preserve generated API boundaries. If a backend endpoint changes, regenerate or update the corresponding client consistently.
+- For review and chat UI, optimize for dense operational workflows: clear state, loading/error handling, source traceability, and no decorative layout rewrites unrelated to the task.
+
+## Testing And Verification
+
+- Backend default checks:
+  - `./mvnw test`
+  - For narrower work, run the relevant test class with `./mvnw -Dtest=ClassName test`.
+- Frontend default checks from `ai-literature-frontend`:
+  - `npm run type-check`
+  - `npm run build`
+  - `npm run test:markdown` when markdown rendering/parsing changes.
+- If tests require PostgreSQL, pgvector, Neo4j, GROBID, or external model credentials, state the missing dependency clearly and run the narrowest feasible check.
+- Add or update tests when changing parsing, retrieval ranking, auth/session behavior, repository SQL, prompt canonicalization, structured output validation, report generation, or API contracts.
+
+## Git And Change Hygiene
+
+- The worktree may contain user changes. Inspect `git status --short` before edits and do not revert unrelated changes.
+- Before editing functions, classes, or methods, follow the GitNexus impact-analysis rules below.
+- Before committing, run the GitNexus change detector required below and verify the changed symbols and flows match the task.
+- Keep documentation-only changes separate from code changes when possible.
+
+## Task Completion Checklist
+
+1. Scope is clear, assumptions are stated, and no speculative behavior was added.
+2. GitNexus impact analysis was run for every edited symbol when code symbols changed.
+3. Config, migration, backend contract, frontend client, and tests are consistent.
+4. Verification command was run, or the reason it could not be run is documented.
+5. Final response names the files changed, the verification result, and any residual risk.
+
+<!-- project-spec:end -->
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

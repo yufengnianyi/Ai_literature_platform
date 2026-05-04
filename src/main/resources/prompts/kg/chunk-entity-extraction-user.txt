@@ -1,0 +1,6 @@
+schema_version=%s
+title=%s
+section_path=%s
+chunk_id=%s
+chunk_text:
+%s

@@ -34,32 +34,38 @@ public class ReviewProperties {
     public static class Retrieval {
 
         @Min(1)
-        private int docFtsMaxResults = 50;
+        private int seedFtsMaxResults = 60;
 
         @Min(1)
-        private int docExpandTop = 20;
+        private int documentShortlistTop = 24;
 
         @Min(1)
-        private int denseMaxResults = 20;
+        private int documentExpandTop = 8;
 
         @Min(0)
-        private double denseMinScore = 0.3;
+        private int documentExpandChunkLimit = 12;
 
         @Min(1)
-        private int bm25MaxResults = 30;
+        private int seedDenseMaxResults = 30;
+
+        @Min(0)
+        private double seedDenseMinScore = 0.3;
+
+        @Min(1)
+        private int seedBm25MaxResults = 40;
 
         @Min(1)
         private int fusedMaxResults = 50;
 
         @Min(1)
-        private int maxCandidates = 800;
+        private int maxCandidates = 300;
     }
 
     @Data
     public static class Rerank {
 
         @Min(1)
-        private int topK = 60;
+        private int topK = 80;
 
         @Min(1)
         private int batchSize = 5;

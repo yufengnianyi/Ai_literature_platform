@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -23,21 +24,9 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewRerankerService {
 
-    private static final String RERANK_SYSTEM_PROMPT = """
-            You are a scientific relevance assessor. Given a research question and a batch of
-            literature chunks, judge each chunk's relevance to the question.
-            
-            Return JSON only as an array:
-            [{"chunkId":"...","relevance":"HIGH|MEDIUM|LOW|IRRELEVANT","reason":"brief reason"}]
-            
-            Relevance levels:
-            - HIGH: directly answers or provides key evidence for the question
-            - MEDIUM: provides useful context, related methods, or supporting information
-            - LOW: tangentially related, minimal useful information
-            - IRRELEVANT: not related to the question
-            
-            Do not include markdown fences or explanations outside the JSON.
-            """;
+    private static final String RERANK_SYSTEM_PROMPT_PATH = "prompts/review/reranker-system.txt";
+    private static final String RERANK_USER_PROMPT_PATH = "prompts/review/reranker-user.txt";
+    private static final String RERANK_CHUNK_PROMPT_PATH = "prompts/review/reranker-chunk.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -112,20 +101,21 @@ public class ReviewRerankerService {
 
     private List<ChunkRelevanceJudgment> screenBatch(String question, List<RetrievedChunk> batch) {
         StringBuilder userMsg = new StringBuilder();
-        userMsg.append("Research question: ").append(question).append("\n\n");
+        StringBuilder chunksText = new StringBuilder();
         for (int i = 0; i < batch.size(); i++) {
             RetrievedChunk c = batch.get(i);
-            userMsg.append("--- Chunk ").append(i + 1)
-                    .append(" [id=").append(c.chunkId())
-                    .append(", source=").append(safe(c.documentTitle()))
-                    .append("] ---\n")
-                    .append(truncate(c.text(), 1500))
-                    .append("\n\n");
+            chunksText.append(PromptResources.format(
+                    RERANK_CHUNK_PROMPT_PATH,
+                    i + 1,
+                    c.chunkId(),
+                    safe(c.documentTitle()),
+                    truncate(c.text(), 1500)));
         }
+        userMsg.append(PromptResources.format(RERANK_USER_PROMPT_PATH, question, chunksText));
 
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(RERANK_SYSTEM_PROMPT),
+                    SystemMessage.from(PromptResources.load(RERANK_SYSTEM_PROMPT_PATH)),
                     UserMessage.from(userMsg.toString())
             );
             AiMessage ai = response.aiMessage();

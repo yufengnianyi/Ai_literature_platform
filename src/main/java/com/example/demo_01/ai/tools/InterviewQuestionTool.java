@@ -20,7 +20,7 @@ public class InterviewQuestionTool {
      * 从面试鸭网站获取关键词相关的面试题列表
      *
      * @param keyword 搜索关键词（如"redis"、"java多线程"）
-     * @return 面试题列表，若失败则返回错误信息
+     * @return
      */
     @Tool(name = "interviewQuestionSearch", value = """
             Retrieves relevant interview questions from mianshiya.com based on a keyword.

@@ -1,10 +1,12 @@
 package com.example.demo_01.ai.rag.service;
 
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessOutcome;
+import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStatus;
 import com.example.demo_01.ai.preprocessing.service.DocumentPreprocessService;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentIngestionOutcome;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionJobRecord;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagJobStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagUploadAcceptedResponse;
 import com.example.demo_01.ai.rag.repository.RagDocumentRepository;
 import com.example.demo_01.ai.rag.repository.RagIngestionJobRepository;
@@ -39,6 +41,25 @@ public class RagDocumentIngestionService {
 
     public RagDocumentIngestionOutcome ingestStoredPdf(Path pdfPath, String originalFilename, UUID batchId) {
         PreprocessOutcome preprocess = documentPreprocessService.preprocessStoredPdf(pdfPath, originalFilename, batchId);
+        if (preprocess.status() == PreprocessStatus.FAILED) {
+            return new RagDocumentIngestionOutcome(
+                    preprocess.documentId(),
+                    preprocess.jobId(),
+                    RagJobStatus.FAILED,
+                    preprocess.duplicateReason(),
+                    preprocess.chunkCount(),
+                    0L,
+                    0L,
+                    preprocess.uploadMs(),
+                    preprocess.headerMs(),
+                    preprocess.fulltextMs(),
+                    preprocess.teiParseMs(),
+                    preprocess.jsonlMs(),
+                    0L,
+                    0L,
+                    preprocess.totalMs()
+            );
+        }
         RagDocumentIngestionOutcome rag = ragIngestionFromArtifactService.ingestDocument(preprocess.documentId(), batchId);
         return new RagDocumentIngestionOutcome(
                 rag.documentId(),

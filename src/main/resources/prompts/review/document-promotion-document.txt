@@ -1,0 +1,5 @@
+--- Document %s | %s ---
+Summary: %s
+Key findings: %s
+Innovation points: %s
+

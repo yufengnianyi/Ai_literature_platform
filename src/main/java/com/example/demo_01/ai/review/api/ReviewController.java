@@ -4,6 +4,7 @@ import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.repository.ReviewRepository;
 import com.example.demo_01.ai.review.service.QueryAnalyzerService;
 import com.example.demo_01.ai.review.service.ReviewPipelineService;
+import com.example.demo_01.ai.review.service.ReviewScopePreviewService;
 import com.example.demo_01.ai.review.service.ReviewXlsxService;
 import com.example.demo_01.common.BaseResponse;
 import com.example.demo_01.common.ResultUtils;
@@ -40,6 +41,9 @@ public class ReviewController {
     private QueryAnalyzerService queryAnalyzerService;
 
     @Resource
+    private ReviewScopePreviewService reviewScopePreviewService;
+
+    @Resource
     private ReviewXlsxService reviewXlsxService;
 
     @PostMapping("/tasks")
@@ -67,6 +71,17 @@ public class ReviewController {
         return ResultUtils.success(analysis);
     }
 
+    @PostMapping("/preview")
+    public BaseResponse<ReviewScopePreview> previewScope(
+            @RequestBody ReviewTaskSubmitRequest request,
+            HttpServletRequest httpRequest) {
+        userService.getLoginUser(httpRequest);
+        if (request.question() == null || request.question().isBlank()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
+        }
+        return ResultUtils.success(reviewScopePreviewService.buildInitialPreview(request.question()));
+    }
+
     @GetMapping("/tasks/{taskId}")
     public BaseResponse<ReviewTaskRecord> getTask(@PathVariable UUID taskId) {
         ReviewTaskRecord task = reviewRepository.findTask(taskId)
@@ -89,6 +104,16 @@ public class ReviewController {
     @GetMapping("/tasks/{taskId}/candidates")
     public BaseResponse<List<ReviewCandidate>> getCandidates(@PathVariable UUID taskId) {
         return ResultUtils.success(reviewRepository.findAllCandidates(taskId));
+    }
+
+    @GetMapping("/tasks/{taskId}/documents")
+    public BaseResponse<List<ReviewDocumentCandidate>> getDocuments(@PathVariable UUID taskId) {
+        return ResultUtils.success(reviewRepository.findDocumentCandidates(taskId));
+    }
+
+    @GetMapping("/tasks/{taskId}/scope-preview")
+    public BaseResponse<ReviewScopePreview> getScopePreview(@PathVariable UUID taskId) {
+        return ResultUtils.success(reviewScopePreviewService.buildTaskPreview(taskId));
     }
 
     @GetMapping("/tasks/{taskId}/evidence")

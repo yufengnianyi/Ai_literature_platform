@@ -17,7 +17,14 @@
           <a-button :type="isReviewRoute ? 'primary' : 'default'" @click="goReview">Review</a-button>
           <a-button
             v-if="isAdmin"
-            :type="isAdminRoute ? 'primary' : 'default'"
+            :type="isPaperImportRoute ? 'primary' : 'default'"
+            @click="goPaperImport"
+          >
+            Import
+          </a-button>
+          <a-button
+            v-if="isAdmin"
+            :type="isUserManageRoute ? 'primary' : 'default'"
             @click="goUserManage"
           >
             Users
@@ -39,6 +46,7 @@
             <a-menu @click="handleUserMenuClick">
               <a-menu-item key="chat">Chat</a-menu-item>
               <a-menu-item key="review">Review</a-menu-item>
+              <a-menu-item v-if="isAdmin" key="import">Paper Import</a-menu-item>
               <a-menu-item v-if="isAdmin" key="manage">User Manage</a-menu-item>
               <a-menu-divider />
               <a-menu-item key="logout" danger>Logout</a-menu-item>
@@ -259,7 +267,8 @@ const isAdmin = computed(() => loginUser.value?.userRole === USER_ROLE_ADMIN);
 const displayName = computed(() => loginUser.value?.userName || loginUser.value?.userAccount || 'Workspace user');
 const isHomeRoute = computed(() => route.path === '/');
 const isReviewRoute = computed(() => route.path === '/review');
-const isAdminRoute = computed(() => route.path.startsWith('/admin'));
+const isPaperImportRoute = computed(() => route.path === '/admin/paper-import');
+const isUserManageRoute = computed(() => route.path === '/admin/user-manage');
 
 const pinnedConversations = computed(() => conversations.value.filter((item) => item.pinned));
 const recentConversations = computed(() => conversations.value.filter((item) => !item.pinned));
@@ -447,6 +456,12 @@ const goUserManage = async () => {
   }
 };
 
+const goPaperImport = async () => {
+  if (isAdmin.value) {
+    await router.push('/admin/paper-import');
+  }
+};
+
 const handleLogout = async () => {
   try {
     await logout();
@@ -464,6 +479,10 @@ const handleUserMenuClick = async ({ key }: MenuClickEvent) => {
   }
   if (key === 'review') {
     await goReview();
+    return;
+  }
+  if (key === 'import') {
+    await goPaperImport();
     return;
   }
   if (key === 'manage') {

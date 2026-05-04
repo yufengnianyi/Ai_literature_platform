@@ -1,0 +1,14 @@
+Review question:
+%s
+
+Sub-questions:
+%s
+Document:
+documentId: %s
+title: %s
+
+Existing cached knowledge:
+%s
+
+Selected evidence candidate chunks:
+%s

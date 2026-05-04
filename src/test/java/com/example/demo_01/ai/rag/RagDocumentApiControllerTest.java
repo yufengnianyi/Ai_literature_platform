@@ -1,11 +1,13 @@
 package com.example.demo_01.ai.rag;
 
+import com.example.demo_01.annotation.AuthCheck;
 import com.example.demo_01.ai.rag.api.RagDocumentController;
 import com.example.demo_01.ai.rag.api.RagJobController;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
 import com.example.demo_01.ai.rag.service.RagIngestionFromArtifactService;
 import com.example.demo_01.exception.GlobalExceptionHandler;
+import com.example.demo_01.user.constant.UserConstant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -13,10 +15,12 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -36,6 +40,14 @@ class RagDocumentApiControllerTest {
 
     @MockBean
     private RagIngestionFromArtifactService ragIngestionFromArtifactService;
+
+    @Test
+    void documentImportEndpointsShouldRequireAdminRole() throws Exception {
+        assertAdminOnly(RagDocumentController.class.getMethod("upload", org.springframework.web.multipart.MultipartFile.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("ingest", UUID.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("getDocument", UUID.class));
+        assertAdminOnly(RagJobController.class.getMethod("getJob", UUID.class));
+    }
 
     @Test
     void uploadShouldReturnAcceptedPayload() throws Exception {
@@ -89,6 +101,7 @@ class RagDocumentApiControllerTest {
                 "Nature",
                 "2024-01-01",
                 2024,
+                null,
                 "paper.pdf",
                 "D:/data/rag/" + documentId,
                 RagDocumentStatus.COMPLETED,
@@ -142,5 +155,11 @@ class RagDocumentApiControllerTest {
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.stage").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.providerTokensTotal").value(1200));
+    }
+
+    private static void assertAdminOnly(Method method) {
+        AuthCheck authCheck = method.getAnnotation(AuthCheck.class);
+        assertThat(authCheck).isNotNull();
+        assertThat(authCheck.mustRole()).isEqualTo(UserConstant.ADMIN_ROLE);
     }
 }

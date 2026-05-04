@@ -14,6 +14,7 @@ export interface Citation {
   section?: string;
   chunk?: string;
   page?: string;
+  excerpt?: string;
   referenceId: string;
 }
 
@@ -64,7 +65,7 @@ const specialSpacePattern = /[\u00A0\u3000]/g;
 const fullWidthDigitOffset = '０'.charCodeAt(0) - '0'.charCodeAt(0);
 const allowedInlineHtmlAttrs = {
   ADD_TAGS: ['sup'],
-  ADD_ATTR: ['aria-label', 'class', 'data-cite', 'data-reference-target', 'href'],
+  ADD_ATTR: ['aria-label', 'class', 'data-cite', 'data-reference-target', 'href', 'title'],
 };
 
 const sanitizeHtml = (
@@ -354,12 +355,20 @@ const parseCitationTokenBody = (
   }
 
   const matchedSource = sourceLookup.get(source.trim().toLowerCase());
+  const excerpt =
+    entries.get('quote') ??
+    entries.get('excerpt') ??
+    entries.get('snippet') ??
+    entries.get('text') ??
+    entries.get('content') ??
+    matchedSource?.excerpt;
 
   return {
     source,
     section: entries.get('section') ?? matchedSource?.section,
     chunk: entries.get('chunk') ?? matchedSource?.chunk,
     page: entries.get('page') ?? matchedSource?.page,
+    ...(excerpt ? { excerpt } : {}),
   };
 };
 
@@ -399,6 +408,7 @@ export const prepareCitations = (
       parsed.section ?? '',
       parsed.chunk ?? '',
       parsed.page ?? '',
+      parsed.excerpt ?? '',
     ].join('||');
 
     let index = citationIndexMap.get(citationKey);
@@ -414,9 +424,17 @@ export const prepareCitations = (
     }
 
     const referenceId = buildReferenceId(referenceScope, index);
+    const tooltipParts = [
+      parsed.source,
+      parsed.section,
+      parsed.chunk ? `chunk ${parsed.chunk}` : undefined,
+      parsed.page ? `page ${parsed.page}` : undefined,
+      parsed.excerpt,
+    ].filter(Boolean);
+    const tooltip = tooltipParts.join(' · ');
 
     return htmlMode
-      ? `<sup class="citation-marker" data-cite="${index}"><a class="citation-link" href="#${referenceId}" data-reference-target="${referenceId}" aria-label="Jump to reference ${index}">${index}</a></sup>`
+      ? `<sup class="citation-marker" data-cite="${index}"><a class="citation-link" href="#${referenceId}" data-reference-target="${referenceId}" aria-label="Jump to reference ${index}" title="${escapeHtml(tooltip)}">${index}</a></sup>`
       : `[${index}]`;
   };
 

@@ -16,6 +16,15 @@ const toTrimmedString = (value: unknown): string | undefined => {
 const pickFirstDefined = (...values: Array<string | undefined>): string | undefined =>
   values.find((value) => Boolean(value));
 
+const toExcerpt = (value: unknown): string | undefined => {
+  const text = toTrimmedString(value);
+  if (!text) {
+    return undefined;
+  }
+
+  return text.length > 480 ? `${text.slice(0, 477)}...` : text;
+};
+
 const normalizeSourceEntry = (value: unknown): MessageSource | null => {
   if (typeof value === 'string') {
     const title = toTrimmedString(value);
@@ -41,6 +50,16 @@ const normalizeSourceEntry = (value: unknown): MessageSource | null => {
     return null;
   }
 
+  const excerpt = pickFirstDefined(
+    toExcerpt(record.excerpt),
+    toExcerpt(record.quote),
+    toExcerpt(record.snippet),
+    toExcerpt(record.text),
+    toExcerpt(record.content),
+    toExcerpt(record.chunkText),
+    toExcerpt(record.chunk_text),
+  );
+
   return {
     title,
     section: pickFirstDefined(
@@ -58,6 +77,7 @@ const normalizeSourceEntry = (value: unknown): MessageSource | null => {
       toTrimmedString(record.pageNumber),
       toTrimmedString(record.page_number),
     ),
+    ...(excerpt ? { excerpt } : {}),
   };
 };
 

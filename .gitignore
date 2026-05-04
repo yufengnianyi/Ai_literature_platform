@@ -5,6 +5,8 @@
 HELP.md
 target/
 .m2/
+.npm-cache/
+.omx/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -38,14 +40,21 @@ build/
 ### VS Code ###
 .vscode/
 node_modules
+ai-literature-frontend/node_modules/
+ai-literature-frontend/dist/
 .env
 .env.local
 *.local
+*.log
 *-deploy-*.zip
 
 # RAG artifacts (generated data)
+/data/
 /data/rag/
 data/rag/
+data/bm25-index/
+# Generated presentation artifacts
+/presentation-output/
 # GitNexus local index (generated)
 /.gitnexus/
 .gitnexus/

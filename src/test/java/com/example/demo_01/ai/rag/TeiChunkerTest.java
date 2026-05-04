@@ -1,6 +1,6 @@
 package com.example.demo_01.ai.rag;
 
-import com.example.demo_01.ai.config.AiPersistenceProperties;
+import com.example.demo_01.ai.preprocessing.PreprocessingProperties;
 import com.example.demo_01.ai.rag.chunk.TeiChunker;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import dev.langchain4j.data.message.ChatMessage;
@@ -23,10 +23,10 @@ class TeiChunkerTest {
     @BeforeEach
     void setUp() {
         teiChunker = new TeiChunker();
-        AiPersistenceProperties properties = new AiPersistenceProperties();
-        properties.getRag().getChunking().setTargetTokens(9);
-        properties.getRag().getChunking().setMaxTokens(12);
-        properties.getRag().getChunking().setOverlapSentences(1);
+        PreprocessingProperties properties = new PreprocessingProperties();
+        properties.getChunking().setTargetTokens(9);
+        properties.getChunking().setMaxTokens(12);
+        properties.getChunking().setOverlapSentences(1);
         ReflectionTestUtils.setField(teiChunker, "properties", properties);
         ReflectionTestUtils.setField(teiChunker, "tokenCountEstimator", new TokenCountEstimator() {
             @Override

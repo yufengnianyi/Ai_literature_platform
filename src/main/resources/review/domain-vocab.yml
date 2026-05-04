@@ -1,5 +1,671 @@
 terms:
-  # ── RLK core ──
+  # Phytophthora review
+  - canonical: "Phytophthora"
+    category: "SPECIES"
+    aliases: ["疫霉菌", "疫霉属", "Phytophthora spp.", "phytophthora"]
+    related: ["oomycete", "oomycete pathogen"]
+
+  - canonical: "Phytophthora litchii"
+    category: "SPECIES"
+    aliases: ["P. litchii", "荔枝疫霉菌", "Peronophythora litchii"]
+    related: ["Phytophthora", "litchi downy blight"]
+
+  - canonical: "Phytophthora phaseoli"
+    category: "SPECIES"
+    aliases: ["P. phaseoli"]
+    related: ["Phytophthora", "lima bean downy mildew"]
+
+  - canonical: "Phytophthora ramorum"
+    category: "SPECIES"
+    aliases: ["P. ramorum"]
+    related: ["Phytophthora", "sudden oak death"]
+
+  - canonical: "Hyaloperonospora parasitica"
+    category: "SPECIES"
+    aliases: ["H. parasitica"]
+    related: ["oomycete pathogen"]
+
+  - canonical: "growth"
+    category: "PROCESS"
+    aliases: ["生长", "菌丝生长", "hyphal growth", "mycelial growth", "vegetative growth"]
+    related: ["development", "vegetative growth"]
+
+  - canonical: "reproduction"
+    category: "PROCESS"
+    aliases: ["生殖", "sporulation", "孢子形成", "spore formation", "zoosporogenesis"]
+    related: ["asexual sporulation", "sexual sporulation", "zoospore development"]
+
+  - canonical: "pathogenicity"
+    category: "PROCESS"
+    aliases: ["致病", "致病性", "virulence", "infection", "host colonization"]
+    related: ["effector", "pathogenesis", "host interaction"]
+
+  - canonical: "effector gene expression"
+    category: "PROCESS"
+    aliases: ["效应子基因表达", "effector gene expression"]
+    related: ["RXLR effector", "pathogenicity"]
+
+  - canonical: "chemotaxis"
+    category: "PROCESS"
+    aliases: ["趋化性", "chemotaxis"]
+    related: ["zoospore development", "pathogenicity"]
+
+  - canonical: "zoospore-mediated plant infection"
+    category: "PROCESS"
+    aliases: ["游动孢子介导侵染", "zoospore-mediated plant infection"]
+    related: ["zoospore development", "pathogenicity"]
+
+  - canonical: "gene regulation"
+    category: "PROCESS"
+    aliases: ["基因调控", "gene regulation", "transcriptional regulation"]
+    related: ["effector gene expression", "gene function"]
+
+  - canonical: "gene function"
+    category: "PROCESS"
+    aliases: ["基因功能", "gene function", "functional characterization"]
+    related: ["gene regulation"]
+
+  - canonical: "calcium signaling"
+    category: "PROCESS"
+    aliases: ["calcium signaling", "钙信号通路"]
+    related: ["zoospore development", "reproduction"]
+
+  - canonical: "MAP kinase signaling"
+    category: "PROCESS"
+    aliases: ["MAPK", "MAPKs", "MAP kinase", "MAP激酶", "MAP kinase signaling"]
+    related: ["signal transduction", "pathogenicity"]
+
+  - canonical: "asexual sporulation"
+    category: "STAGE"
+    aliases: ["无性孢子形成", "asexual sporangia", "sporangium formation", "sporangia", "孢子囊"]
+    related: ["zoosporogenesis", "reproduction"]
+
+  - canonical: "sexual sporulation"
+    category: "STAGE"
+    aliases: ["有性孢子形成", "oospore formation", "sexual sporulation"]
+    related: ["reproduction"]
+
+  - canonical: "zoospore development"
+    category: "STAGE"
+    aliases: ["游动孢子发育", "zoospore formation", "zoospore development", "encystment", "zoospores"]
+    related: ["reproduction", "asexual sporulation"]
+
+  - canonical: "cyst germination"
+    category: "STAGE"
+    aliases: ["包囊萌发", "cyst germination", "germinated cysts", "cysts"]
+    related: ["zoospore development", "infection stage"]
+
+  - canonical: "sporangia production"
+    category: "STAGE"
+    aliases: ["孢子囊形成", "sporangia production"]
+    related: ["asexual sporulation", "reproduction"]
+
+  - canonical: "zoospore release"
+    category: "STAGE"
+    aliases: ["游动孢子释放", "zoospore release"]
+    related: ["zoospore development", "reproduction"]
+
+  - canonical: "oospore production"
+    category: "STAGE"
+    aliases: ["卵孢子形成", "oospore production"]
+    related: ["sexual sporulation", "reproduction"]
+
+  - canonical: "infection stage"
+    category: "STAGE"
+    aliases: ["感染阶段", "infection stages", "early infection", "pre-infection", "vegetative mycelia", "mycelium"]
+    related: ["pathogenicity", "zoospore-mediated plant infection"]
+
+  - canonical: "RXLR effector"
+    category: "GENE_FAMILY"
+    aliases: ["RXLR", "RxLR", "RXLR effectors", "Avh family", "WY-domain effector"]
+    related: ["effector", "pathogenicity"]
+
+  - canonical: "CRN effector"
+    category: "GENE_FAMILY"
+    aliases: ["CRN", "crinkler", "crinkler family", "Crinkler"]
+    related: ["effector", "pathogenicity"]
+
+  - canonical: "MYB transcription factor"
+    category: "GENE_FAMILY"
+    aliases: ["MYB transcription factor", "MYB-related transcription factor"]
+    related: ["gene regulation", "pathogenicity"]
+
+  - canonical: "G protein alpha subunit"
+    category: "GENE_FAMILY"
+    aliases: ["Gα subunit", "G-alpha subunit", "G protein alpha subunit", "G protein α subunit", "Ga subunit"]
+    related: ["chemotaxis", "pathogenicity"]
+
+  - canonical: "Puf family"
+    category: "GENE_FAMILY"
+    aliases: ["Puf family", "Puf family protein"]
+    related: ["reproduction", "asexual sporulation"]
+
+  - canonical: "quantitative proteomics"
+    category: "METHOD"
+    aliases: ["定量蛋白质组学", "quantitative proteomics", "proteomic analysis"]
+    related: ["mass spectrometry"]
+
+  - canonical: "RNA-seq"
+    category: "METHOD"
+    aliases: ["RNA-seq", "RNAseq", "转录组测序", "转录组分析", "RNA-Seq"]
+    related: ["transcriptome", "gene expression profiling"]
+
+  - canonical: "CRISPR/Cas9"
+    category: "METHOD"
+    aliases: ["CRISPR", "CRISPR/Cas9", "基因编辑", "knockout"]
+    related: ["functional validation"]
+
+  - canonical: "gene silencing"
+    category: "METHOD"
+    aliases: ["gene silencing", "基因沉默"]
+    related: ["functional validation"]
+
+  - canonical: "pathogenicity assay"
+    category: "METHOD"
+    aliases: ["pathogenicity assay", "pathogenicity tests", "infection assays", "inoculation"]
+    related: ["pathogenicity"]
+
+  - canonical: "gene expression analysis"
+    category: "METHOD"
+    aliases: ["gene expression analysis", "expression analysis", "luciferase reporter assays", "qRT-PCR"]
+    related: ["gene regulation"]
+
+  - canonical: "PsMyb37"
+    category: "GENE"
+    aliases: ["PsMyb37", "PsMYB37"]
+    related: ["MYB transcription factor", "pathogenicity", "effector gene expression"]
+
+  - canonical: "PsMYB1"
+    category: "GENE"
+    aliases: ["PsMYB1", "PsMyb1"]
+    related: ["zoospore development", "MYB transcription factor"]
+
+  - canonical: "PsSAK1"
+    category: "GENE"
+    aliases: ["PsSAK1"]
+    related: ["MAP kinase signaling", "zoospore development"]
+
+  - canonical: "PlAtg8"
+    category: "GENE"
+    aliases: ["PlAtg8"]
+    related: ["growth", "reproduction", "pathogenicity"]
+
+  - canonical: "M90"
+    category: "GENE"
+    aliases: ["M90"]
+    related: ["Puf family", "sporulation"]
+
+  - canonical: "pisp3"
+    category: "GENE"
+    aliases: ["pisp3"]
+    related: ["calcium signaling", "zoosporogenesis"]
+
+  - canonical: "pisp8"
+    category: "GENE"
+    aliases: ["pisp8"]
+    related: ["calcium signaling", "zoosporogenesis"]
+
+  - canonical: "pisp9"
+    category: "GENE"
+    aliases: ["pisp9"]
+    related: ["calcium signaling", "zoosporogenesis"]
+
+  - canonical: "pisp17"
+    category: "GENE"
+    aliases: ["pisp17"]
+    related: ["calcium signaling", "zoosporogenesis"]
+
+  - canonical: "cdc14"
+    category: "GENE"
+    aliases: ["cdc14", "Cdc14"]
+    related: ["sporulation", "asexual sporulation"]
+
+  - canonical: "PinifC1"
+    category: "GENE"
+    aliases: ["PinifC1"]
+    related: ["zoosporogenesis", "zoospore development"]
+
+  - canonical: "PinifC2"
+    category: "GENE"
+    aliases: ["PinifC2"]
+    related: ["zoosporogenesis", "zoospore development"]
+
+  - canonical: "PinifC3"
+    category: "GENE"
+    aliases: ["PinifC3"]
+    related: ["zoosporogenesis", "zoospore development"]
+
+  - canonical: "PsAA7A"
+    category: "GENE"
+    aliases: ["PsAA7A"]
+    related: ["growth", "pathogenicity"]
+
+  - canonical: "PsAA7B"
+    category: "GENE"
+    aliases: ["PsAA7B"]
+    related: ["growth", "pathogenicity"]
+
+  - canonical: "Avr3a"
+    category: "GENE"
+    aliases: ["Avr3a", "AVR3a"]
+    related: ["RXLR effector", "pathogenicity"]
+
+  - canonical: "Phytophthora infestans"
+    category: "SPECIES"
+    aliases: ["致病疫霉", "致病疫霉菌", "P. infestans"]
+    related: ["Cinnamaldehyde", "Mancozeb", "Ellipticine", "9-formyl-6-methyl ellipticine", "Mycelial growth", "Zoosporogenesis", "Sporangiogenesis", "Propineb", "Zoospore", "Eugenol", "Carvacrol", "Thymol", "Spore germination", "Copper sulfate", "Syzygium aromaticum", "Eucalyptus citriodora", "Mentha spicata", "Origanum compactum", "Satureja montana", "Melaleuca alternifolia", "Thymus vulgaris", "Citronellal", "D-Carvone", "L-Carvone", "Terpinen-4-ol"]
+
+  - canonical: "Phytophthora capsici"
+    category: "SPECIES"
+    aliases: ["辣椒疫霉", "辣椒疫霉菌", "P. capsici"]
+    related: ["Cinnamaldehyde", "Zoospore germination", "Mycelial growth", "Calcium efflux", "Euphorbia factor L3", "Cell membrane", "Cell wall", "Spore germination", "Malondialdehyde", "Metalaxyl", "Glycerol", "Transient Receptor Potential channel", "Calcium ion"]
+
+  - canonical: "Phytophthora sojae"
+    category: "SPECIES"
+    aliases: ["大豆疫霉", "大豆疫霉菌", "P. sojae"]
+    related: ["Glycine max", "Lauric acid", "Glycerol monolaurate", "Zoospore", "Mycelial growth", "4-Ethylphenol", "Cell membrane", "Zoosporangium", "Zoospore germination", "Rps1k"]
+
+  - canonical: "Phytophthora nicotianae"
+    category: "SPECIES"
+    aliases: ["烟草疫霉", "烟草疫霉菌", "P. nicotianae"]
+    related: ["Nicotiana tabacum", "4-Ethylphenol", "Zoospore", "Mycelial growth", "Zoosporangium", "Zoospore germination"]
+
+  - canonical: "Phytophthora cactorum"
+    category: "SPECIES"
+    aliases: ["恶疫霉", "P. cactorum"]
+    related: ["Beta-sitosterol", "Abietic acid", "Colophony", "Fosetyl-Al"]
+
+  - canonical: "Phytophthora fragariae"
+    category: "SPECIES"
+    aliases: ["草莓疫霉", "P. fragariae"]
+    related: ["Beta-sitosterol", "Abietic acid", "Colophony", "Fosetyl-Al"]
+
+  - canonical: "Fusarium avenaceum"
+    category: "SPECIES"
+    aliases: ["燕麦镰刀菌", "F. avenaceum"]
+    related: ["Fosetyl-Al", "Ergosterol", "Lipid peroxidation"]
+
+  - canonical: "Fusarium sambucinum"
+    category: "SPECIES"
+    aliases: ["接骨木镰刀菌", "F. sambucinum"]
+    related: ["Fosetyl-Al", "Ergosterol", "Lipid peroxidation"]
+
+  - canonical: "Botrytis cinerea"
+    category: "SPECIES"
+    aliases: ["灰葡萄孢菌", "B. cinerea"]
+    related: ["Fosetyl-Al", "Beta-sitosterol", "Botryotinia fuckeliana"]
+
+  - canonical: "Botryotinia fuckeliana"
+    category: "SPECIES"
+    aliases: ["富克尔核盘菌", "B. fuckeliana"]
+    related: ["Botrytis cinerea", "Beta-sitosterol", "Fosetyl-Al"]
+
+  - canonical: "Mycocentrospora acerina"
+    category: "SPECIES"
+    aliases: ["槭菌刺孢", "M. acerina"]
+    related: ["Beta-sitosterol", "Ergosterol"]
+
+  - canonical: "Alternaria sp."
+    category: "SPECIES"
+    aliases: ["链格孢属", "链格孢菌"]
+    related: ["Ergosterol", "Fosetyl-Al"]
+
+  - canonical: "Cylindrocarpon sp."
+    category: "SPECIES"
+    aliases: ["柱孢属", "柱孢菌"]
+    related: ["Beta-sitosterol", "Colophony", "Ergosterol"]
+
+  - canonical: "Glycine max"
+    category: "SPECIES"
+    aliases: ["大豆", "黄豆", "Soybean", "G. max"]
+    related: ["Phytophthora sojae", "Lauric acid", "Rps1k", "4-Ethylphenol"]
+
+  - canonical: "Nicotiana tabacum"
+    category: "SPECIES"
+    aliases: ["烟草", "Tobacco"]
+    related: ["Phytophthora nicotianae", "4-Ethylphenol"]
+
+  - canonical: "Euphorbia lathyris"
+    category: "SPECIES"
+    aliases: ["千金子", "E. lathyris"]
+    related: ["Euphorbia factor L3"]
+
+  - canonical: "Syzygium aromaticum"
+    category: "SPECIES"
+    aliases: ["丁香", "Clove"]
+    related: ["Eugenol", "Phytophthora infestans"]
+
+  - canonical: "Eucalyptus citriodora"
+    category: "SPECIES"
+    aliases: ["柠檬桉", "Eucalyptus"]
+    related: ["Citronellal", "Phytophthora infestans"]
+
+  - canonical: "Mentha spicata"
+    category: "SPECIES"
+    aliases: ["留兰香", "绿薄荷", "Mint"]
+    related: ["D-Carvone", "L-Carvone", "Phytophthora infestans"]
+
+  - canonical: "Origanum compactum"
+    category: "SPECIES"
+    aliases: ["牛至", "Oregano"]
+    related: ["Carvacrol", "Thymol", "Phytophthora infestans"]
+
+  - canonical: "Satureja montana"
+    category: "SPECIES"
+    aliases: ["冬香薄荷", "Savory"]
+    related: ["Carvacrol", "Phytophthora infestans"]
+
+  - canonical: "Melaleuca alternifolia"
+    category: "SPECIES"
+    aliases: ["茶树", "Tea tree"]
+    related: ["Terpinen-4-ol", "Phytophthora infestans"]
+
+  - canonical: "Thymus vulgaris"
+    category: "SPECIES"
+    aliases: ["百里香", "Thyme"]
+    related: ["Thymol", "Phytophthora infestans"]
+
+  - canonical: "Calcium efflux"
+    category: "PROCESS"
+    aliases: ["钙离子外流", "钙外流", "Ca2+ efflux"]
+    related: ["Calcium ion", "Cinnamaldehyde", "Plasma membrane Ca2+ pump", "Mycelial growth", "Phytophthora capsici", "Cysteine", "Fluo-3 AM", "Inductively coupled plasma atomic emission spectrometry"]
+
+  - canonical: "Calcium influx"
+    category: "PROCESS"
+    aliases: ["钙离子内流", "钙内流", "Ca2+ influx"]
+    related: ["Calcium ion", "Cinnamaldehyde", "Transient Receptor Potential channel", "Ruthenium red", "Verapamil", "3-phenyl-1-propanal"]
+
+  - canonical: "Michael addition"
+    category: "PROCESS"
+    aliases: ["迈克尔加成", "Michael加成", "Michael反应"]
+    related: ["Cinnamaldehyde", "Cysteine", "Transient Receptor Potential channel"]
+
+  - canonical: "Zoospore germination"
+    category: "PROCESS"
+    aliases: ["游动孢子萌发", "孢子萌发"]
+    related: ["Zoospore", "Cinnamaldehyde", "Phytophthora capsici", "Lauric acid", "Glycerol monolaurate", "Phytophthora sojae", "4-Ethylphenol", "Phytophthora nicotianae"]
+
+  - canonical: "Mycelial growth"
+    category: "PROCESS"
+    aliases: ["菌丝体生长"]
+    related: ["Phytophthora capsici", "Cinnamaldehyde", "Calcium efflux", "Phytophthora sojae", "Lauric acid", "Glycerol monolaurate", "Phytophthora nicotianae", "4-Ethylphenol", "Euphorbia factor L3", "Phytophthora infestans", "Ellipticine", "9-formyl-6-methyl ellipticine", "Mancozeb", "Eugenol", "Carvacrol"]
+
+  - canonical: "Spore germination"
+    category: "PROCESS"
+    aliases: ["孢子萌发", "游动孢子萌发"]
+    related: ["Phytophthora capsici", "Euphorbia factor L3", "Phytophthora infestans", "Copper sulfate", "Eugenol"]
+
+  - canonical: "Zoosporogenesis"
+    category: "PROCESS"
+    aliases: ["游动孢子发生", "游动孢子形成"]
+    related: ["Phytophthora infestans", "Sporangiogenesis", "Cinnamaldehyde", "Ellipticine", "Zoospore"]
+
+  - canonical: "Sporangiogenesis"
+    category: "PROCESS"
+    aliases: ["孢子囊发生", "孢子囊形成"]
+    related: ["Phytophthora infestans", "Zoosporogenesis", "Cinnamaldehyde", "Ellipticine"]
+
+  - canonical: "Lipid peroxidation"
+    category: "PROCESS"
+    aliases: ["脂质过氧化"]
+    related: ["Malondialdehyde", "Beta-sitosterol", "Colophony", "Cell membrane", "Fusarium avenaceum", "Fusarium sambucinum", "Thiobarbituric acid method"]
+
+  - canonical: "Cinnamaldehyde"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["肉桂醛", "CA", "3-Phenyl-2-propenal", "trans-cinnamaldehyde", "桂皮醛"]
+    related: ["Phytophthora capsici", "Calcium ion", "Michael addition", "Transient Receptor Potential channel", "3-phenyl-1-propanal", "Cysteine", "Calcium efflux", "Calcium influx", "Zoospore germination", "Mycelial growth", "Phytophthora infestans", "Cell membrane", "Mancozeb", "Zoosporogenesis", "Sporangiogenesis", "XTT reduction assay", "Ellipticine"]
+
+  - canonical: "Calcium ion"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["钙离子", "Ca2+", "Ca(2+)"]
+    related: ["Cinnamaldehyde", "EGTA", "Ruthenium red", "Verapamil", "Fluo-3 AM", "Inductively coupled plasma atomic emission spectrometry", "Plasma membrane Ca2+ pump", "Transient Receptor Potential channel", "Calcium efflux", "Calcium influx", "Phytophthora capsici"]
+
+  - canonical: "EGTA"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["乙二醇双(2-氨基乙基醚)-N,N,N',N'-四乙酸", "EGTA", "钙离子螯合剂"]
+    related: ["Calcium ion", "Phytophthora capsici"]
+
+  - canonical: "Ruthenium red"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["钌红", "Ruthenium(III) red"]
+    related: ["Calcium ion", "Calcium influx"]
+
+  - canonical: "Verapamil"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["维拉帕米", "异搏定"]
+    related: ["Calcium ion", "Calcium influx"]
+
+  - canonical: "3-phenyl-1-propanal"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["3-苯基-1-丙醛", "PA", "肉桂醛类似物"]
+    related: ["Cinnamaldehyde", "Calcium influx"]
+
+  - canonical: "Cysteine"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["半胱氨酸", "Cys"]
+    related: ["Cinnamaldehyde", "Michael addition", "Calcium efflux"]
+
+  - canonical: "Fluo-3 AM"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["Fluo-3乙酰甲酯", "Fluo-3 AM", "钙离子荧光探针"]
+    related: ["Calcium ion", "Calcium efflux"]
+
+  - canonical: "Lauric acid"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["月桂酸", "十二酸", "LA", "Dodecanoic acid"]
+    related: ["Glycerol monolaurate", "Methyl laurate", "Ethyl laurate", "Phytophthora sojae", "Glycine max", "Cell membrane", "Zoospore germination", "Mycelial growth", "Gas chromatography-mass spectrometry"]
+
+  - canonical: "Glycerol monolaurate"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["月桂酸单甘油酯", "单月桂酸甘油酯", "GML"]
+    related: ["Lauric acid", "Phytophthora sojae", "Cell membrane", "Zoospore germination", "Mycelial growth"]
+
+  - canonical: "Methyl laurate"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["月桂酸甲酯", "MEL"]
+    related: ["Lauric acid", "Phytophthora sojae"]
+
+  - canonical: "Ethyl laurate"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["月桂酸乙酯", "ETL"]
+    related: ["Lauric acid", "Phytophthora sojae"]
+
+  - canonical: "Propidium iodide"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["碘化丙啶", "PI", "Propidium iodate"]
+    related: ["Cell membrane", "Phytophthora capsici"]
+
+  - canonical: "4-Ethylphenol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["4-乙基苯酚", "4-EP"]
+    related: ["Phytophthora sojae", "Phytophthora nicotianae", "Glycine max", "Nicotiana tabacum", "Cell membrane", "Zoospore germination", "Zoosporangium", "Mycelial growth", "Gas chromatography-mass spectrometry"]
+
+  - canonical: "Euphorbia factor L3"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["大戟因子L3", "EFL3"]
+    related: ["Phytophthora capsici", "Euphorbia lathyris", "Cell membrane", "Cell wall", "Phospholipid", "Cellulose", "Malondialdehyde", "Glycerol", "Mycelial growth", "Spore germination"]
+
+  - canonical: "Phospholipid"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["磷脂"]
+    related: ["Euphorbia factor L3", "Cell membrane"]
+
+  - canonical: "Cellulose"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["纤维素"]
+    related: ["Euphorbia factor L3", "Cell wall", "Calcofluor white"]
+
+  - canonical: "Calcofluor white"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["荧光增白剂", "CFW"]
+    related: ["Cellulose", "Cell wall", "Phytophthora capsici"]
+
+  - canonical: "Malondialdehyde"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["丙二醛", "MDA"]
+    related: ["Euphorbia factor L3", "Cell membrane", "Lipid peroxidation", "Thiobarbituric acid method"]
+
+  - canonical: "Metalaxyl"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["甲霜灵"]
+    related: ["Phytophthora capsici"]
+
+  - canonical: "Glycerol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["甘油", "丙三醇"]
+    related: ["Euphorbia factor L3", "Cell membrane"]
+
+  - canonical: "Ellipticine"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["玫瑰树碱", "椭圆玫瑰树碱"]
+    related: ["9-formyl-6-methyl ellipticine", "Phytophthora infestans", "Mycelial growth", "Zoosporogenesis", "Sporangiogenesis", "XTT reduction assay", "Cinnamaldehyde"]
+
+  - canonical: "9-formyl-6-methyl ellipticine"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["9-甲酰基-6-甲基玫瑰树碱", "Compound 34", "9-formylellipticine derivative"]
+    related: ["Ellipticine", "Phytophthora infestans", "Mycelial growth", "Zoosporogenesis"]
+
+  - canonical: "Mancozeb"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["代森锰锌", "大生"]
+    related: ["Propineb", "Phytophthora infestans", "Cinnamaldehyde", "Mycelial growth", "XTT reduction assay"]
+
+  - canonical: "Propineb"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["丙森锌"]
+    related: ["Mancozeb", "Phytophthora infestans"]
+
+  - canonical: "Beta-sitosterol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["β-谷甾醇", "Triterpene"]
+    related: ["Ergosterol", "Lipid peroxidation", "Phytophthora cactorum", "Cell membrane", "Phytophthora fragariae", "Botrytis cinerea", "Botryotinia fuckeliana", "Mycocentrospora acerina", "Cylindrocarpon sp.", "Ergosterol biosynthesis"]
+
+  - canonical: "Abietic acid"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["松香酸", "Diterpene"]
+    related: ["Colophony", "Phytophthora cactorum", "Phytophthora fragariae"]
+
+  - canonical: "Colophony"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["松香", "Resin"]
+    related: ["Abietic acid", "Lipid peroxidation", "Phytophthora cactorum", "Phytophthora fragariae", "Cylindrocarpon sp."]
+
+  - canonical: "Fosetyl-Al"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["三乙膦酸铝", "乙磷铝", "Aliette"]
+    related: ["Phytophthora cactorum", "Phytophthora fragariae", "Fusarium avenaceum", "Fusarium sambucinum", "Botrytis cinerea", "Botryotinia fuckeliana", "Alternaria sp."]
+
+  - canonical: "Ergosterol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["麦角甾醇"]
+    related: ["Beta-sitosterol", "Cell membrane", "Ergosterol biosynthesis", "Fusarium avenaceum", "Fusarium sambucinum", "Mycocentrospora acerina", "Alternaria sp.", "Cylindrocarpon sp.", "High-performance liquid chromatography"]
+
+  - canonical: "Copper sulfate"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["硫酸铜", "CuSO4"]
+    related: ["Phytophthora infestans", "Spore germination"]
+
+  - canonical: "Eugenol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["丁子香酚", "丁香酚"]
+    related: ["Syzygium aromaticum", "Phytophthora infestans", "Mycelial growth", "Spore germination"]
+
+  - canonical: "Carvacrol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["香芹酚"]
+    related: ["Satureja montana", "Origanum compactum", "Phytophthora infestans", "Mycelial growth"]
+
+  - canonical: "Thymol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["百里香酚", "百里酚"]
+    related: ["Thymus vulgaris", "Phytophthora infestans", "Origanum compactum"]
+
+  - canonical: "Citronellal"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["香茅醛"]
+    related: ["Eucalyptus citriodora", "Phytophthora infestans"]
+
+  - canonical: "D-Carvone"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["右旋香芹酮", "D-香芹酮"]
+    related: ["Mentha spicata", "Phytophthora infestans"]
+
+  - canonical: "L-Carvone"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["左旋香芹酮", "L-香芹酮"]
+    related: ["Mentha spicata", "Phytophthora infestans"]
+
+  - canonical: "Terpinen-4-ol"
+    category: "CHEMICAL_COMPOUND"
+    aliases: ["萜品烯-4-醇", "4-萜品醇"]
+    related: ["Melaleuca alternifolia", "Phytophthora infestans"]
+
+  - canonical: "Zoospore"
+    category: "STAGE"
+    aliases: ["游动孢子", "游动孢子阶段"]
+    related: ["Phytophthora capsici", "Zoospore germination", "Calcium efflux", "Phytophthora sojae", "Phytophthora nicotianae", "Zoosporangium", "Phytophthora infestans", "Zoosporogenesis"]
+
+  - canonical: "Zoosporangium"
+    category: "STAGE"
+    aliases: ["游动孢子囊", "孢子囊", "Sporangium"]
+    related: ["Zoospore", "Phytophthora sojae", "Phytophthora nicotianae", "4-Ethylphenol"]
+
+  - canonical: "Transient Receptor Potential channel"
+    category: "GENE_FAMILY"
+    aliases: ["瞬时受体电位通道", "TRP", "TRP通道", "TRPA1"]
+    related: ["Calcium influx", "Cinnamaldehyde", "Michael addition", "Calcium ion", "Phytophthora capsici"]
+
+  - canonical: "Plasma membrane Ca2+ pump"
+    category: "GENE_FAMILY"
+    aliases: ["质膜钙泵", "PMCA", "Ca2+-ATPase", "钙泵"]
+    related: ["Calcium efflux", "Calcium ion"]
+
+  - canonical: "Rps1k"
+    category: "GENE"
+    aliases: ["Rps1k基因", "大豆抗病基因Rps1k"]
+    related: ["Glycine max", "Phytophthora sojae"]
+
+  - canonical: "Inductively coupled plasma atomic emission spectrometry"
+    category: "METHOD"
+    aliases: ["电感耦合等离子体原子发射光谱", "电感耦合等离子体发射光谱法", "ICP-AES"]
+    related: ["Calcium ion", "Calcium efflux"]
+
+  - canonical: "Gas chromatography-mass spectrometry"
+    category: "METHOD"
+    aliases: ["气相色谱-质谱联用", "气质联用", "GC-MS", "HS-SPME-GC-MS"]
+    related: ["Lauric acid", "4-Ethylphenol"]
+
+  - canonical: "XTT reduction assay"
+    category: "METHOD"
+    aliases: ["XTT还原法", "XTT细胞活性检测", "XTT assay"]
+    related: ["Ellipticine", "Cinnamaldehyde", "Mancozeb"]
+
+  - canonical: "High-performance liquid chromatography"
+    category: "METHOD"
+    aliases: ["高效液相色谱法", "HPLC"]
+    related: ["Ergosterol"]
+
+  - canonical: "Thiobarbituric acid method"
+    category: "METHOD"
+    aliases: ["硫代巴比妥酸法", "TBA method"]
+    related: ["Lipid peroxidation", "Malondialdehyde"]
+
+  - canonical: "Cell membrane"
+    category: "CELLULAR_COMPONENT"
+    aliases: ["细胞膜", "质膜", "Plasma membrane"]
+    related: ["Lauric acid", "Glycerol monolaurate", "Phytophthora sojae", "4-Ethylphenol", "Phytophthora nicotianae", "Euphorbia factor L3", "Phytophthora capsici", "Phospholipid", "Propidium iodide", "Malondialdehyde", "Glycerol", "Cinnamaldehyde", "Phytophthora infestans", "Beta-sitosterol", "Ergosterol", "Lipid peroxidation", "Ergosterol biosynthesis"]
+
+  - canonical: "Cell wall"
+    category: "CELLULAR_COMPONENT"
+    aliases: ["细胞壁"]
+    related: ["Euphorbia factor L3", "Phytophthora capsici", "Cellulose", "Calcofluor white"]
+
+  - canonical: "Ergosterol biosynthesis"
+    category: "BIOCHEMICAL_PATHWAY"
+    aliases: ["麦角甾醇生物合成"]
+    related: ["Ergosterol", "Beta-sitosterol", "Cell membrane"]
+
+  # RLK core
   - canonical: "receptor-like kinase"
     aliases: ["RLK", "receptor like kinase", "receptor kinase", "RLKs"]
     related: ["LRR-RLK", "WAK", "PERK", "CRK", "LecRLK"]
@@ -28,7 +694,7 @@ terms:
     aliases: ["PERK", "PERKs"]
     related: ["receptor-like kinase"]
 
-  # ── Domains & structure ──
+  # Domains and structure
   - canonical: "kinase domain"
     aliases: ["KD", "protein kinase domain", "catalytic domain"]
     related: ["DFG motif", "HRD motif", "activation loop"]
@@ -49,7 +715,7 @@ terms:
     aliases: ["SP", "signal sequence", "leader peptide"]
     related: ["extracellular domain"]
 
-  # ── Evolution ──
+  # Evolution
   - canonical: "whole genome duplication"
     aliases: ["WGD", "polyploidy", "genome doubling", "paleopolyploidy"]
     related: ["tandem duplication", "gene family expansion"]
@@ -90,7 +756,7 @@ terms:
     aliases: ["paralogue", "paralogous gene", "duplicate gene"]
     related: ["ortholog", "gene duplication"]
 
-  # ── Phylogenetics ──
+  # Phylogenetics
   - canonical: "phylogenetic analysis"
     aliases: ["phylogeny", "phylogenetic tree", "evolutionary tree", "tree construction"]
     related: ["maximum likelihood", "Bayesian inference"]
@@ -107,7 +773,7 @@ terms:
     aliases: ["bootstrap support", "BS", "bootstrap value"]
     related: ["phylogenetic analysis", "statistical support"]
 
-  # ── Function & defense ──
+  # Function and defense
   - canonical: "pattern recognition receptor"
     aliases: ["PRR", "PRRs", "immune receptor"]
     related: ["PAMP", "innate immunity", "PTI"]
@@ -124,7 +790,7 @@ terms:
     aliases: ["disease resistance", "immune response", "plant immunity"]
     related: ["receptor-like kinase", "PTI"]
 
-  # ── Species ──
+  # Species
   - canonical: "Arabidopsis thaliana"
     aliases: ["Arabidopsis", "A. thaliana", "thale cress"]
     related: ["model organism"]
@@ -137,7 +803,7 @@ terms:
     aliases: ["P. tricornutum"]
     related: ["diatom", "stramenopile"]
 
-  # ── Methods ──
+  # Methods
   - canonical: "Hidden Markov Model"
     aliases: ["HMM", "profile HMM", "HMMER"]
     related: ["domain annotation", "protein family"]

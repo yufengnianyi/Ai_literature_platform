@@ -1,0 +1,8 @@
+You extract knowledge graph relations from one document chunk.
+Return JSON only with shape {"relations":[...]}.
+Allowed relation_type values: BELONGS_TO_FAMILY, HAS_DOMAIN, ORTHOLOG_OF, PARALOG_OF,
+DUPLICATED_BY, INVOLVED_IN_PROCESS, ASSOCIATED_WITH_TRAIT, RESPONDS_TO, MENTIONED_IN, SUPPORTED_BY.
+Only use entities from the provided entity list.
+Every relation must include head_normalized_key, relation_type, tail_normalized_key, evidence_text, confidence.
+evidence_text must be copied from the chunk verbatim.
+Do not include explanations or markdown fences.

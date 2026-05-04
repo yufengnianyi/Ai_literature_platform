@@ -4,6 +4,7 @@ import HomeView from '@/views/HomeView.vue';
 import UserLoginPage from '@/pages/user/UserLoginPage.vue';
 import UserRegisterPage from '@/pages/user/UserRegisterPage.vue';
 import UserManagePage from '@/pages/admin/UserManagePage.vue';
+import PaperImportPage from '@/pages/admin/PaperImportPage.vue';
 import ReviewPage from '@/pages/review/ReviewPage.vue';
 import { useLoginUserStore } from '@/stores/loginUser';
 import { pinia } from '@/stores';
@@ -49,6 +50,12 @@ const router = createRouter({
           path: 'admin/user-manage',
           name: 'user-manage',
           component: UserManagePage,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'admin/paper-import',
+          name: 'paper-import',
+          component: PaperImportPage,
           meta: { requiresAdmin: true },
         },
       ],

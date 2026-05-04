@@ -50,11 +50,12 @@
     </div>
 
     <!-- Stage: Confirming (Interactive Analysis Panel) -->
-    <div class="confirming-section" v-if="stage === 'confirming' && analysisResult">
-      <ReviewAnalysisPanel
-        :analysis="analysisResult"
+    <div class="confirming-section" v-if="stage === 'confirming' && scopePreview">
+      <ReviewScopePanel
+        :preview="scopePreview"
         :original-question="question"
-        @confirm="handleConfirmAndRetrieve"
+        mode="analysis"
+        @confirm-analysis="handleConfirmAndRetrieve"
         @cancel="handleBackToInput"
       />
     </div>
@@ -74,10 +75,12 @@
     </div>
 
     <!-- Stage: Reviewing Candidates (Checkpoint 1) -->
-    <div class="confirming-section" v-if="stage === 'reviewingCandidates' && candidateList.length > 0">
-      <CandidateReviewPanel
-        :candidates="candidateList"
-        @confirm="handleConfirmCandidates"
+    <div class="confirming-section" v-if="stage === 'reviewingCandidates' && scopePreview">
+      <ReviewScopePanel
+        :preview="scopePreview"
+        :original-question="question"
+        mode="candidate"
+        @confirm-candidates="handleConfirmCandidates"
         @cancel="handleBackToInput"
       />
     </div>
@@ -100,6 +103,7 @@
     <div class="confirming-section" v-if="stage === 'reviewingEvidence' && evidenceList.length > 0">
       <EvidenceReviewPanel
         :evidence="evidenceList"
+        :language-code="reviewLanguageCode"
         @confirm="handleConfirmEvidence"
         @cancel="handleBackToInput"
       />
@@ -196,16 +200,14 @@ import {
   reviewService,
   type ReviewTaskRecord,
   type ReviewStreamHandle,
-  type QueryAnalysis,
+  type ReviewScopePreview,
   type ReviewGenerateRequest,
-  type ReviewCandidate,
   type ReviewEvidenceRecord,
   type CandidateReviewRequest,
   type EvidenceReviewRequest,
 } from '@/services/review';
 import { renderMarkdown } from '@/utils/markdown';
-import ReviewAnalysisPanel from '@/components/review/ReviewAnalysisPanel.vue';
-import CandidateReviewPanel from '@/components/review/CandidateReviewPanel.vue';
+import ReviewScopePanel from '@/components/review/ReviewScopePanel.vue';
 import EvidenceReviewPanel from '@/components/review/EvidenceReviewPanel.vue';
 
 type ReviewStage =
@@ -222,9 +224,9 @@ type ReviewStage =
 const stage = ref<ReviewStage>('inputting');
 const question = ref('');
 const isAnalyzing = ref(false);
-const analysisResult = ref<QueryAnalysis | null>(null);
+const scopePreview = ref<ReviewScopePreview | null>(null);
+const reviewLanguageCode = ref<string>('en');
 const currentTaskId = ref<string>('');
-const candidateList = ref<ReviewCandidate[]>([]);
 const evidenceList = ref<ReviewEvidenceRecord[]>([]);
 const reportContent = ref('');
 const stageLabel = ref('Initializing...');
@@ -272,9 +274,9 @@ const cleanupPolling = () => {
 
 const resetState = () => {
   stage.value = 'inputting';
-  analysisResult.value = null;
+  scopePreview.value = null;
+  reviewLanguageCode.value = 'en';
   currentTaskId.value = '';
-  candidateList.value = [];
   evidenceList.value = [];
   reportContent.value = '';
   xlsxDownloadUrl.value = '';
@@ -305,7 +307,8 @@ const handleAnalyze = async () => {
   errorMessage.value = '';
 
   try {
-    analysisResult.value = await reviewService.analyzeQuestion(question.value);
+    scopePreview.value = await reviewService.previewScope(question.value);
+    reviewLanguageCode.value = scopePreview.value.analysis.languageCode ?? 'en';
     stage.value = 'confirming';
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : 'Failed to analyze question';
@@ -327,7 +330,8 @@ const handleConfirmAndRetrieve = async (request: ReviewGenerateRequest) => {
   try {
     await reviewService.startRetrieval(taskId, request);
     pollForCheckpoint(taskId, 'RERANKING', 'reviewingCandidates', async () => {
-      candidateList.value = await reviewService.getCandidates(taskId);
+      scopePreview.value = await reviewService.getScopePreview(taskId);
+      reviewLanguageCode.value = scopePreview.value.analysis.languageCode ?? 'en';
     });
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : 'Failed to start retrieval';
@@ -528,6 +532,7 @@ const loadTask = async (taskId: string) => {
     const task = await reviewService.getTask(taskId);
     question.value = task.question;
     currentTaskId.value = taskId;
+    reviewLanguageCode.value = task.queryAnalysis?.languageCode ?? 'en';
 
     if (task.reportMarkdown) {
       reportContent.value = task.reportMarkdown;
@@ -535,7 +540,8 @@ const loadTask = async (taskId: string) => {
       xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
     } else if (task.status === 'AWAITING_USER') {
       if (task.stage === 'RERANKING') {
-        candidateList.value = await reviewService.getCandidates(taskId);
+        scopePreview.value = await reviewService.getScopePreview(taskId);
+        reviewLanguageCode.value = scopePreview.value.analysis.languageCode ?? reviewLanguageCode.value;
         stage.value = 'reviewingCandidates';
       } else if (task.stage === 'EVIDENCE_FUSION') {
         evidenceList.value = await reviewService.getEvidence(taskId);
@@ -573,7 +579,8 @@ const pollTask = (taskId: string) => {
         currentTaskId.value = taskId;
         question.value = task.question;
         if (task.stage === 'RERANKING') {
-          candidateList.value = await reviewService.getCandidates(taskId);
+          scopePreview.value = await reviewService.getScopePreview(taskId);
+          reviewLanguageCode.value = scopePreview.value.analysis.languageCode ?? reviewLanguageCode.value;
           stage.value = 'reviewingCandidates';
         } else if (task.stage === 'EVIDENCE_FUSION') {
           evidenceList.value = await reviewService.getEvidence(taskId);

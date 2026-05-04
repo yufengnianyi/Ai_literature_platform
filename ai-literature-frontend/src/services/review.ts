@@ -16,6 +16,62 @@ export interface QueryAnalysis {
   subQuestions: string[];
   keyEntities: string[];
   keyConcepts: string[];
+  languageCode?: 'zh' | 'en' | string;
+  displayMainQuestion?: string | null;
+  displaySubQuestions?: string[] | null;
+}
+
+export interface QuestionOption {
+  id: string;
+  canonicalText: string;
+  displayText: string;
+  selected: boolean;
+}
+
+export interface EntityOption {
+  id: string;
+  canonicalName: string;
+  displayName: string;
+  category: 'ENTITY' | 'CONCEPT' | string;
+  relatedQuestionIds: string[];
+  selected: boolean;
+}
+
+export interface DocumentOption {
+  id: string;
+  documentId: string | null;
+  title: string;
+  relatedQuestionIds: string[];
+  relatedEntities: string[];
+  keyFindings: string[];
+  innovationPoints: string[];
+  relevance: 'HIGH' | 'MEDIUM' | 'LOW' | 'IRRELEVANT' | null;
+  score: number | null;
+  reason: string | null;
+  selected: boolean;
+  chunkIds: string[];
+  previewText: string | null;
+  knowledgeStatus?: 'MISS' | 'PARTIAL' | 'HIT' | 'STALE' | string | null;
+  compoundAliases?: DocumentCompoundAlias[];
+  compounds?: string[];
+}
+
+export interface DocumentCompoundAlias {
+  documentId: string;
+  localAlias: string;
+  resolvedName: string | null;
+  normalizedCompoundId: string | null;
+  evidenceChunkId: string | null;
+  evidenceText: string | null;
+  resolutionStatus: 'RESOLVED' | 'AMBIGUOUS' | 'UNRESOLVED' | string;
+  confidence: number;
+}
+
+export interface ReviewScopePreview {
+  analysis: QueryAnalysis;
+  questions: QuestionOption[];
+  entities: EntityOption[];
+  documents: DocumentOption[];
 }
 
 export interface ReviewGenerateRequest {
@@ -30,6 +86,9 @@ export interface ReviewGenerateRequest {
 export interface CandidateReviewRequest {
   excludedChunkIds: string[];
   prioritizedChunkIds: string[];
+  selectedDocumentIds?: string[];
+  selectedQuestionIds?: string[];
+  selectedEntityIds?: string[];
 }
 
 export interface EvidenceReviewRequest {
@@ -59,9 +118,11 @@ export interface ReviewEvidenceRecord {
   candidateId: number | null;
   chunkId: string | null;
   documentId: string | null;
+  documentTitle: string | null;
   claim: string | null;
   finding: string | null;
   methodology: string | null;
+  typedEntities: Record<string, string[]> | null;
   entities: string[];
   evidenceType: string | null;
   confidence: number;
@@ -80,9 +141,11 @@ export interface ReviewTaskRecord {
   queryAnalysis: QueryAnalysis | null;
   reportMarkdown: string | null;
   candidateCount: number | null;
+  documentCount: number | null;
   evidenceCount: number | null;
   metrics: {
     retrievalMs: number | null;
+    documentPromotionMs: number | null;
     rerankMs: number | null;
     extractionMs: number | null;
     fusionMs: number | null;
@@ -139,6 +202,11 @@ export const reviewService = {
     return data as QueryAnalysis;
   },
 
+  async previewScope(question: string): Promise<ReviewScopePreview> {
+    const { data } = await myAxios.post('/review/preview', { question });
+    return data as ReviewScopePreview;
+  },
+
   async submitTask(question: string): Promise<ReviewTaskAcceptedResponse> {
     const { data } = await myAxios.post('/review/tasks', { question });
     return data as ReviewTaskAcceptedResponse;
@@ -177,6 +245,11 @@ export const reviewService = {
   async getCandidates(taskId: string): Promise<ReviewCandidate[]> {
     const { data } = await myAxios.get(`/review/tasks/${taskId}/candidates`);
     return data as ReviewCandidate[];
+  },
+
+  async getScopePreview(taskId: string): Promise<ReviewScopePreview> {
+    const { data } = await myAxios.get(`/review/tasks/${taskId}/scope-preview`);
+    return data as ReviewScopePreview;
   },
 
   async startExtraction(taskId: string, request: CandidateReviewRequest): Promise<ReviewTaskAcceptedResponse> {

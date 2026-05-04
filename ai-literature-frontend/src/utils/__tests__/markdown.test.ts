@@ -39,19 +39,20 @@ assert.equal(thresholdBoundary.stableContent, 'Line 1\nLine 2\n');
 assert.equal(thresholdBoundary.pendingTail, 'Line 3');
 
 const preparedCitations = prepareCitations(
-  'Answer {source=Paper A; section=Intro; chunk=3}\nAgain {source=Paper A; section=Intro; chunk=3}\nNext 〔source=Paper B; page=7〕',
+  'Answer {source=Paper A; section=Intro; chunk=3; quote=Direct evidence summary}\nAgain {source=Paper A; section=Intro; chunk=3; quote=Direct evidence summary}\nNext 〔source=Paper B; page=7〕',
   { referenceScope: 'message-42' },
 );
 assert.equal(preparedCitations.citations.length, 2);
 assert.equal(preparedCitations.citations[0]?.referenceId, 'message-42-ref-1');
+assert.equal(preparedCitations.citations[0]?.excerpt, 'Direct evidence summary');
 assert.equal(preparedCitations.citations[1]?.referenceId, 'message-42-ref-2');
 assert.match(
   preparedCitations.processedText,
-  /<sup class="citation-marker" data-cite="1"><a class="citation-link" href="#message-42-ref-1" data-reference-target="message-42-ref-1" aria-label="Jump to reference 1">1<\/a><\/sup>/,
+  /<sup class="citation-marker" data-cite="1"><a class="citation-link" href="#message-42-ref-1" data-reference-target="message-42-ref-1" aria-label="Jump to reference 1" title="Paper A · Intro · chunk 3 · Direct evidence summary">1<\/a><\/sup>/,
 );
 assert.match(
   preparedCitations.processedText,
-  /<sup class="citation-marker" data-cite="2"><a class="citation-link" href="#message-42-ref-2" data-reference-target="message-42-ref-2" aria-label="Jump to reference 2">2<\/a><\/sup>/,
+  /<sup class="citation-marker" data-cite="2"><a class="citation-link" href="#message-42-ref-2" data-reference-target="message-42-ref-2" aria-label="Jump to reference 2" title="Paper B · page 7">2<\/a><\/sup>/,
 );
 assert.match(preparedCitations.plaintextText, /\[2\]/);
 
@@ -64,12 +65,12 @@ assert.deepEqual(normalizedStringSources, [
 const normalizedStructuredSources = normalizeSourcesPayload([
   { source: 'Paper A', section: 'Intro', chunk: 3, page: 7 },
   { title: 'Paper A', section: 'Intro', chunk: 3, page: 7 },
-  { name: 'Paper B', sectionName: 'Results', chunkId: 11, pageNumber: 2 },
+  { name: 'Paper B', sectionName: 'Results', chunkId: 11, pageNumber: 2, snippet: 'Evidence excerpt' },
   { invalid: true },
 ]);
 assert.deepEqual(normalizedStructuredSources, [
   { title: 'Paper A', section: 'Intro', chunk: '3', page: '7' },
-  { title: 'Paper B', section: 'Results', chunk: '11', page: '2' },
+  { title: 'Paper B', section: 'Results', chunk: '11', page: '2', excerpt: 'Evidence excerpt' },
 ]);
 
 const finalParsed = parseAIResponse(
@@ -111,6 +112,7 @@ assert.deepEqual(enrichedCitations.citations, [
     section: 'Results',
     chunk: '11',
     page: '2',
+    excerpt: 'Evidence excerpt',
     referenceId: 'message-enriched-ref-1',
   },
 ]);

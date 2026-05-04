@@ -106,6 +106,30 @@ public class RagDocumentRepository {
         updatePreprocessState(documentId, null, preprocessStatus);
     }
 
+    public List<RagDocumentRecord> findCompletedWithoutSynopsis(int limit) {
+        return jdbcTemplate.query(selectSql() + """
+                 where d.status = 'COMPLETED'
+                   and d.duplicate_of_document_id is null
+                   and (d.synopsis_text is null or btrim(d.synopsis_text) = '')
+                 order by d.updated_at desc
+                 limit ?
+                """, this::mapRow, limit);
+    }
+
+    public void updateSynopsis(UUID documentId, RagDocumentSynopsis synopsis) {
+        jdbcTemplate.update("""
+                update rag_document
+                set synopsis_json = cast(? as jsonb),
+                    synopsis_text = ?,
+                    updated_at = ?
+                where document_id = ?
+                """,
+                toJsonSynopsis(synopsis),
+                synopsis == null ? null : synopsis.searchableText(),
+                Timestamp.from(Instant.now()),
+                documentId);
+    }
+
     public boolean isPreprocessCompleted(UUID documentId) {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 select preprocess_status = ?
@@ -186,6 +210,7 @@ public class RagDocumentRepository {
                 rs.getString("journal"),
                 rs.getString("publication_date"),
                 (Integer) rs.getObject("publication_year"),
+                fromJsonSynopsis(rs.getString("synopsis_json")),
                 rs.getString("source_filename"),
                 rs.getString("storage_root"),
                 RagDocumentStatus.valueOf(rs.getString("status")),
@@ -223,6 +248,25 @@ public class RagDocumentRepository {
             return objectMapper.readValue(value, STRING_LIST_TYPE);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to deserialize metadata list", e);
+        }
+    }
+
+    private String toJsonSynopsis(RagDocumentSynopsis synopsis) {
+        try {
+            return synopsis == null ? null : objectMapper.writeValueAsString(synopsis);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize synopsis", e);
+        }
+    }
+
+    private RagDocumentSynopsis fromJsonSynopsis(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(value, RagDocumentSynopsis.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to deserialize synopsis", e);
         }
     }
 }

@@ -17,55 +17,69 @@ public class ReviewPromptCanonicalizer {
     private static final Pattern CHINESE = Pattern.compile("[\\u4e00-\\u9fff]");
 
     public QueryAnalysis canonicalize(String rawPrompt, QueryAnalysis analysis) {
-        boolean chinese = containsChinese(rawPrompt);
-
+        String languageCode = detectLanguage(rawPrompt, analysis);
         String scope = extractScope(rawPrompt, analysis);
         List<String> explicitAspects = extractExplicitAspects(rawPrompt);
 
         String mainQuestion = sanitizeSentence(analysis.mainQuestion());
-        if (mainQuestion == null || looksInstructional(mainQuestion)) {
-            mainQuestion = buildMainQuestion(scope, explicitAspects, chinese);
+        if (mainQuestion == null || looksInstructional(mainQuestion) || containsChinese(mainQuestion)) {
+            mainQuestion = buildCanonicalMainQuestion(scope, explicitAspects, rawPrompt);
         }
 
-        List<String> subQuestions = sanitizeSubQuestions(analysis.subQuestions());
-        if (!explicitAspects.isEmpty()) {
-            subQuestions = buildSubQuestions(scope, explicitAspects, chinese);
+        List<String> subQuestions = sanitizeSubQuestions(analysis.subQuestions(), true);
+        if (!explicitAspects.isEmpty() || isBroadGeneListing(rawPrompt)) {
+            subQuestions = buildCanonicalSubQuestions(scope, explicitAspects, rawPrompt);
         } else if (subQuestions.isEmpty()) {
             subQuestions = List.of(mainQuestion);
+        }
+
+        String displayMainQuestion = sanitizeSentence(analysis.displayMainQuestion());
+        if (displayMainQuestion == null) {
+            displayMainQuestion = "zh".equals(languageCode) ? firstUsefulLine(rawPrompt, mainQuestion) : mainQuestion;
+        }
+        List<String> displaySubQuestions = sanitizeSubQuestions(analysis.displaySubQuestions(), false);
+        if (displaySubQuestions.isEmpty()) {
+            displaySubQuestions = "zh".equals(languageCode) ? List.of(displayMainQuestion) : subQuestions;
         }
 
         return new QueryAnalysis(
                 mainQuestion,
                 subQuestions,
-                dedupe(analysis.keyEntities()),
-                dedupe(analysis.keyConcepts())
+                dedupe(analysis.keyEntities(), true),
+                dedupe(analysis.keyConcepts(), true),
+                languageCode,
+                displayMainQuestion,
+                displaySubQuestions
         );
     }
 
+    private String detectLanguage(String rawPrompt, QueryAnalysis analysis) {
+        if (analysis.languageCode() != null && !analysis.languageCode().isBlank()) {
+            return analysis.languageCode().toLowerCase(Locale.ROOT).startsWith("zh") ? "zh" : "en";
+        }
+        return containsChinese(rawPrompt) ? "zh" : "en";
+    }
+
     private String extractScope(String rawPrompt, QueryAnalysis analysis) {
-        for (String line : rawPrompt.split("\\R")) {
+        String mainQuestion = sanitizeSentence(analysis.mainQuestion());
+        if (mainQuestion != null && !looksInstructional(mainQuestion) && !containsChinese(mainQuestion)) {
+            return trimReviewSuffix(mainQuestion);
+        }
+        for (String line : safe(rawPrompt).split("\\R")) {
             String candidate = sanitizeSentence(line);
             if (candidate == null || looksInstructional(candidate)) {
                 continue;
             }
-            candidate = trimReviewSuffix(candidate);
-            if (candidate != null && candidate.length() >= 4) {
-                return candidate;
-            }
+            return trimReviewSuffix(candidate);
         }
-
-        String mainQuestion = sanitizeSentence(analysis.mainQuestion());
-        if (mainQuestion != null && !looksInstructional(mainQuestion)) {
-            return trimReviewSuffix(mainQuestion);
-        }
-        return "the target topic";
+        return "the target research topic";
     }
 
     private List<String> extractExplicitAspects(String rawPrompt) {
         List<String> aspects = new ArrayList<>();
-        for (String line : rawPrompt.split("\\R")) {
+        for (String line : safe(rawPrompt).split("\\R")) {
             String trimmed = line.trim();
-            if (!trimmed.startsWith("-") && !trimmed.startsWith("*") && !trimmed.startsWith("•")) {
+            if (!trimmed.startsWith("-") && !trimmed.startsWith("*")) {
                 continue;
             }
             String candidate = sanitizeSentence(trimmed.substring(1));
@@ -74,10 +88,10 @@ public class ReviewPromptCanonicalizer {
             }
             aspects.add(candidate);
         }
-        return dedupe(aspects);
+        return dedupe(aspects, false);
     }
 
-    private List<String> sanitizeSubQuestions(List<String> subQuestions) {
+    private List<String> sanitizeSubQuestions(List<String> subQuestions, boolean requireEnglish) {
         if (subQuestions == null || subQuestions.isEmpty()) {
             return List.of();
         }
@@ -87,48 +101,64 @@ public class ReviewPromptCanonicalizer {
             if (candidate == null || looksInstructional(candidate) || looksSchemaField(candidate)) {
                 continue;
             }
+            if (requireEnglish && containsChinese(candidate)) {
+                continue;
+            }
             sanitized.add(candidate);
         }
-        return dedupe(sanitized);
+        return dedupe(sanitized, requireEnglish);
     }
 
-    private String buildMainQuestion(String scope, List<String> aspects, boolean chinese) {
-        if (chinese) {
-            if (!aspects.isEmpty()) {
-                return "基于提供的文献，系统综述%s中参与%s的基因及其功能证据，并比较不同过程之间的共性与差异。"
-                        .formatted(scope, String.join("、", stripExamples(aspects)));
-            }
-            return "基于提供的文献，系统综述%s的关键生物学机制及其证据。".formatted(scope);
+    private String buildCanonicalMainQuestion(String scope, List<String> aspects, String rawPrompt) {
+        if (isBroadGeneListing(rawPrompt)) {
+            return "Catalog the genes, proteins, compounds, mechanisms, evidence strength, and paper-level novelty related to "
+                    + scope + ".";
         }
-
         if (!aspects.isEmpty()) {
-            return "Based on the provided literature, systematically review the genes and supporting evidence involved in %s within %s."
-                    .formatted(String.join(", ", stripExamples(aspects)), scope);
+            return "Systematically review " + scope + " with emphasis on "
+                    + String.join(", ", stripExamples(aspects)) + ".";
         }
-        return "Based on the provided literature, systematically review the key biological mechanisms in %s."
-                .formatted(scope);
+        return "Systematically review the biological mechanisms, research evidence, and knowledge gaps related to "
+                + scope + ".";
     }
 
-    private List<String> buildSubQuestions(String scope, List<String> aspects, boolean chinese) {
+    private List<String> buildCanonicalSubQuestions(String scope, List<String> aspects, String rawPrompt) {
+        if (isBroadGeneListing(rawPrompt)) {
+            return List.of(
+                    "Which genes, proteins, or compounds are directly related to the research topic?",
+                    "Which developmental stages, pathways, organisms, or phenotypes do they affect?",
+                    "What mechanisms or biological processes are supported by the literature?",
+                    "Which experimental or computational methods support the conclusions?",
+                    "Which findings are well supported, and which remain uncertain or under-studied?"
+            );
+        }
+        List<String> cleaned = stripExamples(aspects);
+        if (cleaned.isEmpty()) {
+            return List.of(
+                    "What are the main entities and mechanisms involved in " + scope + "?",
+                    "Which papers provide the strongest evidence for those mechanisms?",
+                    "What limitations and future research directions remain?"
+            );
+        }
         List<String> subQuestions = new ArrayList<>();
-        List<String> cleanedAspects = stripExamples(aspects);
-        for (String aspect : cleanedAspects) {
-            if (chinese) {
-                subQuestions.add("哪些基因参与%s的%s过程，这些基因的功能证据是什么？".formatted(scope, aspect));
-            } else {
-                subQuestions.add("Which genes are involved in %s in %s, and what evidence supports their functions?"
-                        .formatted(aspect, scope));
-            }
+        for (String aspect : cleaned) {
+            subQuestions.add("What evidence explains " + aspect + " in " + scope + "?");
         }
+        return dedupe(subQuestions, false);
+    }
 
-        if (cleanedAspects.size() >= 2) {
-            if (chinese) {
-                subQuestions.add("哪些基因同时参与多个过程，或在不同过程中表现出功能交叉，其证据是什么？");
-            } else {
-                subQuestions.add("Which genes participate in multiple processes or show cross-process functional roles, and what evidence supports this?");
-            }
-        }
-        return dedupe(subQuestions);
+    private boolean isBroadGeneListing(String rawPrompt) {
+        String lower = safe(rawPrompt).toLowerCase(Locale.ROOT);
+        return lower.contains("catalog")
+                || lower.contains("gene_name")
+                || lower.contains("all genes")
+                || lower.contains("all compounds")
+                || lower.contains("genes")
+                || lower.contains("proteins")
+                || lower.contains("compounds")
+                || lower.contains("基因")
+                || lower.contains("蛋白")
+                || lower.contains("化合物");
     }
 
     private List<String> stripExamples(List<String> aspects) {
@@ -142,18 +172,19 @@ public class ReviewPromptCanonicalizer {
 
     private boolean looksInstructional(String value) {
         String lower = value.toLowerCase(Locale.ROOT);
-        return lower.contains("你的任务")
-                || lower.contains("要求")
-                || lower.contains("每个基因")
+        return lower.contains("your task")
+                || lower.contains("requirement")
                 || lower.contains("must")
                 || lower.contains("return json")
                 || lower.contains("do not")
                 || lower.contains("evidence_text")
                 || lower.contains("functional_description")
                 || lower.contains("confidence")
-                || lower.contains("source：")
                 || lower.contains("source:")
-                || lower.contains("gene_name");
+                || lower.contains("gene_name")
+                || lower.contains("你的任务")
+                || lower.contains("要求")
+                || lower.contains("输出格式");
     }
 
     private boolean looksSchemaField(String value) {
@@ -173,8 +204,7 @@ public class ReviewPromptCanonicalizer {
             return null;
         }
         String sanitized = normalizeWhitespace(value)
-                .replaceAll("^[#\\-•*\\d.\\s]+", "")
-                .replaceAll("^[：:]+", "")
+                .replaceAll("^[#\\-*\\d.\\s]+", "")
                 .trim();
         return sanitized.isBlank() ? null : sanitized;
     }
@@ -184,36 +214,47 @@ public class ReviewPromptCanonicalizer {
             return null;
         }
         String trimmed = value
-                .replace("系统性回顾", "")
-                .replace("系统综述", "")
                 .replace("systematic review", "")
                 .replace("Systematic Review", "")
+                .replace("系统综述", "")
+                .replace("文献综述", "")
                 .trim();
         return trimmed.isBlank() ? value : trimmed;
     }
 
-    private String normalizeWhitespace(String value) {
-        if (value == null) {
-            return "";
+    private String firstUsefulLine(String rawPrompt, String fallback) {
+        for (String line : safe(rawPrompt).split("\\R")) {
+            String candidate = sanitizeSentence(line);
+            if (candidate != null && !looksInstructional(candidate)) {
+                return candidate;
+            }
         }
-        return WHITESPACE.matcher(value).replaceAll(" ").trim();
+        return fallback;
+    }
+
+    private String normalizeWhitespace(String value) {
+        return WHITESPACE.matcher(safe(value)).replaceAll(" ").trim();
     }
 
     private boolean containsChinese(String value) {
         return value != null && CHINESE.matcher(value).find();
     }
 
-    private List<String> dedupe(List<String> values) {
+    private List<String> dedupe(List<String> values, boolean requireEnglish) {
         if (values == null || values.isEmpty()) {
             return List.of();
         }
         Set<String> deduped = new LinkedHashSet<>();
         for (String value : values) {
             String sanitized = sanitizeSentence(value);
-            if (sanitized != null) {
+            if (sanitized != null && (!requireEnglish || !containsChinese(sanitized))) {
                 deduped.add(sanitized);
             }
         }
         return List.copyOf(deduped);
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }

@@ -1,0 +1,9 @@
+You extract biological knowledge graph entities from one document chunk.
+Return JSON only with shape {"entities":[...]}.
+Allowed entity_type values: PAPER, SPECIES, GENE_OR_PROTEIN, RLK_FAMILY, DOMAIN_OR_MOTIF,
+TRAIT_OR_PHENOTYPE, STRESS_OR_PATHOGEN, METHOD, DATABASE_OR_DATASET.
+Every entity must include mention_text, canonical_name, entity_type, normalized_key,
+aliases, evidence_text, confidence.
+evidence_text must be copied from the chunk verbatim.
+normalized_key must be lowercase snake_case style and stable across papers.
+Do not include explanations or markdown fences.

@@ -25,7 +25,9 @@ class ReviewPipelineServiceTest {
         QueryAnalyzerService queryAnalyzerService = mock(QueryAnalyzerService.class);
         QueryExpansionService queryExpansionService = mock(QueryExpansionService.class);
         HighRecallRetrievalService highRecallRetrievalService = mock(HighRecallRetrievalService.class);
+        DocumentPromotionService documentPromotionService = mock(DocumentPromotionService.class);
         ReviewRerankerService reviewRerankerService = mock(ReviewRerankerService.class);
+        DocumentKnowledgeEnrichmentService documentKnowledgeEnrichmentService = mock(DocumentKnowledgeEnrichmentService.class);
         EvidenceExtractionService evidenceExtractionService = mock(EvidenceExtractionService.class);
         EvidenceFusionService evidenceFusionService = mock(EvidenceFusionService.class);
         ReportGeneratorService reportGeneratorService = mock(ReportGeneratorService.class);
@@ -34,7 +36,9 @@ class ReviewPipelineServiceTest {
         ReflectionTestUtils.setField(service, "queryAnalyzerService", queryAnalyzerService);
         ReflectionTestUtils.setField(service, "queryExpansionService", queryExpansionService);
         ReflectionTestUtils.setField(service, "highRecallRetrievalService", highRecallRetrievalService);
+        ReflectionTestUtils.setField(service, "documentPromotionService", documentPromotionService);
         ReflectionTestUtils.setField(service, "reviewRerankerService", reviewRerankerService);
+        ReflectionTestUtils.setField(service, "documentKnowledgeEnrichmentService", documentKnowledgeEnrichmentService);
         ReflectionTestUtils.setField(service, "evidenceExtractionService", evidenceExtractionService);
         ReflectionTestUtils.setField(service, "evidenceFusionService", evidenceFusionService);
         ReflectionTestUtils.setField(service, "reportGeneratorService", reportGeneratorService);
@@ -42,13 +46,13 @@ class ReviewPipelineServiceTest {
         ReflectionTestUtils.setField(service, "reviewTaskExecutor", (TaskExecutor) Runnable::run);
 
         String rawPrompt = """
-                疫霉属植物病原体基因功能系统性回顾
-                你的任务是提取生长、生殖和致病性相关基因，并输出 JSON 字段。
+                你是一个植物病原体抽取专家。
+                请整理所有与疫霉菌生长、生殖、致病相关的基因，并输出字段 gene_name / evidence_text。
                 """;
-        String canonicalQuestion = "基于提供的文献，系统综述疫霉属植物病原体中参与生长、生殖、致病性的基因及其功能证据，并比较不同过程之间的共性与差异。";
+        String canonicalQuestion = "基于提供的文献，系统梳理疫霉菌中参与生长、生殖与致病过程的基因/蛋白、其证据强度，以及不同论文报告的创新点与机制差异。";
         QueryAnalysis analysis = new QueryAnalysis(
                 canonicalQuestion,
-                List.of("哪些基因参与生长过程，这些基因的功能证据是什么？"),
+                List.of("哪些基因/蛋白与疫霉菌的生长过程相关，证据强度分别如何？"),
                 List.of("Phytophthora"),
                 List.of("growth", "reproduction", "pathogenicity")
         );
@@ -57,10 +61,12 @@ class ReviewPipelineServiceTest {
         RetrievedChunk candidate = new RetrievedChunk(
                 "chunk-1", documentId, "Paper A", "chunk text", "Section 1", 0.9, "BM25");
         List<RetrievedChunk> candidates = List.of(candidate);
+        DocumentPromotionService.DocumentPromotionResult promotionResult =
+                new DocumentPromotionService.DocumentPromotionResult(List.of(), List.of());
         List<ExtractedEvidence> evidence = List.of();
         List<FusedEvidenceGroup> groups = List.of(
                 new FusedEvidenceGroup(
-                        "哪些基因参与生长过程，这些基因的功能证据是什么？",
+                        "哪些基因/蛋白与疫霉菌的生长过程相关，证据强度分别如何？",
                         "summary",
                         List.of(),
                         0,
@@ -71,22 +77,26 @@ class ReviewPipelineServiceTest {
 
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
-        when(highRecallRetrievalService.retrieve(List.of(canonicalQuestion))).thenReturn(candidates);
+        when(highRecallRetrievalService.retrieveSeedChunks(List.of(canonicalQuestion))).thenReturn(candidates);
+        when(documentPromotionService.promote(analysis, canonicalQuestion, candidates)).thenReturn(promotionResult);
         when(reviewRerankerService.rerank(canonicalQuestion, candidates)).thenReturn(candidates);
         when(reviewRerankerService.getJudgmentMap(canonicalQuestion, candidates)).thenReturn(
                 Map.of("chunk-1", new ChunkRelevanceJudgment("chunk-1", Relevance.HIGH, "direct evidence"))
         );
-        when(evidenceExtractionService.extract(canonicalQuestion, analysis.subQuestions(), candidates)).thenReturn(evidence);
+        when(documentKnowledgeEnrichmentService.enrich(any(UUID.class), eq(analysis), eq(candidates))).thenReturn(Map.of());
+        when(evidenceExtractionService.extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of())).thenReturn(evidence);
         when(evidenceFusionService.fuse(analysis.subQuestions(), evidence)).thenReturn(groups);
-        when(reportGeneratorService.generateReport(canonicalQuestion, groups)).thenReturn("report");
+        when(reportGeneratorService.generateReport(analysis, groups, evidence)).thenReturn("report");
 
         service.submit("user-1", rawPrompt);
 
         verify(reviewRepository).insertTask(any(UUID.class), eq("user-1"), eq(rawPrompt));
+        verify(documentPromotionService).promote(analysis, canonicalQuestion, candidates);
         verify(reviewRerankerService).rerank(canonicalQuestion, candidates);
         verify(reviewRerankerService).getJudgmentMap(canonicalQuestion, candidates);
-        verify(evidenceExtractionService).extract(canonicalQuestion, analysis.subQuestions(), candidates);
-        verify(reportGeneratorService).generateReport(canonicalQuestion, groups);
+        verify(documentKnowledgeEnrichmentService).enrich(any(UUID.class), eq(analysis), eq(candidates));
+        verify(evidenceExtractionService).extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of());
+        verify(reportGeneratorService).generateReport(analysis, groups, evidence);
         verify(reportGeneratorService, never()).generateReport(eq(rawPrompt), any());
     }
 }

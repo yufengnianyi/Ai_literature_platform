@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.kg.service;
 
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.kg.KgProperties;
 import com.example.demo_01.ai.kg.model.KgModels.ChunkEntityExtraction;
 import com.example.demo_01.ai.kg.model.KgModels.ChunkRelationExtraction;
@@ -22,6 +23,9 @@ import java.util.List;
 
 @Service
 public class ChunkRelationExtractionService {
+
+    private static final String RELATION_SYSTEM_PROMPT_PATH = "prompts/kg/chunk-relation-extraction-system.txt";
+    private static final String RELATION_USER_PROMPT_PATH = "prompts/kg/chunk-relation-extraction-user.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -76,24 +80,8 @@ public class ChunkRelationExtractionService {
             throw new IllegalStateException("Failed to serialize relation extraction entities", e);
         }
         ChatResponse response = chatModel.chat(
-                SystemMessage.from("""
-                        You extract knowledge graph relations from one document chunk.
-                        Return JSON only with shape {"relations":[...]}.
-                        Allowed relation_type values: BELONGS_TO_FAMILY, HAS_DOMAIN, ORTHOLOG_OF, PARALOG_OF,
-                        DUPLICATED_BY, INVOLVED_IN_PROCESS, ASSOCIATED_WITH_TRAIT, RESPONDS_TO, MENTIONED_IN, SUPPORTED_BY.
-                        Only use entities from the provided entity list.
-                        Every relation must include head_normalized_key, relation_type, tail_normalized_key, evidence_text, confidence.
-                        evidence_text must be copied from the chunk verbatim.
-                        Do not include explanations or markdown fences.
-                        """),
-                UserMessage.from("""
-                        schema_version=%s
-                        chunk_id=%s
-                        section_path=%s
-                        entities=%s
-                        chunk_text:
-                        %s
-                        """.formatted(
+                SystemMessage.from(PromptResources.load(RELATION_SYSTEM_PROMPT_PATH)),
+                UserMessage.from(PromptResources.format(RELATION_USER_PROMPT_PATH,
                         properties.getSchemaVersion(),
                         chunk.chunkId(),
                         safe(chunk.sectionPath()),

@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -22,30 +23,11 @@ public class EvidenceFusionService {
 
     private static final int SINGLE_PASS_THRESHOLD = 15;
 
-    private static final String FUSION_SYSTEM_PROMPT = """
-            You are a scientific evidence synthesizer. Given a sub-question and a set of extracted
-            evidence items, produce a structured fusion analysis.
-            
-            Return JSON only:
-            {
-              "groupSummary": "2-3 paragraph synthesis of all evidence for this sub-question",
-              "clusters": [
-                {
-                  "claimSummary": "normalized claim statement",
-                  "consistency": "CONSISTENT|CONFLICTING|INSUFFICIENT",
-                  "sourceDocuments": ["doc title 1", "doc title 2"]
-                }
-              ],
-              "consistencyNotes": ["note about agreements or conflicts"]
-            }
-            
-            Rules:
-            - Group similar claims together into clusters
-            - Mark consistency: CONSISTENT if multiple sources agree, CONFLICTING if they disagree,
-              INSUFFICIENT if only one source
-            - The groupSummary should synthesize, not just list
-            - Do not include markdown fences
-            """;
+    private static final String FUSION_SYSTEM_PROMPT_PATH = "prompts/review/evidence-fusion-system.txt";
+    private static final String FUSION_SINGLE_USER_PROMPT_PATH = "prompts/review/evidence-fusion-single-user.txt";
+    private static final String FUSION_SUMMARY_USER_PROMPT_PATH = "prompts/review/evidence-fusion-summary-user.txt";
+    private static final String SUMMARY_SYSTEM_PROMPT_PATH = "prompts/review/evidence-fusion-batch-summary-system.txt";
+    private static final String SUMMARY_USER_PROMPT_PATH = "prompts/review/evidence-fusion-batch-summary-user.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -60,9 +42,9 @@ public class EvidenceFusionService {
 
     public List<FusedEvidenceGroup> fuse(List<String> subQuestions,
                                          List<ExtractedEvidence> allEvidence) {
-        normalizeEntities(allEvidence);
+        List<ExtractedEvidence> normalizedEvidence = normalizeEntities(allEvidence);
 
-        Map<String, List<ExtractedEvidence>> grouped = allEvidence.stream()
+        Map<String, List<ExtractedEvidence>> grouped = normalizedEvidence.stream()
                 .collect(Collectors.groupingBy(
                         e -> e.subQuestion() != null ? e.subQuestion() : "general",
                         LinkedHashMap::new, Collectors.toList()));
@@ -107,8 +89,8 @@ public class EvidenceFusionService {
         String evidenceText = formatEvidenceForLlm(evidence);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(FUSION_SYSTEM_PROMPT),
-                    UserMessage.from("Sub-question: %s\n\nEvidence items:\n%s".formatted(subQuestion, evidenceText))
+                    SystemMessage.from(PromptResources.load(FUSION_SYSTEM_PROMPT_PATH)),
+                    UserMessage.from(PromptResources.format(FUSION_SINGLE_USER_PROMPT_PATH, subQuestion, evidenceText))
             );
             AiMessage ai = response.aiMessage();
             String raw = (ai != null && ai.text() != null) ? ai.text() : "{}";
@@ -123,8 +105,8 @@ public class EvidenceFusionService {
     private FusedEvidenceGroup fuseFromSummary(String subQuestion, List<ExtractedEvidence> evidence, String summaries) {
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(FUSION_SYSTEM_PROMPT),
-                    UserMessage.from("Sub-question: %s\n\nIntermediate summaries:\n%s".formatted(subQuestion, summaries))
+                    SystemMessage.from(PromptResources.load(FUSION_SYSTEM_PROMPT_PATH)),
+                    UserMessage.from(PromptResources.format(FUSION_SUMMARY_USER_PROMPT_PATH, subQuestion, summaries))
             );
             AiMessage ai = response.aiMessage();
             String raw = (ai != null && ai.text() != null) ? ai.text() : "{}";
@@ -140,9 +122,8 @@ public class EvidenceFusionService {
         String evidenceText = formatEvidenceForLlm(batch);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from("Summarize the following evidence items for the sub-question. " +
-                            "Return a concise 1-2 paragraph summary highlighting key findings, methods, and any conflicts."),
-                    UserMessage.from("Sub-question: %s\n\n%s".formatted(subQuestion, evidenceText))
+                    SystemMessage.from(PromptResources.load(SUMMARY_SYSTEM_PROMPT_PATH)),
+                    UserMessage.from(PromptResources.format(SUMMARY_USER_PROMPT_PATH, subQuestion, evidenceText))
             );
             AiMessage ai = response.aiMessage();
             return (ai != null && ai.text() != null) ? ai.text() : "";
@@ -152,20 +133,113 @@ public class EvidenceFusionService {
         }
     }
 
-    private void normalizeEntities(List<ExtractedEvidence> evidence) {
-        for (int i = 0; i < evidence.size(); i++) {
-            ExtractedEvidence e = evidence.get(i);
-            if (e.entities() != null) {
-                List<String> normalized = e.entities().stream()
-                        .map(queryExpansionService::findCanonical)
-                        .toList();
-                evidence.set(i, new ExtractedEvidence(
-                        e.chunkId(), e.documentId(), e.documentTitle(),
-                        e.claim(), e.finding(), e.methodology(),
-                        normalized, e.evidenceType(), e.confidence(),
-                        e.originalText(), e.subQuestion()));
-            }
+    private List<ExtractedEvidence> normalizeEntities(List<ExtractedEvidence> evidence) {
+        if (evidence == null || evidence.isEmpty()) {
+            return List.of();
         }
+        return evidence.stream()
+                .map(this::normalizeEvidence)
+                .toList();
+    }
+
+    private ExtractedEvidence normalizeEvidence(ExtractedEvidence evidence) {
+        if (evidence.entities() == null && evidence.typedEntities() == null) {
+            return evidence;
+        }
+        TypedEntities normalizedTyped = normalizeTypedEntities(evidence.typedEntities());
+        List<String> normalized = flattenTypedEntities(normalizedTyped);
+        if (normalized.isEmpty() && evidence.entities() != null) {
+            normalized = evidence.entities().stream()
+                    .map(queryExpansionService::findCanonical)
+                    .toList();
+        }
+        return new ExtractedEvidence(
+                evidence.chunkId(), evidence.documentId(), evidence.documentTitle(),
+                evidence.claim(), evidence.finding(), evidence.methodology(),
+                normalizedTyped,
+                normalized, evidence.evidenceType(), evidence.confidence(),
+                evidence.originalText(), evidence.subQuestion());
+    }
+
+    private TypedEntities normalizeTypedEntities(TypedEntities typedEntities) {
+        if (typedEntities == null) {
+            return null;
+        }
+        return new TypedEntities(
+                normalizeList(typedEntities.species()),
+                normalizeList(typedEntities.geneOrProtein()),
+                normalizeList(typedEntities.pathwayOrProcess()),
+                normalizeList(typedEntities.developmentalStage()),
+                normalizeList(typedEntities.phenotype()),
+                normalizeList(typedEntities.method()),
+                cleanList(typedEntities.moleculeOrMetabolite()),
+                cleanList(typedEntities.compoundStructureType()),
+                cleanList(typedEntities.compoundSource()),
+                cleanList(typedEntities.antimicrobialActivity()),
+                cleanList(typedEntities.assayMethod()),
+                cleanList(typedEntities.targetOrganism()),
+                cleanList(typedEntities.proposedTarget()),
+                cleanList(typedEntities.mechanism()),
+                cleanList(typedEntities.reference()),
+                cleanList(typedEntities.patentStatus()),
+                cleanList(typedEntities.compoundLocalAlias()),
+                cleanList(typedEntities.compoundCanonicalName()),
+                cleanList(typedEntities.compoundIdentifier()),
+                cleanList(typedEntities.compoundResolutionStatus())
+        );
+    }
+
+    private List<String> normalizeList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .map(queryExpansionService::findCanonical)
+                .distinct()
+                .toList();
+    }
+
+    private List<String> cleanList(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private List<String> flattenTypedEntities(TypedEntities typedEntities) {
+        if (typedEntities == null) {
+            return List.of();
+        }
+        return java.util.stream.Stream.of(
+                        typedEntities.species(),
+                        typedEntities.geneOrProtein(),
+                        typedEntities.pathwayOrProcess(),
+                        typedEntities.developmentalStage(),
+                        typedEntities.phenotype(),
+                        typedEntities.method(),
+                        typedEntities.moleculeOrMetabolite(),
+                        typedEntities.compoundStructureType(),
+                        typedEntities.compoundSource(),
+                        typedEntities.antimicrobialActivity(),
+                        typedEntities.assayMethod(),
+                        typedEntities.targetOrganism(),
+                        typedEntities.proposedTarget(),
+                        typedEntities.mechanism(),
+                        typedEntities.reference(),
+                        typedEntities.patentStatus(),
+                        typedEntities.compoundLocalAlias(),
+                        typedEntities.compoundCanonicalName(),
+                        typedEntities.compoundIdentifier(),
+                        typedEntities.compoundResolutionStatus())
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .distinct()
+                .toList();
     }
 
     private String formatEvidenceForLlm(List<ExtractedEvidence> evidence) {
@@ -177,10 +251,27 @@ public class EvidenceFusionService {
                     .append("Claim: ").append(safe(e.claim()))
                     .append(" | Finding: ").append(safe(e.finding()))
                     .append(" | Method: ").append(safe(e.methodology()))
+                    .append(" | Compounds: ").append(formatCompounds(e.typedEntities()))
                     .append(" | Confidence: ").append(e.confidence())
                     .append("\n");
         }
         return sb.toString();
+    }
+
+    private String formatCompounds(TypedEntities typed) {
+        if (typed == null) {
+            return "";
+        }
+        return String.join("; ", java.util.stream.Stream.of(
+                        typed.compoundCanonicalName(),
+                        typed.compoundIdentifier(),
+                        typed.moleculeOrMetabolite(),
+                        typed.compoundLocalAlias())
+                .filter(Objects::nonNull)
+                .flatMap(List::stream)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .toList());
     }
 
     private FusedEvidenceGroup toFusedGroup(String subQuestion, List<ExtractedEvidence> evidence, FusionResult result) {

@@ -36,7 +36,13 @@ public class ReviewPipelineService {
     private HighRecallRetrievalService highRecallRetrievalService;
 
     @Resource
+    private DocumentPromotionService documentPromotionService;
+
+    @Resource
     private ReviewRerankerService reviewRerankerService;
+
+    @Resource
+    private DocumentKnowledgeEnrichmentService documentKnowledgeEnrichmentService;
 
     @Resource
     private EvidenceExtractionService evidenceExtractionService;
@@ -124,15 +130,27 @@ public class ReviewPipelineService {
                 // Stage 3: High-recall retrieval
                 updateStage(taskId, ReviewStage.RETRIEVAL);
                 Instant retrievalStart = Instant.now();
-                List<RetrievedChunk> candidates = highRecallRetrievalService.retrieve(expandedQueries);
+                List<RetrievedChunk> seedChunks = highRecallRetrievalService.retrieveSeedChunks(expandedQueries);
                 long retrievalMs = Duration.between(retrievalStart, Instant.now()).toMillis();
-                log.info("Task {}: Retrieved {} candidates in {}ms", taskId, candidates.size(), retrievalMs);
+                log.info("Task {}: Retrieved {} seed candidates in {}ms", taskId, seedChunks.size(), retrievalMs);
 
-                List<ReviewCandidate> candidateRecords = candidates.stream()
-                        .map(c -> new ReviewCandidate(null, taskId, c.chunkId(), c.documentId(),
-                                c.documentTitle(), c.score(), c.source(), null, null, null, false, c.text()))
+                List<ReviewCandidate> seedRecords = seedChunks.stream()
+                        .map(c -> toSeedCandidate(taskId, c))
                         .toList();
-                reviewRepository.insertCandidates(taskId, candidateRecords);
+                reviewRepository.insertCandidates(taskId, seedRecords);
+
+                updateStage(taskId, ReviewStage.DOCUMENT_PROMOTION);
+                Instant promotionStart = Instant.now();
+                DocumentPromotionService.DocumentPromotionResult promotion = documentPromotionService.promote(
+                        analysis,
+                        analysis.mainQuestion() != null ? analysis.mainQuestion() : "",
+                        seedChunks);
+                long documentPromotionMs = Duration.between(promotionStart, Instant.now()).toMillis();
+                List<RetrievedChunk> candidates = mergeCandidates(seedChunks, promotion.expandedChunks());
+                reviewRepository.insertDocumentCandidates(taskId, promotion.documentCandidates());
+                reviewRepository.insertCandidates(taskId, promotion.expandedChunks().stream()
+                        .map(c -> toPromotedCandidate(taskId, c, promotion.documentCandidates()))
+                        .toList());
 
                 // Stage 4: Reranking
                 updateStage(taskId, ReviewStage.RERANKING);
@@ -155,7 +173,9 @@ public class ReviewPipelineService {
                             isIncluded);
                 }
 
-                reviewRepository.updateTaskCounts(taskId, candidates.size(), 0);
+                reviewRepository.updateTaskCounts(taskId, candidates.size(), promotion.documentCandidates().size(), 0);
+                reviewRepository.updateTaskMetrics(taskId, new ReviewTaskMetrics(
+                        retrievalMs, documentPromotionMs, rerankMs, null, null, null, null));
 
                 // Pause for user review
                 reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.AWAITING_USER, ReviewStage.RERANKING);
@@ -182,12 +202,13 @@ public class ReviewPipelineService {
                 if (userReview.prioritizedChunkIds() != null && !userReview.prioritizedChunkIds().isEmpty()) {
                     reviewRepository.updateCandidateUserPrioritized(taskId, userReview.prioritizedChunkIds(), true);
                 }
+                applyDocumentSelection(taskId, userReview);
 
                 // Get user-approved candidates
                 List<ReviewCandidate> approvedCandidates = reviewRepository.findUserApprovedCandidates(taskId);
                 List<RetrievedChunk> included = approvedCandidates.stream()
                         .map(c -> new RetrievedChunk(c.chunkId(), c.documentId(), c.documentTitle(),
-                                c.chunkText(), null, c.retrievalScore(), c.retrievalSource()))
+                                c.chunkText(), c.sectionPath(), c.retrievalScore(), c.retrievalSource()))
                         .toList();
 
                 // Retrieve QueryAnalysis from DB
@@ -200,16 +221,23 @@ public class ReviewPipelineService {
 
                 // Stage 5: Evidence extraction
                 updateStage(taskId, ReviewStage.EVIDENCE_EXTRACTION);
+                Map<UUID, DocumentKnowledgeContext> knowledgeContexts =
+                        documentKnowledgeEnrichmentService.enrich(taskId, analysis, included);
                 Instant extractionStart = Instant.now();
                 List<ExtractedEvidence> evidence = evidenceExtractionService.extract(
-                        canonicalQuestion, subQuestions, included);
+                        canonicalQuestion, subQuestions, included, knowledgeContexts);
                 long extractionMs = Duration.between(extractionStart, Instant.now()).toMillis();
                 log.info("Task {}: Extracted {} evidence items in {}ms", taskId, evidence.size(), extractionMs);
 
                 for (ExtractedEvidence e : evidence) {
                     reviewRepository.insertEvidence(taskId, e);
                 }
-                reviewRepository.updateTaskCounts(taskId, approvedCandidates.size(), evidence.size());
+                ReviewTaskRecord taskCounts = reviewRepository.findTask(taskId)
+                        .orElseThrow(() -> new IllegalStateException("Task not found: " + taskId));
+                reviewRepository.updateTaskCounts(taskId,
+                        taskCounts.candidateCount() == null ? approvedCandidates.size() : taskCounts.candidateCount(),
+                        taskCounts.documentCount() == null ? 0 : taskCounts.documentCount(),
+                        evidence.size());
 
                 // Stage 6: Evidence fusion
                 updateStage(taskId, ReviewStage.EVIDENCE_FUSION);
@@ -217,6 +245,8 @@ public class ReviewPipelineService {
                 List<FusedEvidenceGroup> groups = evidenceFusionService.fuse(subQuestions, evidence);
                 long fusionMs = Duration.between(fusionStart, Instant.now()).toMillis();
                 log.info("Task {}: Fused into {} groups in {}ms", taskId, groups.size(), fusionMs);
+                reviewRepository.updateTaskMetrics(taskId, mergeMetrics(taskCounts.metrics(),
+                        null, null, null, extractionMs, fusionMs, null, null));
 
                 // Pause for user review
                 reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.AWAITING_USER, ReviewStage.EVIDENCE_FUSION);
@@ -258,7 +288,8 @@ public class ReviewPipelineService {
                     List<ExtractedEvidence> approvedEvidence = approvedRecords.stream()
                             .map(r -> new ExtractedEvidence(
                                     r.chunkId(), r.documentId() != null ? r.documentId().toString() : null,
-                                    null, r.claim(), r.finding(), r.methodology(),
+                                    r.documentTitle(), r.claim(), r.finding(), r.methodology(),
+                                    r.typedEntities(),
                                     r.entities(), r.evidenceType(), r.confidence(),
                                     r.originalText(), r.subQuestion()))
                             .toList();
@@ -281,9 +312,16 @@ public class ReviewPipelineService {
                     }
 
                     PipelineContext ctx = new PipelineContext();
-                    ctx.pipelineStart = Instant.now();
+                    ctx.pipelineStart = null;
                     ctx.canonicalQuestion = canonicalQuestion;
+                    ctx.analysis = analysis;
+                    ctx.retrievalMs = task.metrics() == null || task.metrics().retrievalMs() == null ? 0L : task.metrics().retrievalMs();
+                    ctx.documentPromotionMs = task.metrics() == null || task.metrics().documentPromotionMs() == null ? 0L : task.metrics().documentPromotionMs();
+                    ctx.rerankMs = task.metrics() == null || task.metrics().rerankMs() == null ? 0L : task.metrics().rerankMs();
+                    ctx.extractionMs = task.metrics() == null || task.metrics().extractionMs() == null ? 0L : task.metrics().extractionMs();
+                    ctx.fusionMs = task.metrics() == null || task.metrics().fusionMs() == null ? 0L : task.metrics().fusionMs();
                     ctx.groups = groups;
+                    ctx.evidence = approvedEvidence;
                     ctx.userGuidance = userReview.userGuidance();
                     ctx.focusSubQuestions = userReview.focusSubQuestions();
 
@@ -303,7 +341,7 @@ public class ReviewPipelineService {
         StringBuilder reportCollector = new StringBuilder();
 
         reportGeneratorService.generateReportStreaming(
-                        ctx.canonicalQuestion, ctx.groups, ctx.userGuidance, ctx.focusSubQuestions)
+                        ctx.analysis, ctx.groups, ctx.evidence, ctx.userGuidance, ctx.focusSubQuestions)
                 .doOnNext(chunk -> {
                     reportCollector.append(chunk);
                     sink.next(chunk);
@@ -311,7 +349,12 @@ public class ReviewPipelineService {
                 .doOnComplete(() -> {
                     long reportMs = Duration.between(reportStart, Instant.now()).toMillis();
                     ctx.reportMs = reportMs;
-                    ctx.totalMs = Duration.between(ctx.pipelineStart, Instant.now()).toMillis();
+                    if (ctx.pipelineStart != null) {
+                        ctx.totalMs = Duration.between(ctx.pipelineStart, Instant.now()).toMillis();
+                    } else {
+                        ctx.totalMs = sumMetrics(ctx.retrievalMs, ctx.documentPromotionMs, ctx.rerankMs,
+                                ctx.extractionMs, ctx.fusionMs, ctx.reportMs);
+                    }
                     finalizeTask(taskId, ctx, reportCollector.toString());
                     sink.complete();
                 })
@@ -329,7 +372,7 @@ public class ReviewPipelineService {
             // Stage 7: Report generation
             updateStage(taskId, ReviewStage.REPORT_GENERATION);
             Instant reportStart = Instant.now();
-            String report = reportGeneratorService.generateReport(ctx.canonicalQuestion, ctx.groups);
+            String report = reportGeneratorService.generateReport(ctx.analysis, ctx.groups, ctx.evidence);
             ctx.reportMs = Duration.between(reportStart, Instant.now()).toMillis();
             ctx.totalMs = Duration.between(ctx.pipelineStart, Instant.now()).toMillis();
 
@@ -347,6 +390,7 @@ public class ReviewPipelineService {
         ctx.canonicalQuestion = analysis.mainQuestion() != null && !analysis.mainQuestion().isBlank()
                 ? analysis.mainQuestion()
                 : question;
+        ctx.analysis = analysis;
         reviewRepository.updateQueryAnalysis(taskId, analysis);
         reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.RUNNING, ReviewStage.QUERY_ANALYSIS);
 
@@ -362,6 +406,7 @@ public class ReviewPipelineService {
         ctx.canonicalQuestion = analysis.mainQuestion() != null && !analysis.mainQuestion().isBlank()
                 ? analysis.mainQuestion()
                 : question;
+        ctx.analysis = analysis;
         reviewRepository.updateQueryAnalysis(taskId, analysis);
         reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.RUNNING, ReviewStage.QUERY_ANALYSIS);
 
@@ -377,15 +422,24 @@ public class ReviewPipelineService {
         // Stage 3: High-recall retrieval
         updateStage(taskId, ReviewStage.RETRIEVAL);
         Instant retrievalStart = Instant.now();
-        List<RetrievedChunk> candidates = highRecallRetrievalService.retrieve(expandedQueries);
+        List<RetrievedChunk> seedChunks = highRecallRetrievalService.retrieveSeedChunks(expandedQueries);
         ctx.retrievalMs = Duration.between(retrievalStart, Instant.now()).toMillis();
-        log.info("Task {}: Retrieved {} candidates in {}ms", taskId, candidates.size(), ctx.retrievalMs);
+        log.info("Task {}: Retrieved {} seed candidates in {}ms", taskId, seedChunks.size(), ctx.retrievalMs);
 
-        List<ReviewCandidate> candidateRecords = candidates.stream()
-                .map(c -> new ReviewCandidate(null, taskId, c.chunkId(), c.documentId(),
-                        c.documentTitle(), c.score(), c.source(), null, null, null, false, c.text()))
-                .toList();
-        reviewRepository.insertCandidates(taskId, candidateRecords);
+        reviewRepository.insertCandidates(taskId, seedChunks.stream()
+                .map(c -> toSeedCandidate(taskId, c))
+                .toList());
+
+        updateStage(taskId, ReviewStage.DOCUMENT_PROMOTION);
+        Instant promotionStart = Instant.now();
+        DocumentPromotionService.DocumentPromotionResult promotion = documentPromotionService.promote(
+                analysis, ctx.canonicalQuestion, seedChunks);
+        ctx.documentPromotionMs = Duration.between(promotionStart, Instant.now()).toMillis();
+        reviewRepository.insertDocumentCandidates(taskId, promotion.documentCandidates());
+        reviewRepository.insertCandidates(taskId, promotion.expandedChunks().stream()
+                .map(c -> toPromotedCandidate(taskId, c, promotion.documentCandidates()))
+                .toList());
+        List<RetrievedChunk> candidates = mergeCandidates(seedChunks, promotion.expandedChunks());
 
         // Stage 4: Reranking
         updateStage(taskId, ReviewStage.RERANKING);
@@ -407,16 +461,19 @@ public class ReviewPipelineService {
 
         // Stage 5: Evidence extraction
         updateStage(taskId, ReviewStage.EVIDENCE_EXTRACTION);
+        Map<UUID, DocumentKnowledgeContext> knowledgeContexts =
+                documentKnowledgeEnrichmentService.enrich(taskId, analysis, included);
         Instant extractionStart = Instant.now();
         List<ExtractedEvidence> evidence = evidenceExtractionService.extract(
-                ctx.canonicalQuestion, analysis.subQuestions(), included);
+                ctx.canonicalQuestion, analysis.subQuestions(), included, knowledgeContexts);
         ctx.extractionMs = Duration.between(extractionStart, Instant.now()).toMillis();
         log.info("Task {}: Extracted {} evidence items in {}ms", taskId, evidence.size(), ctx.extractionMs);
+        ctx.evidence = evidence;
 
         for (ExtractedEvidence e : evidence) {
             reviewRepository.insertEvidence(taskId, e);
         }
-        reviewRepository.updateTaskCounts(taskId, candidates.size(), evidence.size());
+        reviewRepository.updateTaskCounts(taskId, candidates.size(), promotion.documentCandidates().size(), evidence.size());
 
         // Stage 6: Evidence fusion
         updateStage(taskId, ReviewStage.EVIDENCE_FUSION);
@@ -435,7 +492,7 @@ public class ReviewPipelineService {
             log.warn("Task {}: report is null or blank at finalize stage", taskId);
         }
         ReviewTaskMetrics metrics = new ReviewTaskMetrics(
-                ctx.retrievalMs, ctx.rerankMs, ctx.extractionMs,
+                ctx.retrievalMs, ctx.documentPromotionMs, ctx.rerankMs, ctx.extractionMs,
                 ctx.fusionMs, ctx.reportMs, ctx.totalMs);
         reviewRepository.updateTaskMetrics(taskId, metrics);
         reviewRepository.completeTask(taskId);
@@ -454,10 +511,26 @@ public class ReviewPipelineService {
         reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.RUNNING, stage);
     }
 
+    private void applyDocumentSelection(UUID taskId, CandidateReviewRequest userReview) {
+        if (userReview.selectedDocumentIds() == null || userReview.selectedDocumentIds().isEmpty()) {
+            return;
+        }
+        java.util.Set<java.util.UUID> selected = new java.util.LinkedHashSet<>(userReview.selectedDocumentIds());
+        List<ReviewCandidate> candidates = reviewRepository.findAllCandidates(taskId);
+        List<String> excluded = candidates.stream()
+                .filter(candidate -> candidate.documentId() != null)
+                .filter(candidate -> !selected.contains(candidate.documentId()))
+                .map(ReviewCandidate::chunkId)
+                .toList();
+        reviewRepository.updateCandidateUserExcluded(taskId, excluded, true);
+    }
+
     private static class PipelineContext {
         Instant pipelineStart;
+        QueryAnalysis analysis;
         String canonicalQuestion;
         long retrievalMs;
+        long documentPromotionMs;
         long rerankMs;
         long extractionMs;
         long fusionMs;
@@ -466,5 +539,94 @@ public class ReviewPipelineService {
         List<FusedEvidenceGroup> groups;
         String userGuidance;
         List<String> focusSubQuestions;
+        List<ExtractedEvidence> evidence;
+    }
+
+    private ReviewTaskMetrics mergeMetrics(ReviewTaskMetrics existing,
+                                           Long retrievalMs,
+                                           Long documentPromotionMs,
+                                           Long rerankMs,
+                                           Long extractionMs,
+                                           Long fusionMs,
+                                           Long reportMs,
+                                           Long totalMs) {
+        return new ReviewTaskMetrics(
+                retrievalMs != null ? retrievalMs : existing == null ? null : existing.retrievalMs(),
+                documentPromotionMs != null ? documentPromotionMs : existing == null ? null : existing.documentPromotionMs(),
+                rerankMs != null ? rerankMs : existing == null ? null : existing.rerankMs(),
+                extractionMs != null ? extractionMs : existing == null ? null : existing.extractionMs(),
+                fusionMs != null ? fusionMs : existing == null ? null : existing.fusionMs(),
+                reportMs != null ? reportMs : existing == null ? null : existing.reportMs(),
+                totalMs != null ? totalMs : existing == null ? null : existing.totalMs()
+        );
+    }
+
+    private long sumMetrics(Long... values) {
+        long total = 0L;
+        for (Long value : values) {
+            total += value == null ? 0L : value;
+        }
+        return total;
+    }
+
+    private List<RetrievedChunk> mergeCandidates(List<RetrievedChunk> seedChunks, List<RetrievedChunk> promotedChunks) {
+        Map<String, RetrievedChunk> merged = new java.util.LinkedHashMap<>();
+        for (RetrievedChunk chunk : seedChunks) {
+            merged.put(chunk.chunkId(), chunk);
+        }
+        for (RetrievedChunk chunk : promotedChunks) {
+            merged.putIfAbsent(chunk.chunkId(), chunk);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private ReviewCandidate toSeedCandidate(UUID taskId, RetrievedChunk chunk) {
+        return new ReviewCandidate(
+                null,
+                taskId,
+                chunk.chunkId(),
+                chunk.documentId(),
+                chunk.documentTitle(),
+                chunk.score(),
+                chunk.source(),
+                chunk.sectionPath(),
+                "SEED",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                false,
+                chunk.text()
+        );
+    }
+
+    private ReviewCandidate toPromotedCandidate(UUID taskId,
+                                                RetrievedChunk chunk,
+                                                List<ReviewDocumentCandidate> documentCandidates) {
+        ReviewDocumentCandidate docCandidate = documentCandidates.stream()
+                .filter(candidate -> chunk.documentId() != null && chunk.documentId().equals(candidate.documentId()))
+                .findFirst()
+                .orElse(null);
+        return new ReviewCandidate(
+                null,
+                taskId,
+                chunk.chunkId(),
+                chunk.documentId(),
+                chunk.documentTitle(),
+                chunk.score(),
+                chunk.source(),
+                chunk.sectionPath(),
+                "DOC_PROMOTED",
+                docCandidate == null ? null : docCandidate.finalScore(),
+                docCandidate == null ? null : docCandidate.relevance(),
+                docCandidate == null ? null : docCandidate.promotionReason(),
+                null,
+                null,
+                null,
+                false,
+                chunk.text()
+        );
     }
 }

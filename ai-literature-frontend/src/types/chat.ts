@@ -5,6 +5,7 @@ export interface MessageSource {
   section?: string;
   chunk?: string;
   page?: string;
+  excerpt?: string;
 }
 
 export interface Message {

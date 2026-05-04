@@ -85,6 +85,20 @@ public final class RagPipelineModels {
         }
     }
 
+    public record RagDocumentSynopsis(
+            String summary,
+            List<String> species,
+            List<String> geneOrProtein,
+            List<String> pathwayOrProcess,
+            List<String> developmentalStage,
+            List<String> methods,
+            List<String> keyFindings,
+            List<String> innovationPoints,
+            List<String> limitations,
+            String searchableText
+    ) {
+    }
+
     public record ChunkUnit(
             String contentType,
             String sectionPath,
@@ -143,6 +157,7 @@ public final class RagPipelineModels {
             String journal,
             String publicationDate,
             Integer publicationYear,
+            RagDocumentSynopsis synopsis,
             String sourceFilename,
             String storageRoot,
             RagDocumentStatus status,

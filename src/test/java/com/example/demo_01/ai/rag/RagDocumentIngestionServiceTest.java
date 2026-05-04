@@ -30,6 +30,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -106,7 +107,7 @@ class RagDocumentIngestionServiceTest {
     void getDocumentShouldDelegateToRepository() {
         UUID documentId = UUID.randomUUID();
         RagDocumentRecord record = new RagDocumentRecord(documentId, null, null, null, null, null, null, "Paper",
-                List.of(), List.of(), null, null, null, null, "paper.pdf", "data/rag", RagDocumentStatus.COMPLETED, Instant.now(), Instant.now());
+                List.of(), List.of(), null, null, null, null, null, "paper.pdf", "data/rag", RagDocumentStatus.COMPLETED, Instant.now(), Instant.now());
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(record));
 
         assertEquals(record, service.getDocument(documentId));
@@ -136,6 +137,24 @@ class RagDocumentIngestionServiceTest {
 
         assertEquals(DuplicateReason.PDF_SHA256, outcome.duplicateReason());
         assertEquals(20L, outcome.totalMs());
+    }
+
+    @Test
+    void ingestStoredPdfShouldStopWhenPreprocessFails() {
+        UUID documentId = UUID.randomUUID();
+        UUID preprocessJobId = UUID.randomUUID();
+        Path pdf = Path.of("paper.pdf");
+        when(documentPreprocessService.preprocessStoredPdf(pdf, "paper.pdf", null))
+                .thenReturn(new PreprocessOutcome(documentId, preprocessJobId, PreprocessStatus.FAILED, null, null, null,
+                        0, 10L, 20L, 0L, 0L, 0L, 30L));
+
+        RagDocumentIngestionOutcome outcome = service.ingestStoredPdf(pdf, "paper.pdf", null);
+
+        assertEquals(documentId, outcome.documentId());
+        assertEquals(preprocessJobId, outcome.jobId());
+        assertEquals(RagJobStatus.FAILED, outcome.status());
+        assertEquals(30L, outcome.totalMs());
+        verify(ragIngestionFromArtifactService, never()).ingestDocument(any(), any());
     }
 }
 
