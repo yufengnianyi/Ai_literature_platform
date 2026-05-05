@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
@@ -23,10 +24,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ReviewRerankerService {
-
-    private static final String RERANK_SYSTEM_PROMPT_PATH = "prompts/review/reranker-system.txt";
-    private static final String RERANK_USER_PROMPT_PATH = "prompts/review/reranker-user.txt";
-    private static final String RERANK_CHUNK_PROMPT_PATH = "prompts/review/reranker-chunk.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -105,17 +102,17 @@ public class ReviewRerankerService {
         for (int i = 0; i < batch.size(); i++) {
             RetrievedChunk c = batch.get(i);
             chunksText.append(PromptResources.format(
-                    RERANK_CHUNK_PROMPT_PATH,
+                    PromptCatalog.REVIEW_RERANKER_CHUNK,
                     i + 1,
                     c.chunkId(),
                     safe(c.documentTitle()),
                     truncate(c.text(), 1500)));
         }
-        userMsg.append(PromptResources.format(RERANK_USER_PROMPT_PATH, question, chunksText));
+        userMsg.append(PromptResources.format(PromptCatalog.REVIEW_RERANKER_USER, question, chunksText));
 
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(RERANK_SYSTEM_PROMPT_PATH)),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_RERANKER_SYSTEM)),
                     UserMessage.from(userMsg.toString())
             );
             AiMessage ai = response.aiMessage();

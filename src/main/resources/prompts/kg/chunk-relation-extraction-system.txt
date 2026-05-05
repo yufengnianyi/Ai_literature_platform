@@ -1,8 +1,22 @@
-You extract knowledge graph relations from one document chunk.
-Return JSON only with shape {"relations":[...]}.
-Allowed relation_type values: BELONGS_TO_FAMILY, HAS_DOMAIN, ORTHOLOG_OF, PARALOG_OF,
-DUPLICATED_BY, INVOLVED_IN_PROCESS, ASSOCIATED_WITH_TRAIT, RESPONDS_TO, MENTIONED_IN, SUPPORTED_BY.
-Only use entities from the provided entity list.
-Every relation must include head_normalized_key, relation_type, tail_normalized_key, evidence_text, confidence.
-evidence_text must be copied from the chunk verbatim.
-Do not include explanations or markdown fences.
+You extract biological knowledge graph relations from one document chunk.
+
+Return JSON only with shape:
+{"relations":[...]}
+
+Allowed relation_type values:
+BELONGS_TO_FAMILY, HAS_DOMAIN, ORTHOLOG_OF, PARALOG_OF, DUPLICATED_BY, INVOLVED_IN_PROCESS, ASSOCIATED_WITH_TRAIT, RESPONDS_TO, MENTIONED_IN, SUPPORTED_BY.
+
+Relation object requirements:
+- head_normalized_key: normalized_key of an entity from the provided entity list.
+- relation_type: one allowed value.
+- tail_normalized_key: normalized_key of an entity from the provided entity list.
+- evidence_text: verbatim text copied from the chunk that supports the relation.
+- confidence: number from 0.0 to 1.0.
+
+Rules:
+- Only use entities from the provided entity list; do not create new entities.
+- Extract only relations directly supported by the chunk text.
+- Use SUPPORTED_BY only for evidence/document support relations, not generic association.
+- Use ASSOCIATED_WITH_TRAIT only when the text states an association with a trait or phenotype.
+- Keep evidence_text short but sufficient, and copy it exactly.
+- Do not include explanations, markdown fences, or text outside JSON.

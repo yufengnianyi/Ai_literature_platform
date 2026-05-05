@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.repository.DocumentKnowledgeRepository;
@@ -29,14 +30,10 @@ import java.util.stream.Collectors;
 @Service
 public class DocumentKnowledgeEnrichmentService {
 
-    public static final String PROMPT_VERSION = "document-knowledge-enrichment-v1";
+    public static final String PROMPT_VERSION = "document-knowledge-enrichment-v2";
     private static final String KNOWLEDGE_VERSION = "v1";
     private static final int MAX_CHUNKS_PER_DOCUMENT = 12;
     private static final int MAX_CHUNK_CHARS = 2500;
-
-    private static final String SYSTEM_PROMPT_PATH = "prompts/review/document-knowledge-enrichment-system.txt";
-    private static final String USER_PROMPT_PATH = "prompts/review/document-knowledge-enrichment-user.txt";
-    private static final String CHUNK_PROMPT_PATH = "prompts/review/document-knowledge-enrichment-chunk.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -157,7 +154,7 @@ public class DocumentKnowledgeEnrichmentService {
         String userPrompt = buildUserPrompt(analysis, documentId, chunks, existing);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(SYSTEM_PROMPT_PATH)),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_SYSTEM)),
                     UserMessage.from(userPrompt)
             );
             AiMessage ai = response.aiMessage();
@@ -187,12 +184,12 @@ public class DocumentKnowledgeEnrichmentService {
         }
         StringBuilder chunksText = new StringBuilder();
         chunks.stream().limit(MAX_CHUNKS_PER_DOCUMENT).forEach(chunk -> chunksText.append(PromptResources.format(
-                CHUNK_PROMPT_PATH,
+                PromptCatalog.REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_CHUNK,
                 chunk.chunkId(),
                 safe(chunk.sectionPath()),
                 truncate(chunk.text(), MAX_CHUNK_CHARS))));
         prompt.append(PromptResources.format(
-                USER_PROMPT_PATH,
+                PromptCatalog.REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_USER,
                 safe(analysis == null ? null : analysis.mainQuestion()),
                 subQuestionsText,
                 documentId,

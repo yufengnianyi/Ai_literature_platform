@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,8 +19,6 @@ import java.util.List;
 @Service
 public class QueryAnalyzerService {
 
-    private static final String SYSTEM_PROMPT_PATH = "prompts/review/query-analyzer-system.txt";
-
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
 
@@ -32,7 +31,7 @@ public class QueryAnalyzerService {
     public QueryAnalysis analyze(String question) {
         log.info("Analyzing question: {}", truncate(question, 100));
         ChatResponse response = chatModel.chat(
-                SystemMessage.from(PromptResources.load(SYSTEM_PROMPT_PATH)),
+                SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_QUERY_ANALYZER_SYSTEM)),
                 UserMessage.from(question)
         );
         AiMessage aiMessage = response.aiMessage();

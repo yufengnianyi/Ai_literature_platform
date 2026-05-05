@@ -1,5 +1,6 @@
 package com.example.demo_01.ai;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -22,8 +23,6 @@ public class AiCodeHelper {
     @Resource
     private ChatModel qwenChatModel;
 
-    private static final String SYSTEM_MESSAGE_PATH = "prompts/ai/ai-code-helper-system.txt";
-
     /**
      * chat方法
      * 这是一个用于与AI进行对话的方法，接收一个字符串参数message，返回一个字符串
@@ -31,7 +30,7 @@ public class AiCodeHelper {
      * @return
      */
     public String chat(String message) {
-        SystemMessage systemMessage = SystemMessage.from(PromptResources.load(SYSTEM_MESSAGE_PATH));
+        SystemMessage systemMessage = SystemMessage.from(PromptResources.load(PromptCatalog.AI_CODE_HELPER_SYSTEM));
         UserMessage userMessage = UserMessage.from(message);
         ChatResponse chatResponse = qwenChatModel.chat(systemMessage,userMessage);
         AiMessage aiMessage = chatResponse.aiMessage();

@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
@@ -50,10 +51,6 @@ public class EvidenceExtractionService {
             "compoundResolutionStatus"
     );
 
-    private static final String SYSTEM_PROMPT_PATH = "prompts/review/evidence-extraction-system.txt";
-    private static final String USER_PROMPT_PATH = "prompts/review/evidence-extraction-user.txt";
-    private static final String CHUNK_PROMPT_PATH = "prompts/review/evidence-extraction-chunk.txt";
-
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
 
@@ -103,7 +100,7 @@ public class EvidenceExtractionService {
         for (int i = 0; i < batch.size(); i++) {
             RetrievedChunk c = batch.get(i);
             chunksText.append(PromptResources.format(
-                    CHUNK_PROMPT_PATH,
+                    PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_CHUNK,
                     i + 1,
                     c.chunkId(),
                     c.documentId(),
@@ -111,11 +108,15 @@ public class EvidenceExtractionService {
                     formatKnowledgeContext(c.documentId(), knowledgeContexts),
                     c.text()));
         }
-        userMsg.append(PromptResources.format(USER_PROMPT_PATH, mainQuestion, subQuestionsText, chunksText));
+        userMsg.append(PromptResources.format(
+                PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_USER,
+                mainQuestion,
+                subQuestionsText,
+                chunksText));
 
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(SYSTEM_PROMPT_PATH)),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_SYSTEM)),
                     UserMessage.from(userMsg.toString())
             );
             AiMessage ai = response.aiMessage();

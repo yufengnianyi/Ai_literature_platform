@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentSynopsis;
 import com.example.demo_01.ai.review.config.ReviewProperties;
@@ -37,10 +38,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class DocumentPromotionService {
-
-    private static final String PROMOTION_SYSTEM_PROMPT_PATH = "prompts/review/document-promotion-system.txt";
-    private static final String PROMOTION_USER_PROMPT_PATH = "prompts/review/document-promotion-user.txt";
-    private static final String PROMOTION_DOCUMENT_PROMPT_PATH = "prompts/review/document-promotion-document.txt";
 
     private static final int DOCUMENT_LLM_BATCH_SIZE = 6;
     private static final double MIN_FINAL_SCORE = 0.55;
@@ -189,7 +186,7 @@ public class DocumentPromotionService {
         StringBuilder documentPrompts = new StringBuilder();
         for (DocumentScoreCard card : batch) {
             documentPrompts.append(PromptResources.format(
-                    PROMOTION_DOCUMENT_PROMPT_PATH,
+                    PromptCatalog.REVIEW_DOCUMENT_PROMOTION_DOCUMENT,
                     card.documentId(),
                     safe(card.documentTitle()),
                     safe(card.summary()),
@@ -197,14 +194,14 @@ public class DocumentPromotionService {
                     joinSafe(card.innovationPoints())));
         }
         String userPrompt = PromptResources.format(
-                PROMOTION_USER_PROMPT_PATH,
+                PromptCatalog.REVIEW_DOCUMENT_PROMOTION_USER,
                 canonicalQuestion,
                 joinSafe(analysis.keyEntities()),
                 joinSafe(analysis.keyConcepts()),
                 documentPrompts);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(PROMOTION_SYSTEM_PROMPT_PATH)),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_DOCUMENT_PROMOTION_SYSTEM)),
                     UserMessage.from(userPrompt)
             );
             AiMessage aiMessage = response.aiMessage();

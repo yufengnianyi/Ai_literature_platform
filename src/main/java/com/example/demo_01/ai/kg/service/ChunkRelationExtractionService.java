@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.kg.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.kg.KgProperties;
 import com.example.demo_01.ai.kg.model.KgModels.ChunkEntityExtraction;
@@ -23,9 +24,6 @@ import java.util.List;
 
 @Service
 public class ChunkRelationExtractionService {
-
-    private static final String RELATION_SYSTEM_PROMPT_PATH = "prompts/kg/chunk-relation-extraction-system.txt";
-    private static final String RELATION_USER_PROMPT_PATH = "prompts/kg/chunk-relation-extraction-user.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -80,8 +78,8 @@ public class ChunkRelationExtractionService {
             throw new IllegalStateException("Failed to serialize relation extraction entities", e);
         }
         ChatResponse response = chatModel.chat(
-                SystemMessage.from(PromptResources.load(RELATION_SYSTEM_PROMPT_PATH)),
-                UserMessage.from(PromptResources.format(RELATION_USER_PROMPT_PATH,
+                SystemMessage.from(PromptResources.load(PromptCatalog.KG_CHUNK_RELATION_EXTRACTION_SYSTEM)),
+                UserMessage.from(PromptResources.format(PromptCatalog.KG_CHUNK_RELATION_EXTRACTION_USER,
                         properties.getSchemaVersion(),
                         chunk.chunkId(),
                         safe(chunk.sectionPath()),

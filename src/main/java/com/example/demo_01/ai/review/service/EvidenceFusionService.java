@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -22,12 +23,6 @@ import java.util.stream.Collectors;
 public class EvidenceFusionService {
 
     private static final int SINGLE_PASS_THRESHOLD = 15;
-
-    private static final String FUSION_SYSTEM_PROMPT_PATH = "prompts/review/evidence-fusion-system.txt";
-    private static final String FUSION_SINGLE_USER_PROMPT_PATH = "prompts/review/evidence-fusion-single-user.txt";
-    private static final String FUSION_SUMMARY_USER_PROMPT_PATH = "prompts/review/evidence-fusion-summary-user.txt";
-    private static final String SUMMARY_SYSTEM_PROMPT_PATH = "prompts/review/evidence-fusion-batch-summary-system.txt";
-    private static final String SUMMARY_USER_PROMPT_PATH = "prompts/review/evidence-fusion-batch-summary-user.txt";
 
     @Resource(name = "myqwenChatModel")
     private ChatModel chatModel;
@@ -89,8 +84,8 @@ public class EvidenceFusionService {
         String evidenceText = formatEvidenceForLlm(evidence);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(FUSION_SYSTEM_PROMPT_PATH)),
-                    UserMessage.from(PromptResources.format(FUSION_SINGLE_USER_PROMPT_PATH, subQuestion, evidenceText))
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_SYSTEM)),
+                    UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_SINGLE_USER, subQuestion, evidenceText))
             );
             AiMessage ai = response.aiMessage();
             String raw = (ai != null && ai.text() != null) ? ai.text() : "{}";
@@ -105,8 +100,8 @@ public class EvidenceFusionService {
     private FusedEvidenceGroup fuseFromSummary(String subQuestion, List<ExtractedEvidence> evidence, String summaries) {
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(FUSION_SYSTEM_PROMPT_PATH)),
-                    UserMessage.from(PromptResources.format(FUSION_SUMMARY_USER_PROMPT_PATH, subQuestion, summaries))
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_SYSTEM)),
+                    UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_SUMMARY_USER, subQuestion, summaries))
             );
             AiMessage ai = response.aiMessage();
             String raw = (ai != null && ai.text() != null) ? ai.text() : "{}";
@@ -122,8 +117,8 @@ public class EvidenceFusionService {
         String evidenceText = formatEvidenceForLlm(batch);
         try {
             ChatResponse response = chatModel.chat(
-                    SystemMessage.from(PromptResources.load(SUMMARY_SYSTEM_PROMPT_PATH)),
-                    UserMessage.from(PromptResources.format(SUMMARY_USER_PROMPT_PATH, subQuestion, evidenceText))
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_SYSTEM)),
+                    UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_USER, subQuestion, evidenceText))
             );
             AiMessage ai = response.aiMessage();
             return (ai != null && ai.text() != null) ? ai.text() : "";
