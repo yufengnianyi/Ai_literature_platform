@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.review.service;
 
 import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
+import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -87,13 +88,17 @@ public class ReportGeneratorService {
         report.append(heading(zh, "二、主要研究内容分类", "2. Main Research Categories"));
         report.append(researchCategoryTable(safeEvidence, zh)).append("\n\n");
 
-        report.append(heading(zh, "三、关键发现总结", "3. Key Findings Summary"));
+        List<CompoundActivityRow> compoundRows = CompoundEvidenceAggregator.fromExtractedEvidence(safeEvidence);
+        report.append(heading(zh, "三、抑菌化合物同类分析", "3. Antimicrobial Compound Class Analysis"));
+        report.append(compoundClassAnalysis(compoundRows, zh)).append("\n\n");
+
+        report.append(heading(zh, "四、关键发现总结", "4. Key Findings Summary"));
         report.append(keyFindings(safeEvidence, safeGroups, focusSubQuestions, zh)).append("\n\n");
 
-        report.append(heading(zh, "四、研究方法与证据强度", "4. Research Methods and Evidence Strength"));
+        report.append(heading(zh, "五、研究方法与证据强度", "5. Research Methods and Evidence Strength"));
         report.append(methodsAndStrength(safeEvidence, zh)).append("\n\n");
 
-        report.append(heading(zh, "五、当前存在的不足和未来研究方向", "5. Current Limitations and Future Directions"));
+        report.append(heading(zh, "六、当前存在的不足和未来研究方向", "6. Current Limitations and Future Directions"));
         report.append(limitationsAndFuture(safeEvidence, zh)).append("\n\n");
 
         report.append(heading(zh, "参考文献", "References"));
@@ -208,6 +213,67 @@ public class ReportGeneratorService {
                     .append(" |\n");
         }
         return table.toString();
+    }
+
+    private String compoundClassAnalysis(List<CompoundActivityRow> rows, boolean zh) {
+        if (rows == null || rows.isEmpty()) {
+            return zh
+                    ? "当前证据集中没有可汇总的抑菌化合物记录。"
+                    : "The current evidence set contains no compound activity records for aggregation.";
+        }
+
+        Map<String, Long> byStructure = countDelimited(rows, CompoundActivityRow::structureType);
+        Map<String, Long> bySource = countDelimited(rows, CompoundActivityRow::source);
+        Map<String, Long> byPathogen = countDelimited(rows, CompoundActivityRow::targetPathogen);
+        List<String> activityExamples = rows.stream()
+                .filter(row -> mentioned(row.antimicrobialActivity()))
+                .limit(5)
+                .map(row -> row.compoundName() + ": " + row.antimicrobialActivity())
+                .toList();
+        List<String> notableRows = rows.stream()
+                .filter(row -> mentioned(row.mechanism())
+                        || mentioned(row.cytotoxicitySafety())
+                        || mentioned(row.patentStatus()))
+                .limit(5)
+                .map(row -> row.compoundName()
+                        + " | mechanism=" + row.mechanism()
+                        + " | safety=" + row.cytotoxicitySafety()
+                        + " | patent=" + row.patentStatus())
+                .toList();
+
+        StringBuilder out = new StringBuilder();
+        if (zh) {
+            out.append("本次证据集中可汇总的化合物或化合物衍生物组共有 ")
+                    .append(rows.size()).append(" 组。");
+            out.append("结构类型分布：").append(formatCounts(limitMap(byStructure, 8))).append("。");
+            out.append("来源分布：").append(formatCounts(limitMap(bySource, 8))).append("。");
+            out.append("作用病原菌覆盖：").append(formatCounts(limitMap(byPathogen, 8))).append("。");
+            if (!activityExamples.isEmpty()) {
+                out.append("\n\n代表性抑菌活性记录：\n");
+                appendNumbered(out, activityExamples);
+            }
+            if (!notableRows.isEmpty()) {
+                out.append("\n\n差异化个例：\n");
+                appendNumbered(out, notableRows);
+            }
+            out.append("\n\n注意：EC50、MIC、抑制率、菌丝生长率和防效来自不同试验体系时不可直接排序；报告仅按原文条件进行结构化展示。");
+        } else {
+            out.append("The evidence set contains ").append(rows.size())
+                    .append(" compound or derivative groups. ");
+            out.append("Structure classes: ").append(formatCounts(limitMap(byStructure, 8))).append(". ");
+            out.append("Sources: ").append(formatCounts(limitMap(bySource, 8))).append(". ");
+            out.append("Target pathogens: ").append(formatCounts(limitMap(byPathogen, 8))).append(". ");
+            if (!activityExamples.isEmpty()) {
+                out.append("\n\nRepresentative activity records:\n");
+                appendNumbered(out, activityExamples);
+            }
+            if (!notableRows.isEmpty()) {
+                out.append("\n\nNotable outliers or differentiators:\n");
+                appendNumbered(out, notableRows);
+            }
+            out.append("\n\nEC50, MIC, inhibition rate, mycelial growth, and control efficacy are not directly ranked across assay systems; this report preserves source conditions.");
+        }
+        return out.toString();
     }
 
     private String keyFindings(List<ExtractedEvidence> evidence,
@@ -472,6 +538,32 @@ public class ReportGeneratorService {
                 .limit(limit)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
                         (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private Map<String, Long> countDelimited(List<CompoundActivityRow> rows,
+                                             Function<CompoundActivityRow, String> extractor) {
+        return rows.stream()
+                .map(extractor)
+                .filter(this::mentioned)
+                .flatMap(value -> List.of(value.split(";")).stream())
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.groupingBy(value -> value, LinkedHashMap::new, Collectors.counting()));
+    }
+
+    private boolean mentioned(String value) {
+        return value != null
+                && !value.isBlank()
+                && !"-".equals(value)
+                && !CompoundEvidenceAggregator.NOT_MENTIONED.equals(value)
+                && !"not mentioned".equalsIgnoreCase(value)
+                && !"not reported".equalsIgnoreCase(value);
+    }
+
+    private void appendNumbered(StringBuilder out, List<String> values) {
+        for (int i = 0; i < values.size(); i++) {
+            out.append(i + 1).append(". ").append(values.get(i)).append("\n");
+        }
     }
 
     private String firstNonBlank(String... values) {

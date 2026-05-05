@@ -180,7 +180,8 @@ public class EvidenceFusionService {
                 cleanList(typedEntities.compoundLocalAlias()),
                 cleanList(typedEntities.compoundCanonicalName()),
                 cleanList(typedEntities.compoundIdentifier()),
-                cleanList(typedEntities.compoundResolutionStatus())
+                cleanList(typedEntities.compoundResolutionStatus()),
+                cleanList(typedEntities.cytotoxicitySafety())
         );
     }
 
@@ -230,7 +231,8 @@ public class EvidenceFusionService {
                         typedEntities.compoundLocalAlias(),
                         typedEntities.compoundCanonicalName(),
                         typedEntities.compoundIdentifier(),
-                        typedEntities.compoundResolutionStatus())
+                        typedEntities.compoundResolutionStatus(),
+                        typedEntities.cytotoxicitySafety())
                 .filter(Objects::nonNull)
                 .flatMap(List::stream)
                 .distinct()

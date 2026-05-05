@@ -63,8 +63,36 @@ public final class ReviewModels {
             List<String> compoundLocalAlias,
             List<String> compoundCanonicalName,
             List<String> compoundIdentifier,
-            List<String> compoundResolutionStatus
+            List<String> compoundResolutionStatus,
+            List<String> cytotoxicitySafety
     ) {
+        public TypedEntities(List<String> species,
+                             List<String> geneOrProtein,
+                             List<String> pathwayOrProcess,
+                             List<String> developmentalStage,
+                             List<String> phenotype,
+                             List<String> method,
+                             List<String> moleculeOrMetabolite,
+                             List<String> compoundStructureType,
+                             List<String> compoundSource,
+                             List<String> antimicrobialActivity,
+                             List<String> assayMethod,
+                             List<String> targetOrganism,
+                             List<String> proposedTarget,
+                             List<String> mechanism,
+                             List<String> reference,
+                             List<String> patentStatus,
+                             List<String> compoundLocalAlias,
+                             List<String> compoundCanonicalName,
+                             List<String> compoundIdentifier,
+                             List<String> compoundResolutionStatus) {
+            this(species, geneOrProtein, pathwayOrProcess, developmentalStage, phenotype, method,
+                    moleculeOrMetabolite, compoundStructureType, compoundSource, antimicrobialActivity,
+                    assayMethod, targetOrganism, proposedTarget, mechanism, reference, patentStatus,
+                    compoundLocalAlias, compoundCanonicalName, compoundIdentifier, compoundResolutionStatus,
+                    List.of());
+        }
+
         public TypedEntities(List<String> species,
                              List<String> geneOrProtein,
                              List<String> pathwayOrProcess,
@@ -84,7 +112,7 @@ public final class ReviewModels {
             this(species, geneOrProtein, pathwayOrProcess, developmentalStage, phenotype, method,
                     moleculeOrMetabolite, compoundStructureType, compoundSource, antimicrobialActivity,
                     assayMethod, targetOrganism, proposedTarget, mechanism, reference, patentStatus,
-                    List.of(), List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(), List.of(), List.of());
         }
     }
 

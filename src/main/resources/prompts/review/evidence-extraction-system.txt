@@ -26,6 +26,7 @@ Return JSON only as an array:
     "mechanism": ["possible mode of action or mechanism"],
     "reference": ["paper title, DOI, patent number, or source identifier if present"],
     "patentStatus": ["patent number/status or not mentioned"],
+    "cytotoxicitySafety": ["mammalian cell toxicity, XTT reduction, IC50, selectivity index, or not mentioned"],
     "compoundLocalAlias": ["compound 1"],
     "compoundCanonicalName": ["resolved canonical compound name"],
     "compoundIdentifier": ["CAS, InChIKey, SMILES, or internal normalized id"],
@@ -49,8 +50,12 @@ Rules:
 - Put sporulation, zoospore, hypha, infection stage, or disease phenotype labels into developmentalStage or phenotype as appropriate.
 - Put species and strains only into species.
 - For compound-antimicrobial evidence, fill moleculeOrMetabolite and compound-specific fields conservatively from explicit text only.
+- Each compound-antimicrobial evidence item must describe exactly one compound, derivative, or unresolved local compound label. If one chunk describes antimicrobial activities for multiple compounds, emit one JSON object per compound so each activity, target organism, assay, mechanism, safety value, reference, and patent value remains tied to the correct compound.
+- Do not put multiple different compounds in one evidence item's moleculeOrMetabolite or compoundCanonicalName arrays. Multiple values are allowed only when they are aliases or identifiers for the same compound.
 - antimicrobialActivity must preserve reported values, units, and assay conditions; if EC50/MIC is absent, capture tested concentration and inhibition rate when available.
+- Prefer this activity wording when enough details are present: "endpoint: concentration unit: effect (duration/condition)".
 - targetOrganism should list all reported Phytophthora species, fungi, oomycetes, or broad-spectrum targets mentioned for the compound.
+- cytotoxicitySafety must capture mammalian-cell toxicity, selectivity index, XTT/MTT reduction, or safety testing only when explicitly reported; otherwise write "not mentioned".
 - reference should identify the source paper or patent when the chunk contains enough metadata; otherwise leave it empty and the system will use document title.
 - If a chunk mentions local labels such as "compound 1", "compound A", "1a", "化合物1", or similar labels, use the provided document knowledge context and alias map whenever available.
 - Do not treat unresolved local labels as globally valid compound names. If unresolved, write compoundResolutionStatus as UNRESOLVED and keep the local label in compoundLocalAlias.

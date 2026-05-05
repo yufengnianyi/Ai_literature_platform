@@ -48,7 +48,8 @@ public class EvidenceExtractionService {
             "compoundLocalAlias",
             "compoundCanonicalName",
             "compoundIdentifier",
-            "compoundResolutionStatus"
+            "compoundResolutionStatus",
+            "cytotoxicitySafety"
     );
 
     @Resource(name = "myqwenChatModel")
@@ -233,7 +234,8 @@ public class EvidenceExtractionService {
                         typed.compoundLocalAlias(),
                         typed.compoundCanonicalName(),
                         typed.compoundIdentifier(),
-                        typed.compoundResolutionStatus())
+                        typed.compoundResolutionStatus(),
+                        typed.cytotoxicitySafety())
                 .filter(java.util.Objects::nonNull)
                 .flatMap(List::stream)
                 .distinct()

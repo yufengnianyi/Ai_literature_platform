@@ -4,6 +4,7 @@ import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskRecord;
 import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
+import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
@@ -62,47 +63,24 @@ public class ReviewXlsxService {
                                              List<ReviewEvidenceRecord> evidenceRecords) {
         Sheet sheet = workbook.createSheet("Compound Activity Summary");
         String[] headers = {
-                "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "实验手段",
-                "作用目标", "可能的作用靶标和作用机制", "参考文献", "专利情况"
+                "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "作用病原菌",
+                "试验方法", "可能的作用靶标/机制", "细胞毒性/安全性数据", "参考文献", "专利情况"
         };
         createHeaderRow(sheet, headerStyle, headers);
 
-        Map<String, List<ReviewEvidenceRecord>> byCompound = new LinkedHashMap<>();
-        for (ReviewEvidenceRecord evidence : evidenceRecords) {
-            for (String compound : typedList(evidence.typedEntities(), TypedEntities::moleculeOrMetabolite)) {
-                byCompound.computeIfAbsent(compound, key -> new ArrayList<>()).add(evidence);
-            }
-        }
-
         int rowIdx = 1;
-        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCompound.entrySet()) {
-            List<ReviewEvidenceRecord> records = entry.getValue();
+        for (CompoundActivityRow activity : CompoundEvidenceAggregator.fromEvidenceRecords(evidenceRecords)) {
             Row row = sheet.createRow(rowIdx++);
-            row.createCell(0).setCellValue(entry.getKey());
-            row.createCell(1).setCellValue(joinDistinct(records,
-                    r -> typedList(r.typedEntities(), TypedEntities::compoundStructureType)));
-            row.createCell(2).setCellValue(joinDistinct(records,
-                    r -> typedList(r.typedEntities(), TypedEntities::compoundSource)));
-            row.createCell(3).setCellValue(valueOrFallback(
-                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::antimicrobialActivity)),
-                    truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500)));
-            row.createCell(4).setCellValue(valueOrFallback(
-                    joinDistinct(records, r -> merge(
-                            typedList(r.typedEntities(), TypedEntities::assayMethod),
-                            typedList(r.typedEntities(), TypedEntities::method))),
-                    joinDistinct(records, r -> listOf(r.methodology()))));
-            row.createCell(5).setCellValue(valueOrFallback(
-                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::targetOrganism)),
-                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::species))));
-            row.createCell(6).setCellValue(joinDistinct(records, r -> merge(
-                    typedList(r.typedEntities(), TypedEntities::proposedTarget),
-                    typedList(r.typedEntities(), TypedEntities::mechanism))));
-            row.createCell(7).setCellValue(valueOrFallback(
-                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::reference)),
-                    joinDistinct(records, r -> listOf(documentLabel(r)))));
-            row.createCell(8).setCellValue(valueOrFallback(
-                    joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::patentStatus)),
-                    "未提及"));
+            row.createCell(0).setCellValue(activity.compoundName());
+            row.createCell(1).setCellValue(activity.structureType());
+            row.createCell(2).setCellValue(activity.source());
+            row.createCell(3).setCellValue(activity.antimicrobialActivity());
+            row.createCell(4).setCellValue(activity.targetPathogen());
+            row.createCell(5).setCellValue(activity.assayMethod());
+            row.createCell(6).setCellValue(activity.mechanism());
+            row.createCell(7).setCellValue(activity.cytotoxicitySafety());
+            row.createCell(8).setCellValue(activity.reference());
+            row.createCell(9).setCellValue(activity.patentStatus());
         }
 
         autoSize(sheet, headers.length);
@@ -325,10 +303,6 @@ public class ReviewXlsxService {
 
     private String firstNonBlank(List<String> values) {
         return values.stream().filter(item -> item != null && !item.isBlank()).findFirst().orElse("");
-    }
-
-    private String valueOrFallback(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
     }
 
     private double avgConfidence(List<ReviewEvidenceRecord> records) {

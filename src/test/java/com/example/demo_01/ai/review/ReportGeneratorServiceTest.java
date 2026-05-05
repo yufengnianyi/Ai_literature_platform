@@ -70,4 +70,67 @@ class ReportGeneratorServiceTest {
         assertFalse(report.contains("chunk=chunk_id"));
         assertFalse(report.contains("Genes Involved in the Pathogenicity of Phytophthora infestans"));
     }
+
+    @Test
+    void generateReportShouldIncludeCompoundClassAnalysisWhenCompoundEvidenceExists() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        ExtractedEvidence evidence = new ExtractedEvidence(
+                "chunk-2",
+                "doc-2",
+                "Paper B",
+                "alpha-methylcinnamaldehyde inhibits Phytophthora capsici.",
+                "alpha-methylcinnamaldehyde reduced mycelial growth of Phytophthora capsici.",
+                "mycelial growth assay",
+                new TypedEntities(
+                        List.of("Phytophthora capsici"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("mycelial growth assay"),
+                        List.of("alpha-methylcinnamaldehyde"),
+                        List.of("phenylpropanoid"),
+                        List.of("chemical synthesis"),
+                        List.of("菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth"),
+                        List.of("mycelial growth assay"),
+                        List.of("Phytophthora capsici"),
+                        List.of("cell membrane"),
+                        List.of("disrupts membrane integrity"),
+                        List.of("Paper B"),
+                        List.of("not mentioned"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("XTT reduction IC50 > 200 uM in mammalian cells")
+                ),
+                List.of("alpha-methylcinnamaldehyde", "Phytophthora capsici"),
+                "EXPERIMENTAL",
+                0.88,
+                "alpha-methylcinnamaldehyde reduced mycelial growth.",
+                "Which compounds inhibit Phytophthora?"
+        );
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Which antimicrobial compounds inhibit Phytophthora?",
+                List.of(evidence.subQuestion()),
+                List.of("Phytophthora capsici"),
+                List.of("antimicrobial compounds"),
+                "zh",
+                "哪些抑菌化合物可以抑制疫霉菌？",
+                List.of("哪些化合物有效？")
+        );
+
+        String report = service.generateReport(
+                analysis,
+                List.of(new FusedEvidenceGroup(evidence.subQuestion(), "", List.of(), 0, 0, List.of())),
+                List.of(evidence)
+        );
+
+        assertTrue(report.contains("三、抑菌化合物同类分析"));
+        assertTrue(report.contains("phenylpropanoid"));
+        assertTrue(report.contains("chemical synthesis"));
+        assertTrue(report.contains("Phytophthora capsici"));
+        assertTrue(report.contains("菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth"));
+        assertTrue(report.contains("EC50、MIC、抑制率"));
+    }
 }
