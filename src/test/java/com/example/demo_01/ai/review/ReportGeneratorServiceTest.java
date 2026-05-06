@@ -65,6 +65,10 @@ class ReportGeneratorServiceTest {
         );
 
         assertTrue(report.contains("一、研究主题的概述"));
+        assertFalse(report.contains("主要研究内容分类"));
+        assertFalse(report.contains("| 研究对象 | 作用阶段/目标 | 机制或通路 | 证明方法 | 结论摘要 | 来源 |"));
+        assertFalse(report.contains("抑菌化合物同类分析"));
+        assertTrue(report.contains("二、关键发现总结"));
         assertTrue(report.contains("PsMyb37"));
         assertTrue(report.contains("{source=A MYB-related transcription factor regulates effector gene expression in an oomycete pathogen; chunk=chunk-1}"));
         assertFalse(report.contains("chunk=chunk_id"));
@@ -126,7 +130,8 @@ class ReportGeneratorServiceTest {
                 List.of(evidence)
         );
 
-        assertTrue(report.contains("三、抑菌化合物同类分析"));
+        assertTrue(report.contains("二、抑菌化合物同类分析"));
+        assertTrue(report.contains("三、关键发现总结"));
         assertTrue(report.contains("phenylpropanoid"));
         assertTrue(report.contains("chemical synthesis"));
         assertTrue(report.contains("Phytophthora capsici"));

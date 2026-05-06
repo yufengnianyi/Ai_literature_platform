@@ -81,24 +81,24 @@ public class ReportGeneratorService {
                 .toList();
 
         StringBuilder report = new StringBuilder();
+        int section = 1;
         report.append("# ").append(zh ? "文献综述报告" : "Systematic Review Report").append("\n\n");
-        report.append(heading(zh, "一、研究主题的概述", "1. Research Topic Overview"));
+        report.append(heading(section++, zh, "研究主题的概述", "Research Topic Overview"));
         report.append(topicOverview(question, safeEvidence, userGuidance, zh)).append("\n\n");
 
-        report.append(heading(zh, "二、主要研究内容分类", "2. Main Research Categories"));
-        report.append(researchCategoryTable(safeEvidence, zh)).append("\n\n");
-
         List<CompoundActivityRow> compoundRows = CompoundEvidenceAggregator.fromExtractedEvidence(safeEvidence);
-        report.append(heading(zh, "三、抑菌化合物同类分析", "3. Antimicrobial Compound Class Analysis"));
-        report.append(compoundClassAnalysis(compoundRows, zh)).append("\n\n");
+        if (shouldIncludeAntimicrobialCompoundAnalysis(analysis, compoundRows)) {
+            report.append(heading(section++, zh, "抑菌化合物同类分析", "Antimicrobial Compound Class Analysis"));
+            report.append(compoundClassAnalysis(compoundRows, zh)).append("\n\n");
+        }
 
-        report.append(heading(zh, "四、关键发现总结", "4. Key Findings Summary"));
+        report.append(heading(section++, zh, "关键发现总结", "Key Findings Summary"));
         report.append(keyFindings(safeEvidence, safeGroups, focusSubQuestions, zh)).append("\n\n");
 
-        report.append(heading(zh, "五、研究方法与证据强度", "5. Research Methods and Evidence Strength"));
+        report.append(heading(section++, zh, "研究方法与证据强度", "Research Methods and Evidence Strength"));
         report.append(methodsAndStrength(safeEvidence, zh)).append("\n\n");
 
-        report.append(heading(zh, "六、当前存在的不足和未来研究方向", "6. Current Limitations and Future Directions"));
+        report.append(heading(section++, zh, "当前存在的不足和未来研究方向", "Current Limitations and Future Directions"));
         report.append(limitationsAndFuture(safeEvidence, zh)).append("\n\n");
 
         report.append(heading(zh, "参考文献", "References"));
@@ -116,6 +116,43 @@ public class ReportGeneratorService {
         return safe(analysis.mainQuestion());
     }
 
+    private boolean shouldIncludeAntimicrobialCompoundAnalysis(QueryAnalysis analysis,
+                                                              List<CompoundActivityRow> compoundRows) {
+        if (compoundRows == null || compoundRows.isEmpty()) {
+            return mentionsAntimicrobialIntent(analysis);
+        }
+        return mentionsAntimicrobialIntent(analysis)
+                || compoundRows.stream().anyMatch(row -> mentioned(row.antimicrobialActivity()));
+    }
+
+    private boolean mentionsAntimicrobialIntent(QueryAnalysis analysis) {
+        if (analysis == null) {
+            return false;
+        }
+        String text = String.join(" ",
+                safe(analysis.mainQuestion()),
+                safe(analysis.displayMainQuestion()),
+                analysis.subQuestions() == null ? "" : String.join(" ", analysis.subQuestions()),
+                analysis.displaySubQuestions() == null ? "" : String.join(" ", analysis.displaySubQuestions()),
+                analysis.keyEntities() == null ? "" : String.join(" ", analysis.keyEntities()),
+                analysis.keyConcepts() == null ? "" : String.join(" ", analysis.keyConcepts()));
+        String normalized = text.toLowerCase();
+        return normalized.contains("抑菌")
+                || normalized.contains("抗菌")
+                || normalized.contains("抗真菌")
+                || normalized.contains("杀菌")
+                || normalized.contains("防效")
+                || normalized.contains("菌丝")
+                || normalized.contains("antimicrobial")
+                || normalized.contains("antibacterial")
+                || normalized.contains("antifungal")
+                || normalized.contains("anti-fungal")
+                || normalized.contains("fungicidal")
+                || normalized.contains("mycelial")
+                || normalized.contains("mic")
+                || normalized.contains("ec50");
+    }
+
     private List<ExtractedEvidence> sanitizeEvidence(List<ExtractedEvidence> evidence) {
         if (evidence == null) {
             return List.of();
@@ -126,8 +163,27 @@ public class ReportGeneratorService {
                 .toList();
     }
 
+    private String heading(int section, boolean zh, String zhText, String enText) {
+        return "## " + (zh ? chineseSectionNumber(section) + "、" + zhText : section + ". " + enText) + "\n\n";
+    }
+
     private String heading(boolean zh, String zhText, String enText) {
         return "## " + (zh ? zhText : enText) + "\n\n";
+    }
+
+    private String chineseSectionNumber(int section) {
+        return switch (section) {
+            case 1 -> "一";
+            case 2 -> "二";
+            case 3 -> "三";
+            case 4 -> "四";
+            case 5 -> "五";
+            case 6 -> "六";
+            case 7 -> "七";
+            case 8 -> "八";
+            case 9 -> "九";
+            default -> String.valueOf(section);
+        };
     }
 
     private String topicOverview(String question,
@@ -167,52 +223,6 @@ public class ReportGeneratorService {
             out.append("All conclusions below are derived from extracted evidence and cited source chunks.");
         }
         return out.toString();
-    }
-
-    private String researchCategoryTable(List<ExtractedEvidence> evidence, boolean zh) {
-        StringBuilder table = new StringBuilder();
-        if (zh) {
-            table.append("| 研究对象 | 作用阶段/目标 | 机制或通路 | 证明方法 | 结论摘要 | 来源 |\n");
-        } else {
-            table.append("| Research Object | Stage / Target | Mechanism or Pathway | Method | Conclusion | Source |\n");
-        }
-        table.append("|---|---|---|---|---|---|\n");
-        List<ExtractedEvidence> rows = evidence.stream()
-                .sorted(Comparator.comparingDouble(ExtractedEvidence::confidence).reversed())
-                .limit(20)
-                .toList();
-        if (rows.isEmpty()) {
-            table.append(zh ? "| - | - | - | - | 当前没有可用证据 | - |\n"
-                    : "| - | - | - | - | No evidence available | - |\n");
-            return table.toString();
-        }
-        for (ExtractedEvidence item : rows) {
-            TypedEntities typed = item.typedEntities();
-            table.append("| ")
-                    .append(cell(joinOrDash(merge(
-                            typed == null ? List.of() : typed.geneOrProtein(),
-                            typed == null ? List.of() : compoundDisplayNames(typed)))))
-                    .append(" | ")
-                    .append(cell(joinOrDash(merge(
-                            typed == null ? List.of() : typed.developmentalStage(),
-                            typed == null ? List.of() : typed.targetOrganism(),
-                            typed == null ? List.of() : typed.phenotype()))))
-                    .append(" | ")
-                    .append(cell(joinOrDash(merge(
-                            typed == null ? List.of() : typed.pathwayOrProcess(),
-                            typed == null ? List.of() : typed.mechanism(),
-                            typed == null ? List.of() : typed.proposedTarget()))))
-                    .append(" | ")
-                    .append(cell(firstNonBlank(item.methodology(),
-                            joinOrDash(typed == null ? List.of() : typed.assayMethod()),
-                            joinOrDash(typed == null ? List.of() : typed.method()))))
-                    .append(" | ")
-                    .append(cell(shortText(preferredFinding(item), 140)))
-                    .append(" | ")
-                    .append(cell(citation(item)))
-                    .append(" |\n");
-        }
-        return table.toString();
     }
 
     private String compoundClassAnalysis(List<CompoundActivityRow> rows, boolean zh) {
