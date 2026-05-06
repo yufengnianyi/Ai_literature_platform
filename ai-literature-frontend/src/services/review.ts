@@ -164,6 +164,14 @@ export interface ReviewTaskRecord {
 
 export interface ReviewStreamHandle {
   close: () => void;
+  taskId?: string;
+}
+
+export interface ReviewSummaryTable {
+  id: string;
+  title: string;
+  headers: string[];
+  rows: string[][];
 }
 
 const parseEventBlock = (rawBlock: string): { eventName: string; data: string } | null => {
@@ -265,6 +273,11 @@ export const reviewService = {
     return data as ReviewEvidenceRecord[];
   },
 
+  async getSummaryTables(taskId: string): Promise<ReviewSummaryTable[]> {
+    const { data } = await myAxios.get(`/review/tasks/${taskId}/summary-tables`);
+    return data as ReviewSummaryTable[];
+  },
+
   startGeneration(params: {
     taskId: string;
     request: EvidenceReviewRequest;
@@ -352,6 +365,7 @@ export const reviewService = {
     })();
 
     return {
+      taskId: params.taskId,
       close: () => {
         if (!controller.signal.aborted) controller.abort();
       },
@@ -451,6 +465,7 @@ export const reviewService = {
     })();
 
     return {
+      taskId,
       close: () => {
         if (!controller.signal.aborted) controller.abort();
       },
@@ -544,6 +559,7 @@ export const reviewService = {
     })();
 
     return {
+      taskId,
       close: () => {
         if (!controller.signal.aborted) controller.abort();
       },

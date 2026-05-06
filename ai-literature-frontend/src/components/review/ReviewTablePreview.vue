@@ -2,18 +2,18 @@
   <section v-if="tables.length" class="table-preview">
     <div class="preview-heading">
       <div>
-        <h3>{{ isChinese ? '表格在线预览' : 'Online Table Preview' }}</h3>
+        <h3>{{ isChinese ? '汇总表在线预览' : 'Summary Table Preview' }}</h3>
         <p>
           {{ isChinese
-            ? `已从报告中识别 ${tables.length} 个 Markdown 表格，可在下载 xlsx 前快速检查。`
-            : `${tables.length} Markdown table${tables.length > 1 ? 's' : ''} found in the report. Preview them before downloading xlsx.` }}
+            ? `已根据任务证据生成 ${tables.length} 个汇总表预览，可在下载 xlsx 前快速检查。`
+            : `${tables.length} summary table${tables.length > 1 ? 's' : ''} generated from task evidence. Preview them before downloading xlsx.` }}
         </p>
       </div>
       <a-tag color="blue">{{ tables.length }} {{ isChinese ? '个表格' : 'tables' }}</a-tag>
     </div>
 
     <a-tabs v-model:activeKey="activeTableId" size="small">
-      <a-tab-pane v-for="table in tables" :key="table.id" :tab="tableLabel(table.title)">
+      <a-tab-pane v-for="table in tables" :key="table.id" :tab="table.title">
         <div class="table-frame">
           <table>
             <thead>
@@ -37,10 +37,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import type { MarkdownTablePreview, ReviewDisplayLanguage } from '@/utils/reviewPresentation';
+import type { ReviewDisplayLanguage } from '@/utils/reviewPresentation';
+import type { ReviewSummaryTable } from '@/services/review';
 
 const props = defineProps<{
-  tables: MarkdownTablePreview[];
+  tables: ReviewSummaryTable[];
   language: ReviewDisplayLanguage;
 }>();
 
@@ -56,12 +57,6 @@ watch(
   },
   { immediate: true },
 );
-
-const tableLabel = (title: string) => {
-  const match = title.match(/\d+$/);
-  if (!isChinese.value || !match) return title;
-  return `表格 ${match[0]}`;
-};
 
 const stripMarkdown = (value: string): string =>
   value

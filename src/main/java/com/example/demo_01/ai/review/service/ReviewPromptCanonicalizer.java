@@ -22,12 +22,12 @@ public class ReviewPromptCanonicalizer {
         List<String> explicitAspects = extractExplicitAspects(rawPrompt);
 
         String mainQuestion = sanitizeSentence(analysis.mainQuestion());
-        if (mainQuestion == null || looksInstructional(mainQuestion) || containsChinese(mainQuestion)) {
+        if (mainQuestion == null || looksInstructional(mainQuestion) || looksSchemaField(mainQuestion)) {
             mainQuestion = buildCanonicalMainQuestion(scope, explicitAspects, rawPrompt);
         }
 
-        List<String> subQuestions = sanitizeSubQuestions(analysis.subQuestions(), true);
-        if (!explicitAspects.isEmpty() || isBroadGeneListing(rawPrompt)) {
+        List<String> subQuestions = sanitizeSubQuestions(analysis.subQuestions(), false);
+        if (subQuestions.isEmpty() && (!explicitAspects.isEmpty() || isBroadGeneListing(rawPrompt))) {
             subQuestions = buildCanonicalSubQuestions(scope, explicitAspects, rawPrompt);
         } else if (subQuestions.isEmpty()) {
             subQuestions = List.of(mainQuestion);
@@ -45,8 +45,8 @@ public class ReviewPromptCanonicalizer {
         return new QueryAnalysis(
                 mainQuestion,
                 subQuestions,
-                dedupe(analysis.keyEntities(), true),
-                dedupe(analysis.keyConcepts(), true),
+                dedupe(analysis.keyEntities(), false),
+                dedupe(analysis.keyConcepts(), false),
                 languageCode,
                 displayMainQuestion,
                 displaySubQuestions
@@ -62,7 +62,7 @@ public class ReviewPromptCanonicalizer {
 
     private String extractScope(String rawPrompt, QueryAnalysis analysis) {
         String mainQuestion = sanitizeSentence(analysis.mainQuestion());
-        if (mainQuestion != null && !looksInstructional(mainQuestion) && !containsChinese(mainQuestion)) {
+        if (mainQuestion != null && !looksInstructional(mainQuestion) && !looksSchemaField(mainQuestion)) {
             return trimReviewSuffix(mainQuestion);
         }
         for (String line : safe(rawPrompt).split("\\R")) {
@@ -123,28 +123,28 @@ public class ReviewPromptCanonicalizer {
     }
 
     private List<String> buildCanonicalSubQuestions(String scope, List<String> aspects, String rawPrompt) {
+        List<String> cleaned = stripExamples(aspects);
+        if (!cleaned.isEmpty()) {
+            List<String> subQuestions = new ArrayList<>();
+            for (String aspect : cleaned) {
+                subQuestions.add("What evidence explains " + aspect + " in " + scope + "?");
+            }
+            return dedupe(subQuestions, false);
+        }
         if (isBroadGeneListing(rawPrompt)) {
             return List.of(
-                    "Which genes, proteins, or compounds are directly related to the research topic?",
+                    "Which genes, proteins, or compounds are directly related to " + scope + "?",
                     "Which developmental stages, pathways, organisms, or phenotypes do they affect?",
                     "What mechanisms or biological processes are supported by the literature?",
                     "Which experimental or computational methods support the conclusions?",
                     "Which findings are well supported, and which remain uncertain or under-studied?"
             );
         }
-        List<String> cleaned = stripExamples(aspects);
-        if (cleaned.isEmpty()) {
-            return List.of(
-                    "What are the main entities and mechanisms involved in " + scope + "?",
-                    "Which papers provide the strongest evidence for those mechanisms?",
-                    "What limitations and future research directions remain?"
-            );
-        }
-        List<String> subQuestions = new ArrayList<>();
-        for (String aspect : cleaned) {
-            subQuestions.add("What evidence explains " + aspect + " in " + scope + "?");
-        }
-        return dedupe(subQuestions, false);
+        return List.of(
+                "What are the main entities and mechanisms involved in " + scope + "?",
+                "Which papers provide the strongest evidence for those mechanisms?",
+                "What limitations and future research directions remain?"
+        );
     }
 
     private boolean isBroadGeneListing(String rawPrompt) {

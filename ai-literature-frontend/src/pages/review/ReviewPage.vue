@@ -138,7 +138,7 @@
           {{ text.downloadXlsx }}
         </a-button>
       </div>
-      <ReviewTablePreview :tables="reportTables" :language="activeLanguage" />
+      <ReviewTablePreview :tables="summaryTables" :language="activeLanguage" />
       <a-card class="report-card">
         <div class="report-content markdown-body" v-html="renderedReport"></div>
       </a-card>
@@ -206,13 +206,13 @@ import {
   type ReviewScopePreview,
   type ReviewGenerateRequest,
   type ReviewEvidenceRecord,
+  type ReviewSummaryTable,
   type CandidateReviewRequest,
   type EvidenceReviewRequest,
 } from '@/services/review';
 import { renderMarkdown } from '@/utils/markdown';
 import {
   detectReviewLanguage,
-  extractMarkdownTables,
   reviewText,
   translateReviewStage,
   translateReviewStatus,
@@ -240,6 +240,7 @@ const reviewLanguageCode = ref<string>('en');
 const currentTaskId = ref<string>('');
 const evidenceList = ref<ReviewEvidenceRecord[]>([]);
 const reportContent = ref('');
+const summaryTables = ref<ReviewSummaryTable[]>([]);
 const stageLabel = ref('Initializing...');
 const errorMessage = ref('');
 const xlsxDownloadUrl = ref('');
@@ -254,8 +255,6 @@ const text = computed(() => reviewText(activeLanguage.value));
 const renderedReport = computed(() => {
   return reportContent.value ? renderMarkdown(reportContent.value) : '';
 });
-
-const reportTables = computed(() => extractMarkdownTables(reportContent.value));
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -294,12 +293,25 @@ const resetState = () => {
   currentTaskId.value = '';
   evidenceList.value = [];
   reportContent.value = '';
+  summaryTables.value = [];
   xlsxDownloadUrl.value = '';
   stageLabel.value = text.value.initializing;
   errorMessage.value = '';
   streamHandle?.close();
   streamHandle = null;
   cleanupPolling();
+};
+
+const loadSummaryTables = async (taskId: string) => {
+  if (!taskId) {
+    summaryTables.value = [];
+    return;
+  }
+  try {
+    summaryTables.value = await reviewService.getSummaryTables(taskId);
+  } catch {
+    summaryTables.value = [];
+  }
 };
 
 const loadTaskHistory = async () => {
@@ -389,6 +401,7 @@ const handleConfirmEvidence = (request: EvidenceReviewRequest) => {
     },
     onXlsxReady: (downloadUrl: string) => {
       xlsxDownloadUrl.value = downloadUrl;
+      void loadSummaryTables(currentTaskId.value);
     },
     onError: (error: unknown) => {
       stage.value = reportContent.value ? 'completed' : 'inputting';
@@ -398,6 +411,9 @@ const handleConfirmEvidence = (request: EvidenceReviewRequest) => {
       stage.value = 'completed';
       if (!reportContent.value) {
         errorMessage.value = text.value.noReportContent;
+      }
+      if (!summaryTables.value.length) {
+        void loadSummaryTables(currentTaskId.value);
       }
       loadTaskHistory();
     },
@@ -459,9 +475,15 @@ const handleDirectSubmit = () => {
       if (!reportContent.value) {
         errorMessage.value = text.value.noReportContent;
       }
+      if (streamHandle?.taskId) {
+        currentTaskId.value = streamHandle.taskId;
+        xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(streamHandle.taskId);
+        void loadSummaryTables(streamHandle.taskId);
+      }
       loadTaskHistory();
     },
   });
+  currentTaskId.value = streamHandle.taskId ?? '';
 };
 
 const handleAsyncSubmit = async () => {
@@ -553,6 +575,7 @@ const loadTask = async (taskId: string) => {
       reportContent.value = task.reportMarkdown;
       stage.value = 'completed';
       xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
+      await loadSummaryTables(taskId);
     } else if (task.status === 'AWAITING_USER') {
       if (task.stage === 'RERANKING') {
         scopePreview.value = await reviewService.getScopePreview(taskId);
@@ -587,6 +610,7 @@ const pollTask = (taskId: string) => {
           reportContent.value = task.reportMarkdown;
           question.value = task.question;
           xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
+          await loadSummaryTables(taskId);
         }
         stage.value = 'completed';
       } else if (task.status === 'AWAITING_USER') {

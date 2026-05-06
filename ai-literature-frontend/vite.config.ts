@@ -9,6 +9,14 @@ const appBasePath = process.env.VITE_APP_BASE_PATH || '/'
 // https://vite.dev/config/
 export default defineConfig({
   base: appBasePath,
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     vue(),
     vueDevTools(),

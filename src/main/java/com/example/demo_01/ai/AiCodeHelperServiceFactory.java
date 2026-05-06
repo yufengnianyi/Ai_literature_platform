@@ -36,7 +36,6 @@ public class AiCodeHelperServiceFactory {
                         .chatMemoryStore(persistentChatMemoryStore)
                         .build())
                 .contentRetriever(ragContentRetriever)
-                //.tools(new InterviewQuestionTool())
                 .build();
     }
 }

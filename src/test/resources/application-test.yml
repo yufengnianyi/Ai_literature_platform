@@ -6,7 +6,6 @@ app:
   ai:
     rag:
       embedding-dimension: 1024
-      bootstrap-mode: skip
 langchain4j:
   community:
     dashscope:

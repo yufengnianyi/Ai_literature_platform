@@ -19,7 +19,6 @@ RUN apk add --no-cache wget
 WORKDIR /app
 
 COPY --from=build /workspace/target/demo_01-0.0.1-SNAPSHOT.jar /app/app.jar
-COPY --from=build /workspace/src/main/resources/docs /app/data/docs
 
 EXPOSE 8081
 

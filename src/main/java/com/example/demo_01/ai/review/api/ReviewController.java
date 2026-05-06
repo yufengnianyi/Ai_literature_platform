@@ -121,6 +121,17 @@ public class ReviewController {
         return ResultUtils.success(reviewRepository.findEvidenceByTask(taskId));
     }
 
+    @GetMapping("/tasks/{taskId}/summary-tables")
+    public BaseResponse<List<ReviewSummaryTable>> getSummaryTables(@PathVariable UUID taskId,
+                                                                   HttpServletRequest httpRequest) {
+        userService.getLoginUser(httpRequest);
+        ReviewTaskRecord task = reviewRepository.findTask(taskId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
+                        "Review task not found: " + taskId));
+        List<ReviewEvidenceRecord> evidence = reviewRepository.findEvidenceByTask(taskId);
+        return ResultUtils.success(reviewXlsxService.buildSummaryTables(task, evidence));
+    }
+
     // ── Interactive checkpoint endpoints ──
 
     @PostMapping("/tasks/{taskId}/retrieve")

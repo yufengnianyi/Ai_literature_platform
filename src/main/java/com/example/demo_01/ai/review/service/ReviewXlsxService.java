@@ -2,6 +2,7 @@ package com.example.demo_01.ai.review.service;
 
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewSummaryTable;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskRecord;
 import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
 import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
@@ -9,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.IndexedColors;
@@ -18,6 +20,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,6 +60,52 @@ public class ReviewXlsxService {
             log.error("Failed to generate xlsx for task {}", task.taskId(), e);
             throw new RuntimeException("Failed to generate xlsx", e);
         }
+    }
+
+    public List<ReviewSummaryTable> buildSummaryTables(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords) {
+        byte[] xlsxBytes = generateXlsx(task, evidenceRecords);
+        DataFormatter formatter = new DataFormatter();
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsxBytes))) {
+            List<ReviewSummaryTable> tables = new ArrayList<>();
+            for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
+                Sheet sheet = workbook.getSheetAt(sheetIndex);
+                Row headerRow = sheet.getRow(0);
+                List<String> headers = new ArrayList<>();
+                if (headerRow != null) {
+                    for (int column = 0; column < headerRow.getLastCellNum(); column++) {
+                        headers.add(formatter.formatCellValue(headerRow.getCell(column)));
+                    }
+                }
+
+                List<List<String>> rows = new ArrayList<>();
+                for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                    Row row = sheet.getRow(rowIndex);
+                    if (row == null) {
+                        continue;
+                    }
+                    List<String> values = new ArrayList<>();
+                    boolean hasValue = false;
+                    for (int column = 0; column < headers.size(); column++) {
+                        String value = formatter.formatCellValue(row.getCell(column));
+                        values.add(value);
+                        hasValue = hasValue || !value.isBlank();
+                    }
+                    if (hasValue) {
+                        rows.add(values);
+                    }
+                }
+
+                tables.add(new ReviewSummaryTable(sheetId(sheet.getSheetName()), sheet.getSheetName(), headers, rows));
+            }
+            return tables;
+        } catch (IOException e) {
+            log.error("Failed to build summary tables for task {}", task.taskId(), e);
+            throw new RuntimeException("Failed to build summary tables", e);
+        }
+    }
+
+    private String sheetId(String sheetName) {
+        return sheetName.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
 
     private void createCompoundActivitySheet(Workbook workbook, CellStyle headerStyle,

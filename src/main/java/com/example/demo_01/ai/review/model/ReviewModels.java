@@ -493,6 +493,14 @@ public final class ReviewModels {
     ) {
     }
 
+    public record ReviewSummaryTable(
+            String id,
+            String title,
+            List<String> headers,
+            List<List<String>> rows
+    ) {
+    }
+
     // ── Checkpoint requests ──
 
     public record CandidateReviewRequest(

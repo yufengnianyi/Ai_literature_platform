@@ -3,6 +3,7 @@ package com.example.demo_01.ai.review;
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewStage;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewSummaryTable;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskMetrics;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskRecord;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskStatus;
@@ -104,7 +105,23 @@ class ReviewXlsxServiceTest {
                 "CONSISTENT"
         );
 
-        byte[] bytes = service.generateXlsx(task, List.of(evidence, derivativeEvidence));
+        List<ReviewEvidenceRecord> evidenceRecords = List.of(evidence, derivativeEvidence);
+        List<ReviewSummaryTable> summaryTables = service.buildSummaryTables(task, evidenceRecords);
+        assertEquals(List.of(
+                "Compound Activity Summary",
+                "Gene-Protein Summary",
+                "Process-Pathway Summary",
+                "Stage Summary",
+                "Species Summary",
+                "Method Summary",
+                "Concept Summary"
+        ), summaryTables.stream().map(ReviewSummaryTable::title).toList());
+        assertEquals("cinnamaldehyde (derivatives: alpha-methylcinnamaldehyde)",
+                summaryTables.get(0).rows().get(0).get(0));
+        assertEquals("EC50 = 120 mg/L; 菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth",
+                summaryTables.get(0).rows().get(0).get(3));
+
+        byte[] bytes = service.generateXlsx(task, evidenceRecords);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
             assertNotNull(workbook.getSheet("Gene-Protein Summary"));
             assertNotNull(workbook.getSheet("Stage Summary"));
