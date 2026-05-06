@@ -1,15 +1,15 @@
 <template>
   <div class="review-page">
     <div class="review-header">
-      <h2>Systematic Review Report</h2>
-      <p class="subtitle">Enter a research question to generate a comprehensive systematic review report</p>
+      <h2>{{ text.pageTitle }}</h2>
+      <p class="subtitle">{{ text.pageSubtitle }}</p>
     </div>
 
     <!-- Stage: Input -->
     <div class="input-section" v-if="stage === 'inputting'">
       <a-textarea
         v-model:value="question"
-        placeholder="Enter your research question, e.g.: What is the evolutionary origin and diversification pattern of the LRR-RLK gene family across land plants?"
+        :placeholder="text.questionPlaceholder"
         :rows="4"
         :maxlength="2000"
         show-count
@@ -24,13 +24,13 @@
           @click="handleAnalyze"
         >
           <ThunderboltOutlined />
-          Analyze & Configure
+          {{ text.analyze }}
         </a-button>
         <a-button size="large" @click="handleDirectSubmit" :disabled="!question.trim()" :loading="isAnalyzing">
-          Quick Generate (Skip Config)
+          {{ text.quickGenerate }}
         </a-button>
         <a-button size="large" @click="handleAsyncSubmit" :disabled="!question.trim()" :loading="isAnalyzing">
-          Submit (Background)
+          {{ text.submitBackground }}
         </a-button>
       </div>
     </div>
@@ -41,11 +41,11 @@
         <div class="progress-info">
           <a-spin size="large" />
           <div class="progress-text">
-            <h3>Analyzing Question...</h3>
-            <p class="stage-text">Decomposing your question into sub-questions, entities, and concepts</p>
+            <h3>{{ text.analyzingTitle }}</h3>
+            <p class="stage-text">{{ text.analyzingText }}</p>
           </div>
         </div>
-        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">{{ text.cancel }}</a-button>
       </a-card>
     </div>
 
@@ -54,6 +54,7 @@
       <ReviewScopePanel
         :preview="scopePreview"
         :original-question="question"
+        :language-code="activeLanguage"
         mode="analysis"
         @confirm-analysis="handleConfirmAndRetrieve"
         @cancel="handleBackToInput"
@@ -66,11 +67,11 @@
         <div class="progress-info">
           <a-spin size="large" />
           <div class="progress-text">
-            <h3>Retrieving & Reranking Literature...</h3>
+            <h3>{{ text.retrievingTitle }}</h3>
             <p class="stage-text">{{ stageLabel }}</p>
           </div>
         </div>
-        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">{{ text.cancel }}</a-button>
       </a-card>
     </div>
 
@@ -79,6 +80,7 @@
       <ReviewScopePanel
         :preview="scopePreview"
         :original-question="question"
+        :language-code="activeLanguage"
         mode="candidate"
         @confirm-candidates="handleConfirmCandidates"
         @cancel="handleBackToInput"
@@ -91,11 +93,11 @@
         <div class="progress-info">
           <a-spin size="large" />
           <div class="progress-text">
-            <h3>Extracting & Fusing Evidence...</h3>
+            <h3>{{ text.extractingTitle }}</h3>
             <p class="stage-text">{{ stageLabel }}</p>
           </div>
         </div>
-        <a-button danger @click="handleBackToInput" style="margin-top: 16px">Cancel</a-button>
+        <a-button danger @click="handleBackToInput" style="margin-top: 16px">{{ text.cancel }}</a-button>
       </a-card>
     </div>
 
@@ -103,7 +105,7 @@
     <div class="confirming-section" v-if="stage === 'reviewingEvidence' && evidenceList.length > 0">
       <EvidenceReviewPanel
         :evidence="evidenceList"
-        :language-code="reviewLanguageCode"
+        :language-code="activeLanguage"
         @confirm="handleConfirmEvidence"
         @cancel="handleBackToInput"
       />
@@ -115,27 +117,28 @@
         <div class="progress-info">
           <a-spin size="large" />
           <div class="progress-text">
-            <h3>Generating Report...</h3>
+            <h3>{{ text.generatingTitle }}</h3>
             <p class="stage-text">{{ stageLabel }}</p>
           </div>
         </div>
-        <a-button danger @click="handleCancel" style="margin-top: 16px">Cancel</a-button>
+        <a-button danger @click="handleCancel" style="margin-top: 16px">{{ text.cancel }}</a-button>
       </a-card>
     </div>
 
     <!-- Stage: Completed / Report Display -->
     <div class="report-section" v-if="reportContent">
       <div class="report-toolbar">
-        <a-button @click="handleNewReport">New Report</a-button>
+        <a-button @click="handleNewReport">{{ text.newReport }}</a-button>
         <a-button @click="handleCopyReport">
           <CopyOutlined />
-          Copy Markdown
+          {{ text.copyMarkdown }}
         </a-button>
         <a-button v-if="xlsxDownloadUrl" type="primary" ghost @click="handleDownloadXlsx">
           <FileExcelOutlined />
-          Download Summary Table (xlsx)
+          {{ text.downloadXlsx }}
         </a-button>
       </div>
+      <ReviewTablePreview :tables="reportTables" :language="activeLanguage" />
       <a-card class="report-card">
         <div class="report-content markdown-body" v-html="renderedReport"></div>
       </a-card>
@@ -143,11 +146,11 @@
 
     <!-- Task History -->
     <div class="history-section" v-if="stage === 'inputting'">
-      <h3>Recent Tasks</h3>
+      <h3>{{ text.recentTasks }}</h3>
       <a-list
         :data-source="taskHistory"
         :loading="loadingHistory"
-        :locale="{ emptyText: 'No review tasks yet. Submit a question above to get started.' }"
+        :locale="{ emptyText: text.emptyTasks }"
       >
         <template #renderItem="{ item }">
           <a-list-item class="task-item">
@@ -164,12 +167,12 @@
               </template>
             </a-list-item-meta>
             <template #actions>
-              <a-tooltip v-if="item.status === 'FAILED'" title="Retry">
+              <a-tooltip v-if="item.status === 'FAILED'" :title="text.retry">
                 <a-button type="text" size="small" @click.stop="handleRetry(item)">
                   <template #icon><ReloadOutlined /></template>
                 </a-button>
               </a-tooltip>
-              <a-tooltip title="Delete">
+              <a-tooltip :title="text.delete">
                 <a-button type="text" danger size="small" @click.stop="handleDelete(item)">
                   <template #icon><DeleteOutlined /></template>
                 </a-button>
@@ -207,8 +210,16 @@ import {
   type EvidenceReviewRequest,
 } from '@/services/review';
 import { renderMarkdown } from '@/utils/markdown';
+import {
+  detectReviewLanguage,
+  extractMarkdownTables,
+  reviewText,
+  translateReviewStage,
+  translateReviewStatus,
+} from '@/utils/reviewPresentation';
 import ReviewScopePanel from '@/components/review/ReviewScopePanel.vue';
 import EvidenceReviewPanel from '@/components/review/EvidenceReviewPanel.vue';
+import ReviewTablePreview from '@/components/review/ReviewTablePreview.vue';
 
 type ReviewStage =
   | 'inputting'
@@ -237,9 +248,14 @@ const loadingHistory = ref(false);
 let streamHandle: ReviewStreamHandle | null = null;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
+const activeLanguage = computed(() => detectReviewLanguage(reviewLanguageCode.value, question.value));
+const text = computed(() => reviewText(activeLanguage.value));
+
 const renderedReport = computed(() => {
   return reportContent.value ? renderMarkdown(reportContent.value) : '';
 });
+
+const reportTables = computed(() => extractMarkdownTables(reportContent.value));
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -253,8 +269,7 @@ const statusColor = (status: string) => {
 };
 
 const statusLabel = (task: ReviewTaskRecord) => {
-  if (task.status === 'AWAITING_USER') return 'Awaiting your review';
-  return task.status;
+  return translateReviewStatus(task.status, activeLanguage.value);
 };
 
 const formatTime = (iso: string) => {
@@ -280,7 +295,7 @@ const resetState = () => {
   evidenceList.value = [];
   reportContent.value = '';
   xlsxDownloadUrl.value = '';
-  stageLabel.value = 'Initializing...';
+  stageLabel.value = text.value.initializing;
   errorMessage.value = '';
   streamHandle?.close();
   streamHandle = null;
@@ -322,7 +337,7 @@ const handleAnalyze = async () => {
 
 const handleConfirmAndRetrieve = async (request: ReviewGenerateRequest) => {
   stage.value = 'retrieving';
-  stageLabel.value = 'Expanding queries & retrieving literature...';
+  stageLabel.value = text.value.expandingQueries;
   errorMessage.value = '';
   const taskId = crypto.randomUUID();
   currentTaskId.value = taskId;
@@ -343,7 +358,7 @@ const handleConfirmAndRetrieve = async (request: ReviewGenerateRequest) => {
 
 const handleConfirmCandidates = async (request: CandidateReviewRequest) => {
   stage.value = 'extracting';
-  stageLabel.value = 'Extracting evidence from selected literature...';
+  stageLabel.value = text.value.extractingEvidence;
   errorMessage.value = '';
 
   try {
@@ -363,13 +378,13 @@ const handleConfirmEvidence = (request: EvidenceReviewRequest) => {
   stage.value = 'generating';
   reportContent.value = '';
   xlsxDownloadUrl.value = '';
-  stageLabel.value = 'Generating report with your guidance...';
+  stageLabel.value = text.value.reportGuidanceGenerating;
 
   streamHandle = reviewService.startGeneration({
     taskId: currentTaskId.value,
     request,
     onMessage: (data: string) => {
-      stageLabel.value = 'Generating report...';
+      stageLabel.value = text.value.reportGenerating;
       reportContent.value += data;
     },
     onXlsxReady: (downloadUrl: string) => {
@@ -382,7 +397,7 @@ const handleConfirmEvidence = (request: EvidenceReviewRequest) => {
     onComplete: () => {
       stage.value = 'completed';
       if (!reportContent.value) {
-        errorMessage.value = 'No report content received';
+        errorMessage.value = text.value.noReportContent;
       }
       loadTaskHistory();
     },
@@ -401,7 +416,7 @@ const pollForCheckpoint = (
   pollInterval = setInterval(async () => {
     try {
       const task = await reviewService.getTask(taskId);
-      stageLabel.value = task.stage ?? 'Processing...';
+      stageLabel.value = translateReviewStage(task.stage, activeLanguage.value);
 
       if (task.status === 'AWAITING_USER' && task.stage === expectedStage) {
         cleanupPolling();
@@ -415,7 +430,7 @@ const pollForCheckpoint = (
     } catch {
       cleanupPolling();
       stage.value = 'inputting';
-      errorMessage.value = 'Lost connection to server';
+      errorMessage.value = text.value.connectionLost;
     }
   }, 3000);
 };
@@ -427,12 +442,12 @@ const handleDirectSubmit = () => {
   stage.value = 'generating';
   reportContent.value = '';
   xlsxDownloadUrl.value = '';
-  stageLabel.value = 'Analyzing question...';
+  stageLabel.value = text.value.analyzingQuestion;
 
   streamHandle = reviewService.streamReport({
     question: question.value,
     onMessage: (data: string) => {
-      stageLabel.value = 'Generating report...';
+      stageLabel.value = text.value.reportGenerating;
       reportContent.value += data;
     },
     onError: (error: unknown) => {
@@ -442,7 +457,7 @@ const handleDirectSubmit = () => {
     onComplete: () => {
       stage.value = 'completed';
       if (!reportContent.value) {
-        errorMessage.value = 'No report content received';
+        errorMessage.value = text.value.noReportContent;
       }
       loadTaskHistory();
     },
@@ -454,10 +469,10 @@ const handleAsyncSubmit = async () => {
   isAnalyzing.value = true;
   try {
     const result = await reviewService.submitTask(question.value);
-    message.success(`Task submitted: ${result.taskId}`);
+    message.success(`${text.value.taskSubmitted}: ${result.taskId}`);
     await loadTaskHistory();
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : 'Submit failed';
+    errorMessage.value = e instanceof Error ? e.message : text.value.submitFailed;
   } finally {
     isAnalyzing.value = false;
   }
@@ -486,9 +501,9 @@ const handleNewReport = () => {
 const handleCopyReport = async () => {
   try {
     await navigator.clipboard.writeText(reportContent.value);
-    message.success('Report copied to clipboard');
+    message.success(text.value.copied);
   } catch {
-    message.error('Copy failed');
+    message.error(text.value.copyFailed);
   }
 };
 
@@ -500,17 +515,17 @@ const handleDownloadXlsx = () => {
 
 const handleDelete = (task: ReviewTaskRecord) => {
   Modal.confirm({
-    title: 'Delete Task',
-    content: `Are you sure you want to delete this task? This action cannot be undone.`,
-    okText: 'Delete',
+    title: text.value.deleteTaskTitle,
+    content: text.value.deleteTaskContent,
+    okText: text.value.delete,
     okType: 'danger',
     async onOk() {
       try {
         await reviewService.deleteTask(task.taskId);
-        message.success('Task deleted');
+        message.success(text.value.taskDeleted);
         await loadTaskHistory();
       } catch {
-        message.error('Failed to delete task');
+        message.error(text.value.taskDeleteFailed);
       }
     },
   });
@@ -519,11 +534,11 @@ const handleDelete = (task: ReviewTaskRecord) => {
 const handleRetry = async (task: ReviewTaskRecord) => {
   try {
     await reviewService.retryTask(task.taskId);
-    message.success('Task resubmitted');
+    message.success(text.value.taskResubmitted);
     await loadTaskHistory();
     pollTask(task.taskId);
   } catch (e) {
-    message.error(e instanceof Error ? e.message : 'Failed to retry task');
+    message.error(e instanceof Error ? e.message : text.value.retryFailed);
   }
 };
 
@@ -548,24 +563,24 @@ const loadTask = async (taskId: string) => {
         stage.value = 'reviewingEvidence';
       }
     } else if (task.status === 'RUNNING' || task.status === 'QUEUED') {
-      message.info('Task is still running, please wait...');
+      message.info(text.value.taskRunning);
       pollTask(taskId);
     } else {
-      message.warning('Report not available');
+      message.warning(text.value.reportUnavailable);
     }
   } catch {
-    message.error('Failed to load task');
+    message.error(text.value.loadTaskFailed);
   }
 };
 
 const pollTask = (taskId: string) => {
   stage.value = 'generating';
-  stageLabel.value = 'Processing...';
+  stageLabel.value = text.value.processing;
   cleanupPolling();
   pollInterval = setInterval(async () => {
     try {
       const task = await reviewService.getTask(taskId);
-      stageLabel.value = task.stage ?? 'Processing...';
+      stageLabel.value = translateReviewStage(task.stage, activeLanguage.value);
       if (task.status === 'COMPLETED') {
         cleanupPolling();
         if (task.reportMarkdown) {

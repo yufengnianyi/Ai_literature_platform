@@ -6,6 +6,7 @@ import {
   prepareCitations,
   splitMarkdownStream,
 } from '../markdown.ts';
+import { extractMarkdownTables } from '../reviewPresentation.ts';
 import { normalizeSourcesPayload } from '../sources.ts';
 
 const headingNormalized = normalizeMarkdownSyntax('###Heading');
@@ -25,6 +26,16 @@ assert.equal(paragraphWithList, 'Summary line\n\n- Item A\n- Item B');
 
 const paragraphWithTable = normalizeMarkdownSyntax('Summary line\n| col | value |\n| --- | --- |\n| a | b |');
 assert.equal(paragraphWithTable, 'Summary line\n\n| col | value |\n| --- | --- |\n| a | b |');
+
+const extractedTables = extractMarkdownTables('Intro\n\n| col | value |\n| --- | --- |\n| a | b |\n| c | d |');
+assert.deepEqual(extractedTables, [
+  {
+    id: 'table-1',
+    title: 'Table 1',
+    headers: ['col', 'value'],
+    rows: [['a', 'b'], ['c', 'd']],
+  },
+]);
 
 const fenceStreamingState = splitMarkdownStream('```ts\nconst a = 1\n');
 assert.equal(fenceStreamingState.stableContent, '');

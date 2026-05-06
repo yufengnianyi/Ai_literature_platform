@@ -5,26 +5,18 @@
         <AuditOutlined />
       </div>
       <div class="panel-title">
-        <h3>{{ isChinese ? '证据综合审阅' : 'Evidence Synthesis Review' }}</h3>
-        <p class="panel-subtitle">
-          {{ isChinese
-            ? `已抽取 ${evidence.length} 条证据，并归入 ${subQuestionGroups.length} 个子问题。生成报告前请审阅。`
-            : `${evidence.length} evidence items extracted, grouped into ${subQuestionGroups.length} sub-questions. Review and adjust before report generation.` }}
-        </p>
+        <h3>{{ labels.title }}</h3>
+        <p class="panel-subtitle">{{ labels.subtitle(evidence.length, subQuestionGroups.length) }}</p>
       </div>
     </div>
 
     <a-divider style="margin: 16px 0" />
 
     <div class="evidence-groups">
-      <div
-        v-for="(group, gi) in subQuestionGroups"
-        :key="gi"
-        class="evidence-group"
-      >
+      <div v-for="(group, gi) in subQuestionGroups" :key="gi" class="evidence-group">
         <div class="group-header">
           <div class="group-title">
-            <span class="group-number">{{ isChinese ? '子问题' : 'Sub-question' }} {{ gi + 1 }}:</span>
+            <span class="group-number">{{ labels.subQuestion }} {{ gi + 1 }}:</span>
             {{ group.subQuestion }}
           </div>
           <a-button
@@ -33,7 +25,7 @@
             @click="toggleFocus(group.subQuestion)"
           >
             <AimOutlined />
-            {{ focusedSubQuestions.has(group.subQuestion) ? (isChinese ? '已聚焦' : 'Focused') : (isChinese ? '聚焦' : 'Focus') }}
+            {{ focusedSubQuestions.has(group.subQuestion) ? labels.focused : labels.focus }}
           </a-button>
         </div>
 
@@ -49,21 +41,17 @@
                 :checked="!excludedIds.has(item.id)"
                 @change="(e: any) => toggleExclude(item.id, !e.target.checked)"
               />
-              <a-tag
-                v-if="item.consistency"
-                :color="consistencyColor(item.consistency)"
-                class="consistency-tag"
-              >
-                {{ item.consistency }}
+              <a-tag v-if="item.consistency" :color="consistencyColor(item.consistency)" class="consistency-tag">
+                {{ consistencyLabel(item.consistency) }}
               </a-tag>
-              <span class="evidence-claim">{{ item.claim || (isChinese ? '无 claim' : 'No claim') }}</span>
-              <span class="evidence-confidence">
-                {{ (item.confidence * 100).toFixed(0) }}%
-              </span>
+              <span class="evidence-claim">{{ item.claim || labels.noClaim }}</span>
+              <span class="evidence-confidence">{{ (item.confidence * 100).toFixed(0) }}%</span>
             </div>
+
             <div class="evidence-finding" v-if="item.finding">
-              <strong>{{ isChinese ? '发现（英文规范化）:' : 'Finding:' }}</strong> {{ item.finding }}
+              <strong>{{ labels.finding }}</strong> {{ item.finding }}
             </div>
+
             <div class="evidence-meta">
               <span v-if="item.methodology" class="meta-item">
                 <ExperimentOutlined /> {{ item.methodology }}
@@ -72,11 +60,13 @@
                 <TagOutlined /> {{ item.evidenceType }}
               </span>
             </div>
+
             <div class="evidence-entities" v-if="item.entities && item.entities.length > 0">
               <a-tag v-for="entity in item.entities" :key="entity" size="small" color="cyan">
                 {{ entity }}
               </a-tag>
             </div>
+
             <div class="compound-resolution" v-if="compoundResolutionDetails(item).length">
               <a-tag
                 v-for="detail in compoundResolutionDetails(item)"
@@ -87,21 +77,22 @@
                 {{ detail }}
               </a-tag>
             </div>
+
             <a-collapse :bordered="false" class="text-preview-collapse">
-              <a-collapse-panel key="text" :header="isChinese ? '原文证据' : 'Original Text'">
-                <p class="original-text">{{ item.originalText || (isChinese ? '暂无原文' : 'No text available') }}</p>
+              <a-collapse-panel key="text" :header="labels.originalText">
+                <p class="original-text">{{ item.originalText || labels.noText }}</p>
               </a-collapse-panel>
             </a-collapse>
           </div>
         </div>
 
         <div class="group-stats">
-          <a-tag color="green">{{ group.includedCount }} included</a-tag>
-          <a-tag color="red">{{ group.excludedCount }} excluded</a-tag>
+          <a-tag color="green">{{ group.includedCount }} {{ labels.included }}</a-tag>
+          <a-tag color="red">{{ group.excludedCount }} {{ labels.excluded }}</a-tag>
         </div>
       </div>
 
-      <a-empty v-if="subQuestionGroups.length === 0" :description="isChinese ? '暂无证据' : 'No evidence available'" />
+      <a-empty v-if="subQuestionGroups.length === 0" :description="labels.noEvidence" />
     </div>
 
     <a-divider style="margin: 16px 0" />
@@ -109,11 +100,11 @@
     <div class="guidance-section">
       <div class="section-label">
         <EditOutlined />
-        <span>{{ isChinese ? '报告补充要求（可选）' : 'Report Guidance (optional)' }}</span>
+        <span>{{ labels.guidance }}</span>
       </div>
       <a-textarea
         v-model:value="userGuidance"
-        :placeholder="isChinese ? '补充你希望报告重点关注的内容' : `Provide specific instructions for the report, e.g., 'Focus on the expansion mechanisms of the LRR-XII subfamily'`"
+        :placeholder="labels.guidancePlaceholder"
         :rows="3"
         :maxlength="1000"
         show-count
@@ -122,22 +113,18 @@
 
     <div class="summary-bar">
       <span>
-        <a-tag color="green">{{ totalIncluded }} {{ isChinese ? '条证据纳入' : 'evidence included' }}</a-tag>
-        <a-tag color="red">{{ excludedIds.size }} {{ isChinese ? '条排除' : 'user-excluded' }}</a-tag>
-        <a-tag color="blue">{{ focusedSubQuestions.size }} {{ isChinese ? '个聚焦问题' : 'sub-questions focused' }}</a-tag>
+        <a-tag color="green">{{ totalIncluded }} {{ labels.evidenceIncluded }}</a-tag>
+        <a-tag color="red">{{ excludedIds.size }} {{ labels.userExcluded }}</a-tag>
+        <a-tag color="blue">{{ focusedSubQuestions.size }} {{ labels.focusedQuestions }}</a-tag>
       </span>
     </div>
 
     <div class="panel-actions">
-      <a-button @click="$emit('cancel')">{{ isChinese ? '返回' : 'Back' }}</a-button>
+      <a-button @click="$emit('cancel')">{{ labels.back }}</a-button>
       <div class="spacer" />
-      <a-button
-        type="primary"
-        :disabled="totalIncluded === 0"
-        @click="handleConfirm"
-      >
+      <a-button type="primary" :disabled="totalIncluded === 0" @click="handleConfirm">
         <ThunderboltOutlined />
-        {{ isChinese ? '生成报告' : 'Generate Report' }}
+        {{ labels.generate }}
       </a-button>
     </div>
   </div>
@@ -170,6 +157,50 @@ const focusedSubQuestions = ref<Set<string>>(new Set());
 const userGuidance = ref('');
 const isChinese = computed(() => props.languageCode === 'zh');
 
+const labels = computed(() => isChinese.value ? {
+  title: '证据综合审阅',
+  subtitle: (evidenceCount: number, groupCount: number) =>
+    `已抽取 ${evidenceCount} 条证据，并归入 ${groupCount} 个子问题。生成报告前请审阅。`,
+  subQuestion: '子问题',
+  focused: '已聚焦',
+  focus: '聚焦',
+  noClaim: '暂无 claim',
+  finding: '发现：',
+  originalText: '原文证据',
+  noText: '暂无原文',
+  included: '条纳入',
+  excluded: '条排除',
+  noEvidence: '暂无证据',
+  guidance: '报告补充要求（可选）',
+  guidancePlaceholder: '补充你希望报告重点关注的内容',
+  evidenceIncluded: '条证据纳入',
+  userExcluded: '条排除',
+  focusedQuestions: '个聚焦问题',
+  back: '返回',
+  generate: '生成报告',
+} : {
+  title: 'Evidence Synthesis Review',
+  subtitle: (evidenceCount: number, groupCount: number) =>
+    `${evidenceCount} evidence items extracted, grouped into ${groupCount} sub-questions. Review and adjust before report generation.`,
+  subQuestion: 'Sub-question',
+  focused: 'Focused',
+  focus: 'Focus',
+  noClaim: 'No claim',
+  finding: 'Finding:',
+  originalText: 'Original Text',
+  noText: 'No text available',
+  included: 'included',
+  excluded: 'excluded',
+  noEvidence: 'No evidence available',
+  guidance: 'Report Guidance (optional)',
+  guidancePlaceholder: `Provide specific instructions for the report, e.g., 'Focus on the expansion mechanisms of the LRR-XII subfamily'`,
+  evidenceIncluded: 'evidence included',
+  userExcluded: 'user-excluded',
+  focusedQuestions: 'sub-questions focused',
+  back: 'Back',
+  generate: 'Generate Report',
+});
+
 interface EvidenceGroup {
   subQuestion: string;
   items: ReviewEvidenceRecord[];
@@ -180,7 +211,7 @@ interface EvidenceGroup {
 const subQuestionGroups = computed<EvidenceGroup[]>(() => {
   const groupMap = new Map<string, ReviewEvidenceRecord[]>();
   for (const item of props.evidence) {
-    const sq = item.subQuestion || 'General';
+    const sq = item.subQuestion || (isChinese.value ? '通用问题' : 'General');
     if (!groupMap.has(sq)) groupMap.set(sq, []);
     groupMap.get(sq)!.push(item);
   }
@@ -194,7 +225,7 @@ const subQuestionGroups = computed<EvidenceGroup[]>(() => {
 });
 
 const totalIncluded = computed(() =>
-  props.evidence.filter(e => !excludedIds.value.has(e.id)).length
+  props.evidence.filter(e => !excludedIds.value.has(e.id)).length,
 );
 
 const consistencyColor = (consistency: string | null) => {
@@ -203,6 +234,16 @@ const consistencyColor = (consistency: string | null) => {
     case 'CONFLICTING': return 'red';
     case 'INSUFFICIENT': return 'orange';
     default: return 'default';
+  }
+};
+
+const consistencyLabel = (consistency: string | null) => {
+  if (!isChinese.value) return consistency;
+  switch (consistency) {
+    case 'CONSISTENT': return '一致';
+    case 'CONFLICTING': return '冲突';
+    case 'INSUFFICIENT': return '证据不足';
+    default: return consistency;
   }
 };
 
@@ -391,13 +432,7 @@ const handleConfirm = () => {
   gap: 4px;
 }
 
-.evidence-entities {
-  margin-top: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
+.evidence-entities,
 .compound-resolution {
   margin-top: 6px;
   display: flex;
@@ -420,20 +455,15 @@ const handleConfirm = () => {
 }
 
 .original-text {
+  margin: 0;
   font-size: 12px;
   line-height: 1.6;
   color: #595959;
   white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 150px;
-  overflow-y: auto;
-  margin: 0;
 }
 
 .group-stats {
-  margin-top: 8px;
-  display: flex;
-  gap: 4px;
+  margin-top: 12px;
 }
 
 .guidance-section {
@@ -443,18 +473,16 @@ const handleConfirm = () => {
 .section-label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 8px;
   font-weight: 500;
-  font-size: 14px;
-  color: #262626;
 }
 
 .summary-bar {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
 }
 
 .panel-actions {

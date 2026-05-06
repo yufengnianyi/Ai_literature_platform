@@ -325,7 +325,10 @@ public final class ReviewModels {
             List<String> selectedSubQuestions,
             List<String> selectedEntities,
             List<String> selectedConcepts,
-            List<String> customSubQuestions
+            List<String> customSubQuestions,
+            String languageCode,
+            String displayMainQuestion,
+            List<String> displaySubQuestions
     ) {
         public QueryAnalysis toFilteredAnalysis() {
             List<String> allSubQuestions = new java.util.ArrayList<>(
@@ -333,11 +336,20 @@ public final class ReviewModels {
             if (customSubQuestions != null) {
                 allSubQuestions.addAll(customSubQuestions);
             }
+            List<String> allDisplaySubQuestions = displaySubQuestions != null
+                    ? new java.util.ArrayList<>(displaySubQuestions)
+                    : null;
+            if (allDisplaySubQuestions != null && customSubQuestions != null) {
+                allDisplaySubQuestions.addAll(customSubQuestions);
+            }
             return new QueryAnalysis(
                     mainQuestion != null ? mainQuestion : question,
                     allSubQuestions,
                     selectedEntities != null ? selectedEntities : List.of(),
-                    selectedConcepts != null ? selectedConcepts : List.of()
+                    selectedConcepts != null ? selectedConcepts : List.of(),
+                    languageCode,
+                    displayMainQuestion,
+                    allDisplaySubQuestions
             );
         }
     }

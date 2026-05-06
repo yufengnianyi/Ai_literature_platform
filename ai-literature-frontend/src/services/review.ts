@@ -81,6 +81,9 @@ export interface ReviewGenerateRequest {
   selectedEntities: string[];
   selectedConcepts: string[];
   customSubQuestions: string[];
+  languageCode?: string | null;
+  displayMainQuestion?: string | null;
+  displaySubQuestions?: string[] | null;
 }
 
 export interface CandidateReviewRequest {

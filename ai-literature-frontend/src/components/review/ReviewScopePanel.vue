@@ -2,23 +2,23 @@
   <div class="scope-panel">
     <div class="scope-header">
       <div>
-        <h3>{{ mode === 'analysis' ? 'Research Scope Preview' : 'Literature Scope Review' }}</h3>
+        <h3>{{ mode === 'analysis' ? labels.analysisTitle : labels.candidateTitle }}</h3>
         <p>
           {{ mode === 'analysis'
-            ? 'Review the questions, entities, and early paper signals before retrieval.'
-            : 'Confirm the questions, entities, and papers that should move into evidence extraction.' }}
+            ? labels.analysisDescription
+            : labels.candidateDescription }}
         </p>
       </div>
-      <a-tag color="blue">{{ selectedQuestionIds.size }} questions</a-tag>
-      <a-tag color="green">{{ selectedEntityIds.size }} entities</a-tag>
-      <a-tag color="purple">{{ selectedDocumentIds.size }} papers</a-tag>
+      <a-tag color="blue">{{ selectedQuestionIds.size }} {{ labels.questions }}</a-tag>
+      <a-tag color="green">{{ selectedEntityIds.size }} {{ labels.entities }}</a-tag>
+      <a-tag color="purple">{{ selectedDocumentIds.size }} {{ labels.papers }}</a-tag>
     </div>
 
     <div class="scope-grid">
       <section class="scope-column">
         <div class="column-title">
           <QuestionCircleOutlined />
-          <span>User Questions</span>
+          <span>{{ labels.userQuestions }}</span>
         </div>
         <div class="option-list">
           <label
@@ -37,7 +37,7 @@
         <a-input
           v-if="mode === 'analysis'"
           v-model:value="customQuestion"
-          placeholder="Add a focused sub-question"
+          :placeholder="labels.addQuestion"
           @pressEnter="addCustomQuestion"
         >
           <template #suffix>
@@ -51,7 +51,7 @@
       <section class="scope-column">
         <div class="column-title">
           <ExperimentOutlined />
-          <span>Related Entities</span>
+          <span>{{ labels.relatedEntities }}</span>
         </div>
         <div class="tag-cloud">
           <a-checkable-tag
@@ -61,7 +61,7 @@
             @change="(checked: boolean) => toggleEntity(entity.id, checked)"
           >
             {{ entity.displayName || entity.canonicalName }}
-            <span class="tag-kind">{{ entity.category }}</span>
+            <span class="tag-kind">{{ categoryLabel(entity.category) }}</span>
           </a-checkable-tag>
         </div>
       </section>
@@ -69,15 +69,15 @@
       <section class="scope-column document-column">
         <div class="column-title">
           <FileSearchOutlined />
-          <span>Literature and Novelty</span>
+          <span>{{ labels.literature }}</span>
         </div>
         <div class="document-toolbar">
           <a-select v-model:value="sortBy" size="small" style="width: 150px">
-            <a-select-option value="score">Score</a-select-option>
-            <a-select-option value="relevance">Relevance</a-select-option>
-            <a-select-option value="title">Title</a-select-option>
+            <a-select-option value="score">{{ labels.score }}</a-select-option>
+            <a-select-option value="relevance">{{ labels.relevance }}</a-select-option>
+            <a-select-option value="title">{{ labels.title }}</a-select-option>
           </a-select>
-          <a-button size="small" @click="selectVisibleDocuments">Select visible</a-button>
+          <a-button size="small" @click="selectVisibleDocuments">{{ labels.selectVisible }}</a-button>
         </div>
         <div class="document-list">
           <article
@@ -91,18 +91,18 @@
                 :checked="selectedDocumentIds.has(document.id)"
                 @change="(event: any) => toggleDocument(document.id, event.target.checked)"
               />
-              <h4>{{ document.title || 'Untitled document' }}</h4>
-              <a-tag :color="relevanceColor(document.relevance)">{{ document.relevance || 'N/A' }}</a-tag>
+              <h4>{{ document.title || labels.untitled }}</h4>
+              <a-tag :color="relevanceColor(document.relevance)">{{ relevanceLabel(document.relevance) }}</a-tag>
             </div>
             <div class="document-meta">
-              <span v-if="document.score !== null">Score {{ document.score.toFixed(2) }}</span>
+              <span v-if="document.score !== null">{{ labels.score }} {{ document.score.toFixed(2) }}</span>
               <a-tag :color="knowledgeColor(document.knowledgeStatus)" class="knowledge-tag">
-                {{ document.knowledgeStatus || 'MISS' }}
+                {{ knowledgeLabel(document.knowledgeStatus) }}
               </a-tag>
               <span v-if="document.relatedEntities.length">{{ document.relatedEntities.slice(0, 4).join(', ') }}</span>
             </div>
             <div v-if="document.compounds?.length" class="mini-section compound-section">
-              <strong>Compounds</strong>
+              <strong>{{ labels.compounds }}</strong>
               <div class="compound-tags">
                 <a-tag v-for="compound in document.compounds.slice(0, 6)" :key="compound">
                   {{ compound }}
@@ -110,34 +110,34 @@
               </div>
             </div>
             <div v-if="document.compoundAliases?.length" class="mini-section">
-              <strong>Alias resolution</strong>
+              <strong>{{ labels.aliasResolution }}</strong>
               <ul>
                 <li v-for="alias in document.compoundAliases.slice(0, 4)" :key="`${alias.localAlias}-${alias.resolutionStatus}`">
                   <span>{{ alias.localAlias }}</span>
-                  <span> -> {{ alias.resolvedName || 'unresolved local label' }}</span>
-                  <a-tag :color="aliasColor(alias.resolutionStatus)">{{ alias.resolutionStatus }}</a-tag>
+                  <span> -> {{ alias.resolvedName || labels.unresolvedAlias }}</span>
+                  <a-tag :color="aliasColor(alias.resolutionStatus)">{{ aliasStatusLabel(alias.resolutionStatus) }}</a-tag>
                 </li>
               </ul>
             </div>
             <div v-if="document.innovationPoints.length" class="mini-section">
-              <strong>Innovation</strong>
+              <strong>{{ labels.innovation }}</strong>
               <ul>
                 <li v-for="item in document.innovationPoints.slice(0, 3)" :key="item">{{ item }}</li>
               </ul>
             </div>
             <div v-if="document.keyFindings.length" class="mini-section">
-              <strong>Key findings</strong>
+              <strong>{{ labels.keyFindings }}</strong>
               <ul>
                 <li v-for="item in document.keyFindings.slice(0, 3)" :key="item">{{ item }}</li>
               </ul>
             </div>
             <a-collapse v-if="document.previewText" :bordered="false" class="preview-collapse">
-              <a-collapse-panel key="preview" header="Preview text">
+              <a-collapse-panel key="preview" :header="labels.previewText">
                 <p>{{ document.previewText }}</p>
               </a-collapse-panel>
             </a-collapse>
           </article>
-          <a-empty v-if="filteredDocuments.length === 0" description="No papers match the current selections" />
+          <a-empty v-if="filteredDocuments.length === 0" :description="labels.noPapers" />
         </div>
       </section>
     </div>
@@ -145,13 +145,13 @@
     <a-divider style="margin: 16px 0" />
 
     <div class="panel-actions">
-      <a-button @click="$emit('cancel')">{{ mode === 'analysis' ? 'Cancel' : 'Back' }}</a-button>
+      <a-button @click="$emit('cancel')">{{ mode === 'analysis' ? labels.cancel : labels.back }}</a-button>
       <div class="spacer" />
-      <a-button @click="selectAll">Select all</a-button>
-      <a-button @click="clearAll">Clear</a-button>
+      <a-button @click="selectAll">{{ labels.selectAll }}</a-button>
+      <a-button @click="clearAll">{{ labels.clear }}</a-button>
       <a-button type="primary" :disabled="selectedQuestionIds.size === 0" @click="confirm">
         <ThunderboltOutlined />
-        {{ mode === 'analysis' ? 'Confirm & Retrieve' : 'Confirm & Extract Evidence' }}
+        {{ mode === 'analysis' ? labels.confirmRetrieve : labels.confirmExtract }}
       </a-button>
     </div>
   </div>
@@ -164,6 +164,7 @@ import type {
   ReviewGenerateRequest,
   ReviewScopePreview,
 } from '@/services/review';
+import { detectReviewLanguage } from '@/utils/reviewPresentation';
 import {
   ExperimentOutlined,
   FileSearchOutlined,
@@ -176,6 +177,7 @@ const props = defineProps<{
   preview: ReviewScopePreview;
   originalQuestion: string;
   mode: 'analysis' | 'candidate';
+  languageCode?: string;
 }>();
 
 const emit = defineEmits<{
@@ -190,6 +192,72 @@ const selectedDocumentIds = ref(new Set<string>());
 const customQuestions = ref<string[]>([]);
 const customQuestion = ref('');
 const sortBy = ref<'score' | 'relevance' | 'title'>('score');
+
+const isChinese = computed(() =>
+  detectReviewLanguage(props.languageCode ?? props.preview.analysis.languageCode, props.originalQuestion) === 'zh',
+);
+
+const labels = computed(() => isChinese.value ? {
+  analysisTitle: '研究范围预览',
+  candidateTitle: '文献范围审阅',
+  analysisDescription: '检索前请审阅子问题、实体和早期文献信号。',
+  candidateDescription: '确认哪些问题、实体和文献应进入证据抽取。',
+  questions: '个问题',
+  entities: '个实体',
+  papers: '篇文献',
+  userQuestions: '用户问题',
+  addQuestion: '添加一个聚焦子问题',
+  relatedEntities: '相关实体',
+  literature: '文献与创新点',
+  score: '评分',
+  relevance: '相关性',
+  title: '标题',
+  selectVisible: '选择当前可见',
+  untitled: '未命名文献',
+  compounds: '化合物',
+  aliasResolution: '别名解析',
+  unresolvedAlias: '未解析的局部标签',
+  innovation: '创新点',
+  keyFindings: '关键发现',
+  previewText: '预览文本',
+  noPapers: '没有符合当前筛选的文献',
+  cancel: '取消',
+  back: '返回',
+  selectAll: '全选',
+  clear: '清空',
+  confirmRetrieve: '确认并检索',
+  confirmExtract: '确认并抽取证据',
+} : {
+  analysisTitle: 'Research Scope Preview',
+  candidateTitle: 'Literature Scope Review',
+  analysisDescription: 'Review the questions, entities, and early paper signals before retrieval.',
+  candidateDescription: 'Confirm the questions, entities, and papers that should move into evidence extraction.',
+  questions: 'questions',
+  entities: 'entities',
+  papers: 'papers',
+  userQuestions: 'User Questions',
+  addQuestion: 'Add a focused sub-question',
+  relatedEntities: 'Related Entities',
+  literature: 'Literature and Novelty',
+  score: 'Score',
+  relevance: 'Relevance',
+  title: 'Title',
+  selectVisible: 'Select visible',
+  untitled: 'Untitled document',
+  compounds: 'Compounds',
+  aliasResolution: 'Alias resolution',
+  unresolvedAlias: 'unresolved local label',
+  innovation: 'Innovation',
+  keyFindings: 'Key findings',
+  previewText: 'Preview text',
+  noPapers: 'No papers match the current selections',
+  cancel: 'Cancel',
+  back: 'Back',
+  selectAll: 'Select all',
+  clear: 'Clear',
+  confirmRetrieve: 'Confirm & Retrieve',
+  confirmExtract: 'Confirm & Extract Evidence',
+});
 
 const resetSelections = () => {
   selectedQuestionIds.value = new Set(props.preview.questions.filter(q => q.selected).map(q => q.id));
@@ -302,6 +370,9 @@ const confirm = () => {
       selectedEntities,
       selectedConcepts,
       customSubQuestions: customQuestions.value,
+      languageCode: props.preview.analysis.languageCode,
+      displayMainQuestion: props.preview.analysis.displayMainQuestion,
+      displaySubQuestions: props.preview.analysis.displaySubQuestions,
     });
     return;
   }
@@ -348,6 +419,47 @@ const aliasColor = (status?: string | null) => {
     case 'UNRESOLVED': return 'red';
     default: return 'default';
   }
+};
+
+const relevanceLabel = (relevance: string | null) => {
+  if (!isChinese.value) return relevance || 'N/A';
+  switch (relevance) {
+    case 'HIGH': return '高相关';
+    case 'MEDIUM': return '中等相关';
+    case 'LOW': return '低相关';
+    case 'IRRELEVANT': return '不相关';
+    default: return '暂无';
+  }
+};
+
+const knowledgeLabel = (status?: string | null) => {
+  if (!isChinese.value) return status || 'MISS';
+  switch (status) {
+    case 'HIT': return '已命中';
+    case 'PARTIAL': return '部分命中';
+    case 'STALE': return '需更新';
+    case 'MISS':
+    case null:
+    case undefined:
+      return '未命中';
+    default:
+      return status;
+  }
+};
+
+const aliasStatusLabel = (status?: string | null) => {
+  if (!isChinese.value) return status || 'UNKNOWN';
+  switch (status) {
+    case 'RESOLVED': return '已解析';
+    case 'AMBIGUOUS': return '有歧义';
+    case 'UNRESOLVED': return '未解析';
+    default: return status || '未知';
+  }
+};
+
+const categoryLabel = (category: string) => {
+  if (!isChinese.value) return category;
+  return category === 'ENTITY' ? '实体' : '概念';
 };
 </script>
 
