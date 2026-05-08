@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -141,6 +142,56 @@ public class HighRecallRetrievalService {
                 map.put(chunkId, candidate);
             }
         }
+    }
+
+    public List<RetrievedChunk> searchWithinDocument(UUID documentId, List<String> queries, int k) {
+        if (documentId == null || queries == null || queries.isEmpty()) {
+            return List.of();
+        }
+        Map<String, RetrievedChunk> candidateMap = new LinkedHashMap<>();
+
+        ContentRetriever denseRetriever = EmbeddingStoreContentRetriever.builder()
+                .embeddingStore(embeddingStore)
+                .embeddingModel(quwenEmbeddingModel)
+                .maxResults(k * 2)
+                .minScore(0.25)
+                .build();
+
+        for (String query : queries) {
+            Query ragQuery = Query.from(query);
+            List<Content> contents = denseRetriever.retrieve(ragQuery);
+            for (Content content : contents) {
+                TextSegment segment = content.textSegment();
+                String chunkDocId = segment.metadata().getString("document_id");
+                if (chunkDocId == null || !documentId.toString().equals(chunkDocId)) {
+                    continue;
+                }
+                String chunkId = segment.metadata().getString("chunk_id");
+                if (chunkId == null || chunkId.isBlank()) {
+                    chunkId = "anon_" + Integer.toHexString(segment.text().hashCode());
+                }
+                String title = segment.metadata().getString("title");
+                String sectionPath = segment.metadata().getString("section_path");
+                Object scoreObj = content.metadata() != null
+                        ? content.metadata().get(dev.langchain4j.rag.content.ContentMetadata.SCORE)
+                        : null;
+                double score = scoreObj instanceof Number number ? number.doubleValue() : 0.0;
+                RetrievedChunk candidate = new RetrievedChunk(
+                        chunkId, documentId, title, segment.text(), sectionPath, score, "DOC_SCOPED_DENSE");
+                RetrievedChunk existing = candidateMap.get(chunkId);
+                if (existing == null || score > existing.score()) {
+                    candidateMap.put(chunkId, candidate);
+                }
+            }
+        }
+
+        List<RetrievedChunk> result = new ArrayList<>(candidateMap.values());
+        result.sort(Comparator.comparingDouble(RetrievedChunk::score).reversed());
+        if (result.size() > k) {
+            result = result.subList(0, k);
+        }
+        log.info("searchWithinDocument: {} results for doc {} from {} queries", result.size(), documentId, queries.size());
+        return result;
     }
 
     private String deriveCorpusGuard(List<String> queries) {

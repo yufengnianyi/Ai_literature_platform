@@ -196,7 +196,8 @@ public class ConversationService {
             return null;
         }
 
-        return new ConversationMessageResponse(rawMessage.seqNo(), role, content, rawMessage.createdAt());
+        String thinking = chatMessage instanceof AiMessage aiMessage ? aiMessage.thinking() : null;
+        return new ConversationMessageResponse(rawMessage.seqNo(), role, content, thinking, rawMessage.createdAt());
     }
 
     private String toFrontendRole(ChatMessageType type) {
@@ -256,7 +257,7 @@ public class ConversationService {
                                        Instant updatedAt) {
     }
 
-    public record ConversationMessageResponse(Long seqNo, String role, String content, Instant createdAt) {
+    public record ConversationMessageResponse(Long seqNo, String role, String content, String thinking, Instant createdAt) {
     }
 
     private record RawConversationMessage(Long seqNo, String messageJson, Instant createdAt) {

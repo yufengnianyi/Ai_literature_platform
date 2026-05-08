@@ -94,11 +94,22 @@ app:
         batch-size: 3
       report:
         max-tokens: 8000
+      reasoning:
+        core-deep-thinking: true
+        core-thinking-budget: 8192
+        standard-deep-thinking: false
+        standard-thinking-budget: 0
+      agent:
+        enabled: false
+        max-iterations-per-compound: 2
+        max-llm-calls-per-paper: 12
+        max-concurrent-papers: 2
+        retriever-k-per-directive: 6
     kg:
       enabled: true
       async-threads: 2
-      entity-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
-      relation-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
+      entity-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen3-max-2026-01-23}
+      relation-model: ${langchain4j.community.dashscope.chat-model.model-name:qwen3-max-2026-01-23}
       schema-version: v1
       entity-confidence-threshold: 0.6
       relation-confidence-threshold: 0.6
@@ -106,7 +117,7 @@ app:
       graph-builder:
         enabled: false
         endpoint:
-        model: ${langchain4j.community.dashscope.chat-model.model-name:qwen-max}
+        model: ${langchain4j.community.dashscope.chat-model.model-name:qwen3-max-2026-01-23}
         batch-size: 1
         max-retries: 2
         connect-timeout-ms: 5000

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Service
 public class QueryExpansionService {
 
-    private static final int MAX_EXPANDED_QUERIES = 24;
+    private static final int MAX_EXPANDED_QUERIES = 36;
 
     private final Map<String, VocabEntry> canonicalIndex = new HashMap<>();
     private final Map<String, String> aliasToCanonical = new HashMap<>();
@@ -131,20 +131,24 @@ public class QueryExpansionService {
         Set<String> stages = new LinkedHashSet<>();
         Set<String> genes = new LinkedHashSet<>();
         Set<String> geneFamilies = new LinkedHashSet<>();
+        Set<String> activityEvidence = new LinkedHashSet<>();
 
         addCategorizedTerms(analysis.keyEntities(), species, "SPECIES");
         addCategorizedTerms(analysis.keyEntities(), genes, "GENE");
         addCategorizedTerms(analysis.keyEntities(), geneFamilies, "GENE_FAMILY");
+        addCategorizedTerms(analysis.keyEntities(), activityEvidence, "ACTIVITY_EVIDENCE");
 
         addCategorizedTerms(analysis.keyConcepts(), processes, "PROCESS");
         addCategorizedTerms(analysis.keyConcepts(), stages, "STAGE");
         addCategorizedTerms(analysis.keyConcepts(), geneFamilies, "GENE_FAMILY");
+        addCategorizedTerms(analysis.keyConcepts(), activityEvidence, "ACTIVITY_EVIDENCE");
 
         addDetectedTerms(analysis.mainQuestion(), species, "SPECIES");
         addDetectedTerms(analysis.mainQuestion(), processes, "PROCESS");
         addDetectedTerms(analysis.mainQuestion(), stages, "STAGE");
         addDetectedTerms(analysis.mainQuestion(), genes, "GENE");
         addDetectedTerms(analysis.mainQuestion(), geneFamilies, "GENE_FAMILY");
+        addDetectedTerms(analysis.mainQuestion(), activityEvidence, "ACTIVITY_EVIDENCE");
 
         if (analysis.subQuestions() != null) {
             for (String subQuestion : analysis.subQuestions()) {
@@ -153,10 +157,11 @@ public class QueryExpansionService {
                 addDetectedTerms(subQuestion, stages, "STAGE");
                 addDetectedTerms(subQuestion, genes, "GENE");
                 addDetectedTerms(subQuestion, geneFamilies, "GENE_FAMILY");
+                addDetectedTerms(subQuestion, activityEvidence, "ACTIVITY_EVIDENCE");
             }
         }
 
-        return new QueryBuckets(species, processes, stages, genes, geneFamilies, looksLikeGeneReview(analysis));
+        return new QueryBuckets(species, processes, stages, genes, geneFamilies, activityEvidence, looksLikeGeneReview(analysis));
     }
 
     private void addCategorizedTerms(List<String> input, Set<String> output, String category) {
@@ -244,6 +249,12 @@ public class QueryExpansionService {
             }
         }
 
+        for (String species : buckets.species()) {
+            for (String activity : buckets.activityEvidence()) {
+                addQuery(queries, joinTerms(species, activity));
+            }
+        }
+
         return new ArrayList<>(queries);
     }
 
@@ -307,6 +318,7 @@ public class QueryExpansionService {
             Set<String> stages,
             Set<String> genes,
             Set<String> geneFamilies,
+            Set<String> activityEvidence,
             boolean geneReview
     ) {}
 

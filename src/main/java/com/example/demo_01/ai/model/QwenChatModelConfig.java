@@ -19,6 +19,8 @@ public class QwenChatModelConfig {
 
     private String api_key;
     private String model_name;
+    private Boolean enable_thinking = false;
+    private Integer thinking_budget = 81920;
     // 从bean中拿到listener对象
     @Resource
     private ChatModelListener chatModelListener;
@@ -27,10 +29,17 @@ public class QwenChatModelConfig {
     public ChatModel myqwenChatModel(RequestService requestBuilder) {
         // 创建一个qwenChatModel对象
         // QwenChatModel是安装LLM依赖中提供的实现接口
-        return QwenChatModel.builder()
+        QwenChatModel model = QwenChatModel.builder()
                 .apiKey(api_key)
                 .modelName(model_name)
                 .listeners(List.of(chatModelListener))
                 .build();
+        model.setGenerationParamCustomizer(builder -> {
+            builder.enableThinking(Boolean.TRUE.equals(enable_thinking));
+            if (thinking_budget != null && thinking_budget > 0) {
+                builder.thinkingBudget(thinking_budget);
+            }
+        });
+        return model;
     }
 }

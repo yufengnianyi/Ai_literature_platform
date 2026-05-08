@@ -10,6 +10,17 @@
         </div>
 
         <template v-else>
+          <a-collapse
+            v-if="message.thinkingContent"
+            ghost
+            class="thinking-collapse"
+            size="small"
+          >
+            <a-collapse-panel key="thinking" header="思考过程">
+              <pre class="thinking-content">{{ message.thinkingContent }}</pre>
+            </a-collapse-panel>
+          </a-collapse>
+
           <div
             class="markdown-content"
             :class="{ 'plaintext-content': parsed.mode === 'plaintext-fallback' }"
@@ -182,6 +193,23 @@ const parsed = computed(() => {
   line-height: 1.7;
   word-break: break-word;
   border: 1px solid #dbe7f5;
+}
+
+.thinking-collapse {
+  margin: -4px 0 10px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+}
+
+.thinking-content {
+  max-height: 240px;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow: auto;
+  color: #78350f;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .user-message .message-content {

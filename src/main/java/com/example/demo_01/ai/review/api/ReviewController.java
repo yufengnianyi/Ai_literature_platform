@@ -129,7 +129,8 @@ public class ReviewController {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
                         "Review task not found: " + taskId));
         List<ReviewEvidenceRecord> evidence = reviewRepository.findEvidenceByTask(taskId);
-        return ResultUtils.success(reviewXlsxService.buildSummaryTables(task, evidence));
+        List<SynthesizedCompoundRecord> synthesized = reviewRepository.findSynthesizedCompoundsByTask(taskId);
+        return ResultUtils.success(reviewXlsxService.buildSummaryTables(task, evidence, synthesized));
     }
 
     // ── Interactive checkpoint endpoints ──
@@ -275,7 +276,8 @@ public class ReviewController {
                         "Review task not found: " + taskId));
 
         List<ReviewEvidenceRecord> evidence = reviewRepository.findEvidenceByTask(taskId);
-        byte[] xlsxBytes = reviewXlsxService.generateXlsx(task, evidence);
+        List<SynthesizedCompoundRecord> synthesized = reviewRepository.findSynthesizedCompoundsByTask(taskId);
+        byte[] xlsxBytes = reviewXlsxService.generateXlsx(task, evidence, synthesized);
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,

@@ -13,16 +13,21 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -52,8 +57,8 @@ public class EvidenceExtractionService {
             "cytotoxicitySafety"
     );
 
-    @Resource(name = "myqwenChatModel")
-    private ChatModel chatModel;
+    @Resource
+    private ReviewReasoningChatClient reasoningChatClient;
 
     @Resource
     private ObjectMapper objectMapper;
@@ -83,6 +88,7 @@ public class EvidenceExtractionService {
                 batch -> extractBatch(mainQuestion, subQuestions, batch, knowledgeContexts),
                 reviewTaskExecutor
         );
+        allEvidence = splitMultiCompoundEvidence(allEvidence);
         log.info("Evidence extraction complete: {} evidence items from {} chunks",
                 allEvidence.size(), chunks.size());
         return allEvidence;
@@ -100,6 +106,10 @@ public class EvidenceExtractionService {
         StringBuilder chunksText = new StringBuilder();
         for (int i = 0; i < batch.size(); i++) {
             RetrievedChunk c = batch.get(i);
+            String chunkText = c.text();
+            if (reviewProperties.getExtraction().isEnableAliasInlineAnnotation()) {
+                chunkText = annotateChunkText(chunkText, c.documentId(), knowledgeContexts);
+            }
             chunksText.append(PromptResources.format(
                     PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_CHUNK,
                     i + 1,
@@ -107,7 +117,7 @@ public class EvidenceExtractionService {
                     c.documentId(),
                     safe(c.documentTitle()),
                     formatKnowledgeContext(c.documentId(), knowledgeContexts),
-                    c.text()));
+                    chunkText));
         }
         userMsg.append(PromptResources.format(
                 PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_USER,
@@ -116,7 +126,7 @@ public class EvidenceExtractionService {
                 chunksText));
 
         try {
-            ChatResponse response = chatModel.chat(
+            ChatResponse response = reasoningChatClient.chatStandard(
                     SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_EXTRACTION_SYSTEM)),
                     UserMessage.from(userMsg.toString())
             );
@@ -188,18 +198,24 @@ public class EvidenceExtractionService {
         }
     }
 
+    private static final java.util.regex.Pattern ROLE_PREFIX = java.util.regex.Pattern.compile("^\\[ROLE:[^\\]]*\\]\\s*");
+
     private ExtractedEvidence normalizeTypedEvidence(ExtractedEvidence evidence) {
         TypedEntities typed = evidence.typedEntities();
         List<String> flattened = flattenTypedEntities(typed);
         if (flattened.isEmpty() && evidence.entities() != null) {
             flattened = evidence.entities();
         }
+        String finding = evidence.finding();
+        if (finding != null) {
+            finding = ROLE_PREFIX.matcher(finding).replaceFirst("");
+        }
         return new ExtractedEvidence(
                 evidence.chunkId(),
                 evidence.documentId(),
                 evidence.documentTitle(),
                 evidence.claim(),
-                evidence.finding(),
+                finding,
                 evidence.methodology(),
                 typed,
                 flattened,
@@ -283,6 +299,80 @@ public class EvidenceExtractionService {
         if (values != null && !values.isEmpty()) {
             out.append(label).append(": ").append(String.join("; ", values)).append("\n");
         }
+    }
+
+    private static final Pattern MULTI_COMPOUND_SPLIT =
+            Pattern.compile("[;,]|\\band\\b|\\b与\\b|\\b和\\b|/");
+
+    private String annotateChunkText(String chunkText, UUID documentId,
+                                      Map<UUID, DocumentKnowledgeContext> knowledgeContexts) {
+        if (chunkText == null || documentId == null || knowledgeContexts == null) return chunkText;
+        DocumentKnowledgeContext ctx = knowledgeContexts.get(documentId);
+        if (ctx == null || ctx.aliasResolutionMap() == null || ctx.aliasResolutionMap().isEmpty()) {
+            return chunkText;
+        }
+        String result = chunkText;
+        Set<String> annotated = new HashSet<>();
+        for (Map.Entry<String, String> entry : ctx.aliasResolutionMap().entrySet()) {
+            String alias = entry.getKey();
+            String canonical = entry.getValue();
+            if (alias.equalsIgnoreCase(canonical) || annotated.contains(alias.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            Pattern p = Pattern.compile("\\b" + Pattern.quote(alias) + "\\b", Pattern.CASE_INSENSITIVE);
+            Matcher m = p.matcher(result);
+            if (m.find()) {
+                result = result.substring(0, m.end()) + " [= " + canonical + "]" + result.substring(m.end());
+                annotated.add(alias.toLowerCase(Locale.ROOT));
+            }
+        }
+        return result;
+    }
+
+    private List<ExtractedEvidence> splitMultiCompoundEvidence(List<ExtractedEvidence> raw) {
+        List<ExtractedEvidence> result = new ArrayList<>();
+        for (ExtractedEvidence ev : raw) {
+            TypedEntities typed = ev.typedEntities();
+            if (typed == null) {
+                result.add(ev);
+                continue;
+            }
+            List<String> canonicals = typed.compoundCanonicalName();
+            List<String> molecules = typed.moleculeOrMetabolite();
+            List<String> names = (canonicals != null && !canonicals.isEmpty()) ? canonicals : molecules;
+            if (names == null || names.size() <= 1) {
+                result.add(ev);
+                continue;
+            }
+            List<String> splitNames = new ArrayList<>();
+            for (String name : names) {
+                String[] parts = MULTI_COMPOUND_SPLIT.split(name);
+                for (String part : parts) {
+                    String trimmed = part.trim();
+                    if (!trimmed.isEmpty()) splitNames.add(trimmed);
+                }
+            }
+            if (splitNames.size() <= 1) {
+                result.add(ev);
+                continue;
+            }
+            for (String compoundName : splitNames) {
+                TypedEntities splitTyped = new TypedEntities(
+                        typed.species(), typed.geneOrProtein(), typed.pathwayOrProcess(),
+                        typed.developmentalStage(), typed.phenotype(), typed.method(),
+                        typed.moleculeOrMetabolite(), typed.compoundStructureType(), typed.compoundSource(),
+                        typed.antimicrobialActivity(), typed.assayMethod(), typed.targetOrganism(),
+                        typed.proposedTarget(), typed.mechanism(), typed.reference(), typed.patentStatus(),
+                        typed.compoundLocalAlias(), List.of(compoundName),
+                        typed.compoundIdentifier(), typed.compoundResolutionStatus(), typed.cytotoxicitySafety());
+                result.add(new ExtractedEvidence(
+                        ev.chunkId(), ev.documentId(), ev.documentTitle(),
+                        ev.claim(), ev.finding(), ev.methodology(),
+                        splitTyped, ev.entities(), ev.evidenceType(),
+                        ev.confidence(), ev.originalText(), ev.subQuestion()));
+            }
+        }
+        return result;
     }
 
     private String extractJson(String raw) {

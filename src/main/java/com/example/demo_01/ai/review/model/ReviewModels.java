@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class ReviewModels {
@@ -279,8 +280,19 @@ public final class ReviewModels {
             List<String> developmentalStages,
             List<String> methods,
             List<String> keyFindings,
-            List<String> innovationPoints
+            List<String> innovationPoints,
+            Map<String, String> aliasResolutionMap
     ) {
+        public DocumentKnowledgeContext(UUID documentId, KnowledgeStatus knowledgeStatus,
+                                        List<DocumentCompoundAlias> compoundAliases, List<String> knownCompounds,
+                                        List<String> species, List<String> genesOrProteins,
+                                        List<String> pathwaysOrProcesses, List<String> developmentalStages,
+                                        List<String> methods, List<String> keyFindings,
+                                        List<String> innovationPoints) {
+            this(documentId, knowledgeStatus, compoundAliases, knownCompounds, species,
+                    genesOrProteins, pathwaysOrProcesses, developmentalStages, methods,
+                    keyFindings, innovationPoints, Map.of());
+        }
     }
 
     // ── Task ──
@@ -544,4 +556,92 @@ public final class ReviewModels {
             String reason
     ) {
     }
+
+    // ── Compound Synthesis (v2+v3) ──
+
+    public enum CompoundRole {
+        SUBJECT, POSITIVE_CONTROL, COMPARATOR, REFERENCE
+    }
+
+    public enum AnchorType {
+        QUANTITATIVE, COMPOUND_DEFINITION
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record KeyMetric(
+            String type,
+            String value,
+            String definition
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AntimicrobialActivityItem(
+            String paradigm,
+            List<String> doseGradient,
+            KeyMetric keyMetric,
+            Boolean doseDependent,
+            String durability,
+            String conditions,
+            String targetOrganism,
+            String observation,
+            String originalQuote
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DoseResponse(
+            String concentration,
+            String effect,
+            String timepoint
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ComparativeRelation(
+            String referenceCompound,
+            String relation,
+            String basis,
+            String derivedEquivalence
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ParadigmActivityBlock(
+            String paradigm,
+            List<DoseResponse> doseGradient,
+            KeyMetric keyMetric,
+            Boolean doseDependent,
+            String durability,
+            String conditions,
+            List<String> targetOrganisms,
+            String observation,
+            List<String> sourceChunkIds,
+            String bestDose,
+            String conclusionPhrase
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SynthesizedCompoundRecord(
+            String compoundName,
+            String documentId,
+            String documentTitle,
+            CompoundRole role,
+            String structureType,
+            String source,
+            List<ParadigmActivityBlock> paradigmActivities,
+            String mechanismSummary,
+            String safetyProfile,
+            List<ComparativeRelation> comparisons,
+            String contextNote,
+            List<String> targetOrganisms,
+            double confidence,
+            String reference,
+            List<String> evidenceChunkIds,
+            List<String> coverageWarnings
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ChunkAnchor(
+            String chunkId,
+            AnchorType type,
+            String reason,
+            List<String> matchedTokens
+    ) {}
 }

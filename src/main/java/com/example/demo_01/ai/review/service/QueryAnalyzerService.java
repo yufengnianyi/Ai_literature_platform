@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -19,8 +18,8 @@ import java.util.List;
 @Service
 public class QueryAnalyzerService {
 
-    @Resource(name = "myqwenChatModel")
-    private ChatModel chatModel;
+    @Resource
+    private ReviewReasoningChatClient reasoningChatClient;
 
     @Resource
     private ObjectMapper objectMapper;
@@ -30,7 +29,7 @@ public class QueryAnalyzerService {
 
     public QueryAnalysis analyze(String question) {
         log.info("Analyzing question: {}", truncate(question, 100));
-        ChatResponse response = chatModel.chat(
+        ChatResponse response = reasoningChatClient.chatCore(
                 SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_QUERY_ANALYZER_SYSTEM)),
                 UserMessage.from(question)
         );

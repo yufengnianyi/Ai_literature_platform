@@ -3,6 +3,12 @@ package com.example.demo_01.ai.review.service;
 import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -16,16 +22,29 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class ReportGeneratorService {
 
+    private static final Pattern CHINESE = Pattern.compile("[\\u4e00-\\u9fff]");
+
+    @Resource(name = "reviewReportChatModel")
+    private ChatModel reviewReportChatModel;
+
     public String generateReport(QueryAnalysis analysis,
                                  List<FusedEvidenceGroup> groups,
                                  List<ExtractedEvidence> evidence) {
-        return buildReport(analysis, groups, evidence, null, null);
+        return buildReport(analysis, groups, evidence, null, null, null);
+    }
+
+    public String generateReport(QueryAnalysis analysis,
+                                 List<FusedEvidenceGroup> groups,
+                                 List<ExtractedEvidence> evidence,
+                                 List<SynthesizedCompoundRecord> synthesizedRecords) {
+        return buildReport(analysis, groups, evidence, null, null, synthesizedRecords);
     }
 
     public String generateReport(String mainQuestion,
@@ -44,7 +63,16 @@ public class ReportGeneratorService {
                                                 List<ExtractedEvidence> evidence,
                                                 String userGuidance,
                                                 List<String> focusSubQuestions) {
-        String report = buildReport(analysis, groups, evidence, userGuidance, focusSubQuestions);
+        return generateReportStreaming(analysis, groups, evidence, userGuidance, focusSubQuestions, null);
+    }
+
+    public Flux<String> generateReportStreaming(QueryAnalysis analysis,
+                                                List<FusedEvidenceGroup> groups,
+                                                List<ExtractedEvidence> evidence,
+                                                String userGuidance,
+                                                List<String> focusSubQuestions,
+                                                List<SynthesizedCompoundRecord> synthesizedRecords) {
+        String report = buildReport(analysis, groups, evidence, userGuidance, focusSubQuestions, synthesizedRecords);
         MarkdownChunkBuffer buffer = new MarkdownChunkBuffer();
         List<String> pieces = new ArrayList<>();
         pieces.addAll(buffer.append(report));
@@ -58,7 +86,7 @@ public class ReportGeneratorService {
                                                 String userGuidance,
                                                 List<String> focusSubQuestions) {
         return generateReportStreaming(new QueryAnalysis(mainQuestion, List.of(), List.of(), List.of()),
-                groups, evidence, userGuidance, focusSubQuestions);
+                groups, evidence, userGuidance, focusSubQuestions, null);
     }
 
     public Flux<String> generateReportStreaming(String mainQuestion,
@@ -72,7 +100,8 @@ public class ReportGeneratorService {
                                List<FusedEvidenceGroup> groups,
                                List<ExtractedEvidence> evidence,
                                String userGuidance,
-                               List<String> focusSubQuestions) {
+                               List<String> focusSubQuestions,
+                               List<SynthesizedCompoundRecord> synthesizedRecords) {
         boolean zh = "zh".equalsIgnoreCase(analysis == null ? null : analysis.languageCode());
         String question = displayQuestion(analysis);
         List<ExtractedEvidence> safeEvidence = sanitizeEvidence(evidence);
@@ -86,14 +115,23 @@ public class ReportGeneratorService {
         report.append(heading(section++, zh, "研究主题的概述", "Research Topic Overview"));
         report.append(topicOverview(question, safeEvidence, userGuidance, zh)).append("\n\n");
 
-        List<CompoundActivityRow> compoundRows = CompoundEvidenceAggregator.fromExtractedEvidence(safeEvidence);
+        List<CompoundActivityRow> compoundRows;
+        if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
+            compoundRows = CompoundEvidenceAggregator.fromSynthesizedRecords(synthesizedRecords);
+        } else {
+            compoundRows = CompoundEvidenceAggregator.fromExtractedEvidence(safeEvidence);
+        }
         if (shouldIncludeAntimicrobialCompoundAnalysis(analysis, compoundRows)) {
             report.append(heading(section++, zh, "抑菌化合物同类分析", "Antimicrobial Compound Class Analysis"));
             report.append(compoundClassAnalysis(compoundRows, zh)).append("\n\n");
+
+            if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
+                report.append(paradigmDetailSection(synthesizedRecords, zh)).append("\n\n");
+            }
         }
 
         report.append(heading(section++, zh, "关键发现总结", "Key Findings Summary"));
-        report.append(keyFindings(safeEvidence, safeGroups, focusSubQuestions, zh)).append("\n\n");
+        report.append(keyFindings(analysis, safeEvidence, safeGroups, focusSubQuestions, zh)).append("\n\n");
 
         report.append(heading(section++, zh, "研究方法与证据强度", "Research Methods and Evidence Strength"));
         report.append(methodsAndStrength(safeEvidence, zh)).append("\n\n");
@@ -286,12 +324,66 @@ public class ReportGeneratorService {
         return out.toString();
     }
 
-    private String keyFindings(List<ExtractedEvidence> evidence,
+    private String paradigmDetailSection(List<SynthesizedCompoundRecord> records, boolean zh) {
+        StringBuilder out = new StringBuilder();
+        out.append(zh ? "### 化合物→范式详细视图\n\n" : "### Compound → Paradigm Detail View\n\n");
+
+        for (SynthesizedCompoundRecord rec : records) {
+            if (rec.paradigmActivities() == null || rec.paradigmActivities().isEmpty()) continue;
+            String name = rec.compoundName() != null ? rec.compoundName() : "unknown";
+            String role = rec.role() != null ? " [" + rec.role().name() + "]" : "";
+            out.append("**").append(name).append(role).append("**\n\n");
+
+            for (ParadigmActivityBlock block : rec.paradigmActivities()) {
+                out.append("- ").append(block.paradigm());
+                if (block.keyMetric() != null && block.keyMetric().type() != null) {
+                    out.append(": ").append(block.keyMetric().type())
+                            .append(" = ").append(block.keyMetric().value() != null ? block.keyMetric().value() : "N/A");
+                }
+                if (block.doseDependent() != null && block.doseDependent()) {
+                    out.append(zh ? " (剂量依赖)" : " (dose-dependent)");
+                }
+                if (block.durability() != null) {
+                    out.append(" [").append(block.durability()).append("]");
+                }
+                out.append("\n");
+
+                if (block.doseGradient() != null && !block.doseGradient().isEmpty()) {
+                    out.append(zh ? "  - 剂量梯度：" : "  - Dose gradient: ");
+                    out.append(block.doseGradient().stream()
+                            .map(dr -> dr.concentration() + " → " + (dr.effect() != null ? dr.effect() : ""))
+                            .collect(Collectors.joining("; ")));
+                    out.append("\n");
+                }
+            }
+
+            if (rec.comparisons() != null && !rec.comparisons().isEmpty()) {
+                out.append(zh ? "  - 比较关系：" : "  - Comparisons: ");
+                for (ComparativeRelation cr : rec.comparisons()) {
+                    out.append(cr.relation()).append(" vs ").append(cr.referenceCompound());
+                    if (cr.derivedEquivalence() != null) out.append(" (").append(cr.derivedEquivalence()).append(")");
+                    out.append("; ");
+                }
+                out.append("\n");
+            }
+
+            if (rec.coverageWarnings() != null && !rec.coverageWarnings().isEmpty()) {
+                out.append(zh ? "  - ⚠ 覆盖预警：" : "  - ⚠ Coverage warnings: ");
+                out.append(String.join(", ", rec.coverageWarnings())).append("\n");
+            }
+            out.append("\n");
+        }
+        return out.toString();
+    }
+
+    private String keyFindings(QueryAnalysis analysis,
+                               List<ExtractedEvidence> evidence,
                                List<FusedEvidenceGroup> groups,
                                List<String> focusSubQuestions,
                                boolean zh) {
         StringBuilder out = new StringBuilder();
         List<String> focus = focusSubQuestions == null ? List.of() : focusSubQuestions;
+        Map<String, String> displaySubQuestions = displaySubQuestionMap(analysis);
         List<FusedEvidenceGroup> orderedGroups = new ArrayList<>();
         for (String item : focus) {
             groups.stream().filter(group -> item.equals(group.subQuestion())).findFirst().ifPresent(orderedGroups::add);
@@ -303,8 +395,13 @@ public class ReportGeneratorService {
         }
         if (!orderedGroups.isEmpty()) {
             for (FusedEvidenceGroup group : orderedGroups) {
-                out.append("### ").append(group.subQuestion()).append("\n\n");
-                out.append(localizedSummary(group.groupSummary(), zh)).append("\n\n");
+                String displaySubQuestion = displaySubQuestion(group.subQuestion(), displaySubQuestions);
+                out.append("### ").append(displaySubQuestion).append("\n\n");
+                out.append(localizedSummary(
+                        group.groupSummary(),
+                        displaySubQuestion,
+                        evidenceForSubQuestion(group.subQuestion(), evidence),
+                        zh)).append("\n\n");
             }
         }
         List<ExtractedEvidence> topItems = evidence.stream()
@@ -512,6 +609,126 @@ public class ReportGeneratorService {
             return zh ? "当前没有足够证据形成综合结论。" : "There is not enough evidence for a synthesis.";
         }
         return summary;
+    }
+
+    private Map<String, String> displaySubQuestionMap(QueryAnalysis analysis) {
+        if (analysis == null || analysis.subQuestions() == null || analysis.subQuestions().isEmpty()) {
+            return Map.of();
+        }
+        List<String> canonical = analysis.subQuestions();
+        List<String> display = analysis.displaySubQuestions();
+        Map<String, String> mapping = new LinkedHashMap<>();
+        for (int i = 0; i < canonical.size(); i++) {
+            String canonicalQuestion = canonical.get(i);
+            if (canonicalQuestion == null || canonicalQuestion.isBlank()) {
+                continue;
+            }
+            String displayQuestion = display != null && i < display.size() ? display.get(i) : canonicalQuestion;
+            mapping.put(canonicalQuestion, safeDefault(displayQuestion, canonicalQuestion));
+        }
+        return mapping;
+    }
+
+    private String displaySubQuestion(String canonicalSubQuestion, Map<String, String> displaySubQuestions) {
+        if (canonicalSubQuestion == null || canonicalSubQuestion.isBlank()) {
+            return "";
+        }
+        return displaySubQuestions.getOrDefault(canonicalSubQuestion, canonicalSubQuestion);
+    }
+
+    private List<ExtractedEvidence> evidenceForSubQuestion(String subQuestion, List<ExtractedEvidence> evidence) {
+        if (subQuestion == null || evidence == null || evidence.isEmpty()) {
+            return List.of();
+        }
+        List<ExtractedEvidence> exactMatches = evidence.stream()
+                .filter(item -> subQuestion.equals(item.subQuestion()))
+                .toList();
+        if (!exactMatches.isEmpty()) {
+            return exactMatches;
+        }
+        String normalized = subQuestion.toLowerCase();
+        return evidence.stream()
+                .filter(item -> item.subQuestion() != null)
+                .filter(item -> item.subQuestion().toLowerCase().contains(normalized)
+                        || normalized.contains(item.subQuestion().toLowerCase()))
+                .toList();
+    }
+
+    private String localizedSummary(String summary,
+                                    String displaySubQuestion,
+                                    List<ExtractedEvidence> evidence,
+                                    boolean zh) {
+        if (!zh) {
+            return summary == null || summary.isBlank()
+                    ? "There is not enough evidence for a synthesis."
+                    : summary;
+        }
+        if (summary == null || summary.isBlank() || isNoEvidenceSummary(summary)) {
+            return fallbackChineseSummary(displaySubQuestion, evidence);
+        }
+        if (containsChinese(summary)) {
+            return summary;
+        }
+        String localized = localizeSummaryWithModel(summary, displaySubQuestion);
+        return localized != null ? localized : fallbackChineseSummary(displaySubQuestion, evidence);
+    }
+
+    private String localizeSummaryWithModel(String summary, String displaySubQuestion) {
+        if (reviewReportChatModel == null) {
+            return null;
+        }
+        try {
+            ChatResponse response = reviewReportChatModel.chat(
+                    SystemMessage.from("""
+                            You are localizing a scientific review section for an end-user Chinese report.
+                            Rewrite the canonical English synthesis into fluent Simplified Chinese.
+                            Preserve scientific names, Latin species names, gene symbols, compound names, units, and uncertainty.
+                            Return plain text only.
+                            """),
+                    UserMessage.from("""
+                            Section question:
+                            %s
+
+                            Canonical English synthesis:
+                            %s
+                            """.formatted(displaySubQuestion, summary))
+            );
+            AiMessage aiMessage = response.aiMessage();
+            String localized = aiMessage == null ? null : aiMessage.text();
+            if (localized == null || localized.isBlank()) {
+                return null;
+            }
+            return localized.trim();
+        } catch (Exception e) {
+            log.warn("Failed to localize review section summary for '{}': {}", displaySubQuestion, e.getMessage());
+            return null;
+        }
+    }
+
+    private String fallbackChineseSummary(String displaySubQuestion, List<ExtractedEvidence> evidence) {
+        int evidenceCount = evidence == null ? 0 : evidence.size();
+        long sourceCount = evidence == null ? 0 : evidence.stream()
+                .map(ExtractedEvidence::documentTitle)
+                .filter(Objects::nonNull)
+                .filter(title -> !title.isBlank())
+                .distinct()
+                .count();
+        if (evidenceCount == 0) {
+            return "\u5f53\u524d\u6ca1\u6709\u8db3\u591f\u8bc1\u636e\u652f\u6301\u8be5\u5b50\u95ee\u9898\u7684\u7efc\u5408\u7ed3\u8bba\u3002";
+        }
+        return "\u56f4\u7ed5\u201c" + safeDefault(displaySubQuestion, "\u8be5\u5b50\u95ee\u9898") + "\u201d\uff0c\u5f53\u524d\u5171\u7eb3\u5165 "
+                + evidenceCount + " \u6761\u8bc1\u636e\uff0c\u6d89\u53ca " + sourceCount
+                + " \u7bc7\u6765\u6e90\u6587\u732e\u3002\u8be6\u7ec6\u7ed3\u8bba\u4ee5\u4e0b\u65b9\u5173\u952e\u53d1\u73b0\u8868\u548c\u53c2\u8003\u6587\u732e\u533a\u4e2d\u7684\u53ef\u8ffd\u6eaf\u8bc1\u636e\u4e3a\u51c6\u3002";
+    }
+
+    private boolean isNoEvidenceSummary(String summary) {
+        String normalized = safe(summary).trim().toLowerCase();
+        return normalized.equals("no evidence found for this sub-question.")
+                || normalized.equals("evidence summary pending (llm fusion failed).");
+    }
+
+    private boolean containsChinese(String value) {
+        return value != null && CHINESE.matcher(value).find();
     }
 
     private String citation(ExtractedEvidence item) {

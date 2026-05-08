@@ -27,24 +27,42 @@ public class ReviewConfig {
     @Bean("reviewReportChatModel")
     public ChatModel reviewReportChatModel(
             @Value("${langchain4j.community.dashscope.chat-model.api-key}") String apiKey,
-            @Value("${langchain4j.community.dashscope.chat-model.model-name:qwen-max}") String modelName,
+            @Value("${langchain4j.community.dashscope.chat-model.model-name:qwen3-max-2026-01-23}") String modelName,
+            @Value("${langchain4j.community.dashscope.chat-model.enable-thinking:false}") boolean enableThinking,
+            @Value("${langchain4j.community.dashscope.chat-model.thinking-budget:81920}") Integer thinkingBudget,
             ReviewProperties properties) {
-        return QwenChatModel.builder()
+        QwenChatModel model = QwenChatModel.builder()
                 .apiKey(apiKey)
                 .modelName(modelName)
                 .maxTokens(properties.getReport().getMaxTokens())
                 .build();
+        model.setGenerationParamCustomizer(builder -> {
+            builder.enableThinking(enableThinking);
+            if (thinkingBudget != null && thinkingBudget > 0) {
+                builder.thinkingBudget(thinkingBudget);
+            }
+        });
+        return model;
     }
 
     @Bean("reviewReportStreamingChatModel")
     public StreamingChatModel reviewReportStreamingChatModel(
             @Value("${langchain4j.community.dashscope.streaming-chat-model.api-key}") String apiKey,
-            @Value("${langchain4j.community.dashscope.streaming-chat-model.model-name:qwen-max}") String modelName,
+            @Value("${langchain4j.community.dashscope.streaming-chat-model.model-name:qwen3-max-2026-01-23}") String modelName,
+            @Value("${langchain4j.community.dashscope.streaming-chat-model.enable-thinking:false}") boolean enableThinking,
+            @Value("${langchain4j.community.dashscope.streaming-chat-model.thinking-budget:81920}") Integer thinkingBudget,
             ReviewProperties properties) {
-        return QwenStreamingChatModel.builder()
+        QwenStreamingChatModel model = QwenStreamingChatModel.builder()
                 .apiKey(apiKey)
                 .modelName(modelName)
                 .maxTokens(properties.getReport().getMaxTokens())
                 .build();
+        model.setGenerationParamCustomizer(builder -> {
+            builder.enableThinking(enableThinking);
+            if (thinkingBudget != null && thinkingBudget > 0) {
+                builder.thinkingBudget(thinkingBudget);
+            }
+        });
+        return model;
     }
 }

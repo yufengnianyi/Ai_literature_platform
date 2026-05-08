@@ -11,10 +11,14 @@ langchain4j:
     dashscope:
       chat-model:
         api-key: test-key
-        model-name: qwen-plus
+        model-name: qwen3-max-2026-01-23
+        enable-thinking: true
+        thinking-budget: 81920
       embedding-model:
         api-key: test-key
         model-name: text-embedding-v4
       streaming-chat-model:
         api-key: test-key
-        model-name: qwen-plus
+        model-name: qwen3-max-2026-01-23
+        enable-thinking: true
+        thinking-budget: 81920

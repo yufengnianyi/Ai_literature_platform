@@ -42,6 +42,10 @@ public final class PromptCatalog {
     public static final String REVIEW_RERANKER_SYSTEM = "prompts/review/reranker-system.txt";
     public static final String REVIEW_RERANKER_USER = "prompts/review/reranker-user.txt";
     public static final String REVIEW_RERANKER_CHUNK = "prompts/review/reranker-chunk.txt";
+    public static final String REVIEW_COMPOUND_SYNTHESIS_SYSTEM =
+            "prompts/review/compound-synthesis-system.txt";
+    public static final String REVIEW_COMPOUND_SYNTHESIS_USER =
+            "prompts/review/compound-synthesis-user.txt";
 
     private PromptCatalog() {
     }

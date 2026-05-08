@@ -6,6 +6,8 @@ import { redirectToLogin } from '@/request';
 export interface ChatSseParams {
   conversationId: string;
   prompt: string;
+  deepThinking?: boolean;
+  onThinking?: (data: string) => void;
   onMessage: (data: string) => void;
   onSources?: (sources: MessageSource[]) => void;
   onError: (error: unknown) => void;
@@ -53,10 +55,10 @@ const parseEventBlock = (rawBlock: string): { eventName: string; data: string } 
 };
 
 export const chatService = {
-  streamChat({ conversationId, prompt, onMessage, onSources, onError, onComplete }: ChatSseParams): ChatStreamHandle {
+  streamChat({ conversationId, prompt, deepThinking = false, onThinking, onMessage, onSources, onError, onComplete }: ChatSseParams): ChatStreamHandle {
     const encodedConversationId = encodeURIComponent(conversationId);
     const encodedPrompt = encodeURIComponent(prompt);
-    const url = `${API_BASE_URL}/ai?conversationId=${encodedConversationId}&prompt=${encodedPrompt}`;
+    const url = `${API_BASE_URL}/ai?conversationId=${encodedConversationId}&prompt=${encodedPrompt}&deepThinking=${deepThinking}`;
     const controller = new AbortController();
 
     let completed = false;
@@ -115,7 +117,9 @@ export const chatService = {
                 return;
               }
 
-              if (parsed.eventName === 'sources') {
+              if (parsed.eventName === 'thinking') {
+                onThinking?.(decodeMessagePayload(parsed.data));
+              } else if (parsed.eventName === 'sources') {
                 if (onSources) {
                   try {
                     onSources(normalizeSourcesPayload(JSON.parse(parsed.data)));

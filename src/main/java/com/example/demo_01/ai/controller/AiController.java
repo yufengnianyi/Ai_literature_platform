@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.controller;
 
 import com.example.demo_01.ai.AiCodeHelperService;
+import com.example.demo_01.ai.ChatStreamingService;
 import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.memory.UserConversationKey;
 import com.example.demo_01.conversation.ConversationService;
@@ -25,6 +26,9 @@ public class AiController {
     private AiCodeHelperService aiCodeHelperService;
 
     @Resource
+    private ChatStreamingService chatStreamingService;
+
+    @Resource
     private UserService userService;
 
     @Resource
@@ -35,6 +39,7 @@ public class AiController {
             HttpServletRequest httpServletRequest,
             @RequestParam(required = false) String conversationId,
             @RequestParam(name = "memory_id", required = false) Integer legacyMemoryId,
+            @RequestParam(name = "deepThinking", defaultValue = "false") boolean deepThinking,
             @RequestParam String prompt) {
         User loginUser = userService.getLoginUser(httpServletRequest);
         String normalizedUserId = loginUser.getUserId();
@@ -42,6 +47,10 @@ public class AiController {
         String resolvedConversationId = resolveConversationId(conversationId, legacyMemoryId);
         conversationService.createConversationIfAbsent(normalizedUserId, resolvedConversationId);
         String memoryKey = UserConversationKey.compose(normalizedUserId, resolvedConversationId);
+        if (deepThinking) {
+            return chatStreamingService.stream(memoryKey, prompt, true);
+        }
+
         MarkdownChunkBuffer chunkBuffer = new MarkdownChunkBuffer();
 
         Flux<ServerSentEvent<String>> messageEvents = aiCodeHelperService.chatWithFlux(memoryKey, prompt)

@@ -823,3 +823,57 @@ terms:
   - canonical: "genome-wide analysis"
     aliases: ["genome-wide identification", "genome-wide survey", "whole-genome analysis"]
     related: ["gene family", "phylogenomic"]
+
+  # ── Antimicrobial Activity Evidence (v3) ──
+
+  - canonical: "minimum inhibitory concentration"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["MIC", "MIC value", "lowest concentration required"]
+
+  - canonical: "minimum fungicidal concentration"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["MFC", "MFC value"]
+
+  - canonical: "half maximal effective concentration"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["EC50", "EC₅₀", "half-maximal"]
+
+  - canonical: "half maximal inhibitory concentration"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["IC50", "IC₅₀"]
+
+  - canonical: "lethal dose 50"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["LD50"]
+
+  - canonical: "dose dependent"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["dose-dependent", "concentration-dependent", "dose-response", "concentration-response"]
+
+  - canonical: "mycelial growth assay"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["mycelium growth", "mycelial growth inhibition", "hyphal growth assay", "mycelial growth"]
+
+  - canonical: "micro-well dilution"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["microwell dilution", "broth microdilution", "micro-dilution assay"]
+
+  - canonical: "zoosporogenesis assay"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["zoospore formation assay", "sporangiogenesis assay"]
+
+  - canonical: "zoospore germination assay"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["zoospore germination"]
+
+  - canonical: "plate inhibition assay"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["agar plate inhibition", "OA plate"]
+
+  - canonical: "cytotoxicity assay"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["XTT reduction", "MTT assay", "selectivity index", "cytotoxicity XTT"]
+
+  - canonical: "pot experiment"
+    category: "ACTIVITY_EVIDENCE"
+    aliases: ["greenhouse experiment", "in planta assay", "pot trial"]

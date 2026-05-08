@@ -9,7 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +23,8 @@ public class EvidenceFusionService {
 
     private static final int SINGLE_PASS_THRESHOLD = 15;
 
-    @Resource(name = "myqwenChatModel")
-    private ChatModel chatModel;
+    @Resource
+    private ReviewReasoningChatClient reasoningChatClient;
 
     @Resource
     private ObjectMapper objectMapper;
@@ -83,7 +82,7 @@ public class EvidenceFusionService {
     private FusedEvidenceGroup fuseGroupSinglePass(String subQuestion, List<ExtractedEvidence> evidence) {
         String evidenceText = formatEvidenceForLlm(evidence);
         try {
-            ChatResponse response = chatModel.chat(
+            ChatResponse response = reasoningChatClient.chatCore(
                     SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_SYSTEM)),
                     UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_SINGLE_USER, subQuestion, evidenceText))
             );
@@ -99,7 +98,7 @@ public class EvidenceFusionService {
 
     private FusedEvidenceGroup fuseFromSummary(String subQuestion, List<ExtractedEvidence> evidence, String summaries) {
         try {
-            ChatResponse response = chatModel.chat(
+            ChatResponse response = reasoningChatClient.chatCore(
                     SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_SYSTEM)),
                     UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_SUMMARY_USER, subQuestion, summaries))
             );
@@ -116,7 +115,7 @@ public class EvidenceFusionService {
     private String summarizeBatch(String subQuestion, List<ExtractedEvidence> batch) {
         String evidenceText = formatEvidenceForLlm(batch);
         try {
-            ChatResponse response = chatModel.chat(
+            ChatResponse response = reasoningChatClient.chatStandard(
                     SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_SYSTEM)),
                     UserMessage.from(PromptResources.format(PromptCatalog.REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_USER, subQuestion, evidenceText))
             );

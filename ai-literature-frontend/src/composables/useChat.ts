@@ -42,6 +42,7 @@ const toUiMessage = (conversationId: string, message: ConversationHistoryMessage
       rawContent: message.content,
       stableContent: message.content,
       pendingTail: '',
+      thinkingContent: message.thinking ?? '',
       renderMode: 'markdown',
     };
   }
@@ -98,7 +99,12 @@ export function useChat() {
     }
   };
 
-  const sendMessage = (text: string, conversationId: string, onScrollToBottom?: () => void) => {
+  const sendMessage = (
+    text: string,
+    conversationId: string,
+    onScrollToBottom?: () => void,
+    options?: { deepThinking?: boolean },
+  ) => {
     if (!text.trim() || !conversationId || isGenerating.value || isHistoryLoading.value) {
       return;
     }
@@ -135,6 +141,16 @@ export function useChat() {
     currentStream.value = chatService.streamChat({
       conversationId,
       prompt: text,
+      deepThinking: options?.deepThinking ?? false,
+      onThinking: (newData) => {
+        updateAssistantMessage(messages.value, aiMessageId, (message) => {
+          message.thinkingContent = `${message.thinkingContent ?? ''}${newData}`;
+        });
+
+        if (onScrollToBottom) {
+          onScrollToBottom();
+        }
+      },
       onMessage: (newData) => {
         updateAssistantMessage(messages.value, aiMessageId, (message) => {
           message.isLoading = false;

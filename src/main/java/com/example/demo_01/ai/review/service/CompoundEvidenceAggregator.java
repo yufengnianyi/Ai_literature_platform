@@ -1,8 +1,6 @@
 package com.example.demo_01.ai.review.service;
 
-import com.example.demo_01.ai.review.model.ReviewModels.ExtractedEvidence;
-import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
-import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
+import com.example.demo_01.ai.review.model.ReviewModels.*;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -97,7 +95,14 @@ final class CompoundEvidenceAggregator {
         String key = "ambiguous:" + view.documentKey() + ":" + normalize(joinedNames);
         CompoundAccumulator acc = byCompound.computeIfAbsent(key,
                 ignored -> new CompoundAccumulator("需人工复核的多化合物证据: " + joinedNames));
-        addEvidence(acc, typed, view);
+        acc.addAll(typed.antimicrobialActivity(), acc.activities);
+        acc.addAll(typed.targetOrganism(), acc.targetPathogens);
+        if (acc.targetPathogens.isEmpty()) {
+            acc.addAll(typed.species(), acc.targetPathogens);
+        }
+        acc.addAll(typed.assayMethod(), acc.assayMethods);
+        acc.addAll(typed.reference(), acc.references);
+        acc.addFallback(view);
     }
 
     private static void addEvidence(CompoundAccumulator acc, TypedEntities typed, EvidenceView view) {
@@ -124,19 +129,15 @@ final class CompoundEvidenceAggregator {
             return "local:" + view.documentKey() + ":" + normalize(name);
         }
         List<String> identifiers = list(typed.compoundIdentifier());
-        if (!identifiers.isEmpty()) {
+        List<String> canonicals = list(typed.compoundCanonicalName());
+        if (!identifiers.isEmpty() && canonicals.size() <= 1) {
             return "id:" + normalize(identifiers.get(0));
         }
-        return "name:" + displayBaseName(name).toLowerCase(Locale.ROOT);
+        return "name:" + normalize(name);
     }
 
     private static String displayBaseName(String name) {
-        String normalized = clean(name);
-        String lower = normalized.toLowerCase(Locale.ROOT);
-        if (lower.contains("cinnamaldehyde")) {
-            return "cinnamaldehyde";
-        }
-        return normalized;
+        return clean(name);
     }
 
     private static boolean isLocalCompoundLabel(String name) {
@@ -334,6 +335,113 @@ final class CompoundEvidenceAggregator {
             );
         }
     }
+
+    // ── v2+v3 Synthesized record support ──
+
+    static List<CompoundActivityRow> fromSynthesizedRecords(List<SynthesizedCompoundRecord> records) {
+        if (records == null || records.isEmpty()) return List.of();
+        List<CompoundActivityRow> rows = new ArrayList<>();
+        for (SynthesizedCompoundRecord rec : records) {
+            String name = rec.compoundName() != null ? rec.compoundName() : "unknown";
+            String role = rec.role() != null ? rec.role().name() : NOT_MENTIONED;
+            String structure = rec.structureType() != null ? rec.structureType() : NOT_MENTIONED;
+            String source = rec.source() != null ? rec.source() : NOT_MENTIONED;
+            String targets = rec.targetOrganisms() != null && !rec.targetOrganisms().isEmpty()
+                    ? String.join("; ", rec.targetOrganisms()) : NOT_MENTIONED;
+            String mechanism = rec.mechanismSummary() != null ? rec.mechanismSummary() : NOT_MENTIONED;
+            String safety = rec.safetyProfile() != null ? rec.safetyProfile() : NOT_MENTIONED;
+            String reference = rec.reference() != null ? rec.reference()
+                    : (rec.documentTitle() != null ? rec.documentTitle() : NOT_MENTIONED);
+
+            StringBuilder activitySb = new StringBuilder();
+            if (rec.paradigmActivities() != null) {
+                for (ParadigmActivityBlock block : rec.paradigmActivities()) {
+                    if (!activitySb.isEmpty()) activitySb.append(" | ");
+                    activitySb.append("[").append(block.paradigm()).append("] ");
+                    if (block.keyMetric() != null && block.keyMetric().type() != null) {
+                        activitySb.append(block.keyMetric().type()).append("=")
+                                .append(block.keyMetric().value() != null ? block.keyMetric().value() : "N/A");
+                    }
+                    if (block.doseDependent() != null && block.doseDependent()) {
+                        activitySb.append(" (dose-dependent)");
+                    }
+                    if (block.durability() != null) {
+                        activitySb.append(" [").append(block.durability()).append("]");
+                    }
+                }
+            }
+            String activity = activitySb.isEmpty() ? NOT_MENTIONED : activitySb.toString();
+            String assay = rec.paradigmActivities() != null
+                    ? rec.paradigmActivities().stream().map(ParadigmActivityBlock::paradigm)
+                    .filter(Objects::nonNull).distinct().collect(java.util.stream.Collectors.joining("; "))
+                    : NOT_MENTIONED;
+
+            rows.add(new CompoundActivityRow(
+                    name + " [" + role + "]", structure, source, activity,
+                    targets, assay.isBlank() ? NOT_MENTIONED : assay, mechanism, safety, reference, NOT_MENTIONED));
+        }
+        return rows;
+    }
+
+    static List<DoseResponseRow> doseResponseRows(List<SynthesizedCompoundRecord> records) {
+        if (records == null || records.isEmpty()) return List.of();
+        List<DoseResponseRow> rows = new ArrayList<>();
+        for (SynthesizedCompoundRecord rec : records) {
+            if (rec.paradigmActivities() == null) continue;
+            for (ParadigmActivityBlock block : rec.paradigmActivities()) {
+                if (block.doseGradient() == null || block.doseGradient().isEmpty()) continue;
+                for (DoseResponse dr : block.doseGradient()) {
+                    rows.add(new DoseResponseRow(
+                            rec.compoundName() != null ? rec.compoundName() : "unknown",
+                            block.paradigm(),
+                            dr.concentration() != null ? dr.concentration() : "",
+                            dr.effect() != null ? dr.effect() : "",
+                            dr.timepoint() != null ? dr.timepoint() : "",
+                            block.conditions() != null ? block.conditions() : "",
+                            block.targetOrganisms() != null && !block.targetOrganisms().isEmpty()
+                                    ? String.join("; ", block.targetOrganisms()) : ""
+                    ));
+                }
+            }
+        }
+        return rows;
+    }
+
+    static List<ComparativeRelationRow> comparativeRelationRows(List<SynthesizedCompoundRecord> records) {
+        if (records == null || records.isEmpty()) return List.of();
+        List<ComparativeRelationRow> rows = new ArrayList<>();
+        for (SynthesizedCompoundRecord rec : records) {
+            if (rec.comparisons() == null) continue;
+            for (ComparativeRelation cr : rec.comparisons()) {
+                rows.add(new ComparativeRelationRow(
+                        rec.compoundName() != null ? rec.compoundName() : "unknown",
+                        cr.referenceCompound() != null ? cr.referenceCompound() : "",
+                        cr.relation() != null ? cr.relation() : "",
+                        cr.basis() != null ? cr.basis() : "",
+                        cr.derivedEquivalence() != null ? cr.derivedEquivalence() : ""
+                ));
+            }
+        }
+        return rows;
+    }
+
+    record DoseResponseRow(
+            String compoundName,
+            String paradigm,
+            String concentration,
+            String effect,
+            String timepoint,
+            String conditions,
+            String targetOrganism
+    ) {}
+
+    record ComparativeRelationRow(
+            String compoundName,
+            String referenceCompound,
+            String relation,
+            String basis,
+            String derivedEquivalence
+    ) {}
 
     private static String first(String first, String second) {
         if (first != null && !first.isBlank()) {

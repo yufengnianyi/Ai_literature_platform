@@ -106,7 +106,7 @@ class ReviewXlsxServiceTest {
         );
 
         List<ReviewEvidenceRecord> evidenceRecords = List.of(evidence, derivativeEvidence);
-        List<ReviewSummaryTable> summaryTables = service.buildSummaryTables(task, evidenceRecords);
+        List<ReviewSummaryTable> summaryTables = service.buildSummaryTables(task, evidenceRecords, null);
         assertEquals(List.of(
                 "Compound Activity Summary",
                 "Gene-Protein Summary",
@@ -116,10 +116,14 @@ class ReviewXlsxServiceTest {
                 "Method Summary",
                 "Concept Summary"
         ), summaryTables.stream().map(ReviewSummaryTable::title).toList());
-        assertEquals("cinnamaldehyde (derivatives: alpha-methylcinnamaldehyde)",
+        assertEquals("Cinnamaldehyde",
                 summaryTables.get(0).rows().get(0).get(0));
-        assertEquals("EC50 = 120 mg/L; 菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth",
+        assertEquals("EC50 = 120 mg/L",
                 summaryTables.get(0).rows().get(0).get(3));
+        assertEquals("alpha-methylcinnamaldehyde",
+                summaryTables.get(0).rows().get(1).get(0));
+        assertEquals("菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth",
+                summaryTables.get(0).rows().get(1).get(3));
 
         byte[] bytes = service.generateXlsx(task, evidenceRecords);
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
@@ -138,14 +142,24 @@ class ReviewXlsxServiceTest {
             assertEquals("PsMYB1", geneValue);
             String stageValue = workbook.getSheet("Stage Summary").getRow(1).getCell(0).getStringCellValue();
             assertEquals("zoospore development", stageValue);
-            String compoundValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(0).getStringCellValue();
-            assertEquals("cinnamaldehyde (derivatives: alpha-methylcinnamaldehyde)", compoundValue);
-            String activityValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(3).getStringCellValue();
-            assertEquals("EC50 = 120 mg/L; 菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth", activityValue);
-            String pathogenValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(4).getStringCellValue();
-            assertEquals("Phytophthora sojae; Phytophthora capsici", pathogenValue);
-            String safetyValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(7).getStringCellValue();
-            assertEquals("XTT reduction IC50 > 200 uM in mammalian cells", safetyValue);
+            String compoundRow1 = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(0).getStringCellValue();
+            assertEquals("Cinnamaldehyde", compoundRow1);
+            String activityRow1 = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(3).getStringCellValue();
+            assertEquals("EC50 = 120 mg/L", activityRow1);
+            String pathogenRow1 = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(4).getStringCellValue();
+            assertEquals("Phytophthora sojae", pathogenRow1);
+
+            String compoundRow2 = workbook.getSheet("Compound Activity Summary").getRow(2).getCell(0).getStringCellValue();
+            assertEquals("alpha-methylcinnamaldehyde", compoundRow2);
+            String activityRow2 = workbook.getSheet("Compound Activity Summary").getRow(2).getCell(3).getStringCellValue();
+            assertEquals("菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth", activityRow2);
+            String pathogenRow2 = workbook.getSheet("Compound Activity Summary").getRow(2).getCell(4).getStringCellValue();
+            assertEquals("Phytophthora capsici", pathogenRow2);
+
+            String safetyRow1 = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(7).getStringCellValue();
+            assertEquals("未提及", safetyRow1);
+            String safetyRow2 = workbook.getSheet("Compound Activity Summary").getRow(2).getCell(7).getStringCellValue();
+            assertEquals("XTT reduction IC50 > 200 uM in mammalian cells", safetyRow2);
             String patentValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(9).getStringCellValue();
             assertEquals("未提及", patentValue);
             assertFalse(geneValue.contains("zoospore"));

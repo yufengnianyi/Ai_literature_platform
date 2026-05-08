@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.controller;
 
 import com.example.demo_01.ai.AiCodeHelperService;
+import com.example.demo_01.ai.ChatStreamingService;
 import com.example.demo_01.conversation.ConversationService;
 import com.example.demo_01.exception.BusinessException;
 import com.example.demo_01.exception.ErrorCode;
@@ -33,6 +34,9 @@ class AiControllerTest {
 
     @MockBean
     private AiCodeHelperService aiCodeHelperService;
+
+    @MockBean
+    private ChatStreamingService chatStreamingService;
 
     @MockBean
     private UserService userService;

@@ -10,6 +10,7 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
@@ -71,6 +72,48 @@ class DocumentKnowledgeEnrichmentServiceTest {
         verify(fixture.repository).upsertKnowledge(any(DocumentKnowledgeRecord.class));
         verify(fixture.repository).upsertAlias(eq(documentId), any(DocumentKnowledgeCompound.class));
         verify(fixture.repository).upsertCompoundIdentity(any(CompoundIdentity.class));
+    }
+
+    @Test
+    void enrichShouldUsePersistedIdentityIdWhenNaturalKeyMapsToExistingCompound() {
+        Fixture fixture = fixture();
+        UUID taskId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        UUID existingCompoundId = UUID.randomUUID();
+        RetrievedChunk chunk = chunk(documentId, "chunk-1", "compound 1 was identified as cinnamaldehyde CAS 104-55-2.");
+        when(fixture.repository.findKnowledge(documentId)).thenReturn(Optional.empty());
+        when(fixture.repository.findAliasesByDocumentIds(any())).thenReturn(Map.of());
+        when(fixture.repository.upsertCompoundIdentity(any())).thenReturn(existingCompoundId);
+        when(fixture.chatModel.chat(any(), any())).thenReturn(response("""
+                {
+                  "documentSummary": "A compound paper.",
+                  "compounds": [{
+                    "localAlias": "compound 1",
+                    "resolvedName": "cinnamaldehyde",
+                    "canonicalName": "cinnamaldehyde",
+                    "casNumber": "104-55-2",
+                    "resolutionStatus": "RESOLVED",
+                    "evidenceChunkId": "chunk-1",
+                    "evidenceText": "compound 1 was identified as cinnamaldehyde CAS 104-55-2.",
+                    "confidence": 0.92
+                  }],
+                  "confidence": 0.92
+                }
+                """));
+
+        fixture.service.enrich(
+                taskId,
+                new QueryAnalysis("Which compounds are active?", List.of("Which compounds?"), List.of(), List.of("compound")),
+                List.of(chunk)
+        );
+
+        ArgumentCaptor<DocumentKnowledgeCompound> aliasCaptor = ArgumentCaptor.forClass(DocumentKnowledgeCompound.class);
+        verify(fixture.repository).upsertAlias(eq(documentId), aliasCaptor.capture());
+        assertEquals(existingCompoundId.toString(), aliasCaptor.getValue().normalizedCompoundId());
+
+        ArgumentCaptor<DocumentKnowledgeRecord> knowledgeCaptor = ArgumentCaptor.forClass(DocumentKnowledgeRecord.class);
+        verify(fixture.repository).upsertKnowledge(knowledgeCaptor.capture());
+        assertEquals(existingCompoundId.toString(), knowledgeCaptor.getValue().compounds().getFirst().normalizedCompoundId());
     }
 
     @Test
@@ -149,6 +192,54 @@ class DocumentKnowledgeEnrichmentServiceTest {
 
         assertEquals(KnowledgeStatus.HIT, result.get(documentId).knowledgeStatus());
         verify(fixture.repository).upsertKnowledge(any(DocumentKnowledgeRecord.class));
+    }
+
+    @Test
+    void aliasResolutionShouldRetainUnresolvedLocalLabelsAsFallbackKeys() {
+        Fixture fixture = fixture();
+        UUID taskId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        RetrievedChunk chunk = chunk(documentId, "chunk-1",
+                "compound 1, compound 7, compound 21, compound 30, compound 34 were tested.");
+        when(fixture.repository.findKnowledge(documentId)).thenReturn(Optional.empty());
+        when(fixture.repository.findAliasesByDocumentIds(any())).thenReturn(Map.of());
+        when(fixture.chatModel.chat(any(), any())).thenReturn(response("""
+                {
+                  "documentSummary": "A multi-compound paper.",
+                  "compounds": [
+                    {"localAlias": "compound 1", "resolvedName": "kaempferol", "canonicalName": "kaempferol",
+                     "resolutionStatus": "RESOLVED", "evidenceChunkId": "chunk-1", "confidence": 0.9},
+                    {"localAlias": "compound 7", "resolvedName": "cinnamaldehyde", "canonicalName": "cinnamaldehyde",
+                     "resolutionStatus": "RESOLVED", "evidenceChunkId": "chunk-1", "confidence": 0.9},
+                    {"localAlias": "compound 21", "resolutionStatus": "UNRESOLVED",
+                     "evidenceChunkId": "chunk-1", "confidence": 0.5},
+                    {"localAlias": "compound 30", "resolutionStatus": "UNRESOLVED",
+                     "evidenceChunkId": "chunk-1", "confidence": 0.5},
+                    {"localAlias": "compound 34", "resolvedName": "9-formyl-6-methylellipticine",
+                     "canonicalName": "9-formyl-6-methylellipticine",
+                     "resolutionStatus": "RESOLVED", "evidenceChunkId": "chunk-1", "confidence": 0.9}
+                  ],
+                  "confidence": 0.8
+                }
+                """));
+
+        Map<UUID, DocumentKnowledgeContext> result = fixture.service.enrich(
+                taskId,
+                new QueryAnalysis("Which compounds inhibit oomycetes?", List.of("Which compounds?"),
+                        List.of(), List.of("compound")),
+                List.of(chunk)
+        );
+
+        DocumentKnowledgeContext ctx = result.get(documentId);
+        assertTrue(ctx.knownCompounds().size() >= 5, "Should know at least 5 compounds, got: " + ctx.knownCompounds());
+        Map<String, String> aliasMap = ctx.aliasResolutionMap();
+        assertEquals("kaempferol", aliasMap.get("compound 1"));
+        assertEquals("cinnamaldehyde", aliasMap.get("compound 7"));
+        assertEquals("9-formyl-6-methylellipticine", aliasMap.get("compound 34"));
+        assertTrue(aliasMap.containsKey("compound 21"), "Unresolved compound 21 should have a fallback key");
+        assertTrue(aliasMap.get("compound 21").startsWith("local:"), "Unresolved alias should have local: prefix");
+        assertTrue(aliasMap.containsKey("compound 30"), "Unresolved compound 30 should have a fallback key");
+        assertTrue(aliasMap.get("compound 30").startsWith("local:"), "Unresolved alias should have local: prefix");
     }
 
     private Fixture fixture() {

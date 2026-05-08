@@ -10,7 +10,6 @@ import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import jakarta.annotation.Resource;
@@ -25,8 +24,8 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewRerankerService {
 
-    @Resource(name = "myqwenChatModel")
-    private ChatModel chatModel;
+    @Resource
+    private ReviewReasoningChatClient reasoningChatClient;
 
     @Resource
     private EmbeddingModel quwenEmbeddingModel;
@@ -43,6 +42,11 @@ public class ReviewRerankerService {
     private final LlmBatchProcessor batchProcessor = new LlmBatchProcessor();
 
     public List<RetrievedChunk> rerank(String question, List<RetrievedChunk> candidates) {
+        return rerank(question, candidates, Set.of());
+    }
+
+    public List<RetrievedChunk> rerank(String question, List<RetrievedChunk> candidates,
+                                       Set<String> protectedChunkIds) {
         ReviewProperties.Rerank cfg = reviewProperties.getRerank();
         if (candidates.isEmpty()) return List.of();
 
@@ -80,6 +84,21 @@ public class ReviewRerankerService {
                         sc.chunk().text(), sc.chunk().sectionPath(), sc.score(), sc.chunk().source()));
             }
         }
+
+        if (protectedChunkIds != null && !protectedChunkIds.isEmpty()) {
+            Set<String> includedIds = included.stream()
+                    .map(RetrievedChunk::chunkId)
+                    .collect(Collectors.toSet());
+            for (ScoredChunk sc : topK) {
+                if (protectedChunkIds.contains(sc.chunk().chunkId()) && !includedIds.contains(sc.chunk().chunkId())) {
+                    included.add(new RetrievedChunk(
+                            sc.chunk().chunkId(), sc.chunk().documentId(), sc.chunk().documentTitle(),
+                            sc.chunk().text(), sc.chunk().sectionPath(), sc.score(), sc.chunk().source()));
+                    log.info("Force-included protected anchor chunk: {}", sc.chunk().chunkId());
+                }
+            }
+        }
+
         log.info("LLM screening: {} judged, {} included (threshold={})",
                 judgments.size(), included.size(), minRelevance);
         return included;
@@ -111,7 +130,7 @@ public class ReviewRerankerService {
         userMsg.append(PromptResources.format(PromptCatalog.REVIEW_RERANKER_USER, question, chunksText));
 
         try {
-            ChatResponse response = chatModel.chat(
+            ChatResponse response = reasoningChatClient.chatStandard(
                     SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_RERANKER_SYSTEM)),
                     UserMessage.from(userMsg.toString())
             );

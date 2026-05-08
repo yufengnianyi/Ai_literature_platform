@@ -14,7 +14,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -54,7 +56,19 @@ public class ReviewPipelineService {
     private ReportGeneratorService reportGeneratorService;
 
     @Resource
+    private QuantitativeAnchorRetriever quantitativeAnchorRetriever;
+
+    @Resource
+    private CompoundEvidenceSynthesizer compoundEvidenceSynthesizer;
+
+    @Resource
+    private CompoundProfileAuditor compoundProfileAuditor;
+
+    @Resource
     private ObjectMapper objectMapper;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private org.bsc.langgraph4j.CompiledGraph<com.example.demo_01.ai.review.agent.PerPaperAgentState> perPaperGraph;
 
     @Resource(name = "reviewTaskExecutor")
     private TaskExecutor reviewTaskExecutor;
@@ -341,7 +355,7 @@ public class ReviewPipelineService {
         StringBuilder reportCollector = new StringBuilder();
 
         reportGeneratorService.generateReportStreaming(
-                        ctx.analysis, ctx.groups, ctx.evidence, ctx.userGuidance, ctx.focusSubQuestions)
+                        ctx.analysis, ctx.groups, ctx.evidence, ctx.userGuidance, ctx.focusSubQuestions, ctx.synthesizedRecords)
                 .doOnNext(chunk -> {
                     reportCollector.append(chunk);
                     sink.next(chunk);
@@ -372,7 +386,7 @@ public class ReviewPipelineService {
             // Stage 7: Report generation
             updateStage(taskId, ReviewStage.REPORT_GENERATION);
             Instant reportStart = Instant.now();
-            String report = reportGeneratorService.generateReport(ctx.analysis, ctx.groups, ctx.evidence);
+            String report = reportGeneratorService.generateReport(ctx.analysis, ctx.groups, ctx.evidence, ctx.synthesizedRecords);
             ctx.reportMs = Duration.between(reportStart, Instant.now()).toMillis();
             ctx.totalMs = Duration.between(ctx.pipelineStart, Instant.now()).toMillis();
 
@@ -441,10 +455,24 @@ public class ReviewPipelineService {
                 .toList());
         List<RetrievedChunk> candidates = mergeCandidates(seedChunks, promotion.expandedChunks());
 
+        // Stage 3.5: Quantitative anchor retrieval
+        Set<String> protectedChunkIds = Set.of();
+        if (reviewProperties.getRetrieval().isEnableQuantitativeAnchor()) {
+            Set<UUID> docIds = candidates.stream().map(RetrievedChunk::documentId)
+                    .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+            List<RetrievedChunk> anchorChunks = quantitativeAnchorRetriever.retrieveAnchors(
+                    docIds, reviewProperties.getRetrieval().getMaxAnchorsPerDocument());
+            candidates = mergeCandidates(candidates, anchorChunks);
+            protectedChunkIds = anchorChunks.stream().map(RetrievedChunk::chunkId).collect(Collectors.toSet());
+            reviewRepository.insertChunkAnchors(taskId,
+                    new java.util.ArrayList<>(quantitativeAnchorRetriever.getAnchorMetadata().values()));
+            log.info("Task {}: Added {} quantitative anchor chunks", taskId, anchorChunks.size());
+        }
+
         // Stage 4: Reranking
         updateStage(taskId, ReviewStage.RERANKING);
         Instant rerankStart = Instant.now();
-        List<RetrievedChunk> included = reviewRerankerService.rerank(ctx.canonicalQuestion, candidates);
+        List<RetrievedChunk> included = reviewRerankerService.rerank(ctx.canonicalQuestion, candidates, protectedChunkIds);
         ctx.rerankMs = Duration.between(rerankStart, Instant.now()).toMillis();
         log.info("Task {}: Reranked to {} included chunks in {}ms", taskId, included.size(), ctx.rerankMs);
 
@@ -474,6 +502,45 @@ public class ReviewPipelineService {
             reviewRepository.insertEvidence(taskId, e);
         }
         reviewRepository.updateTaskCounts(taskId, candidates.size(), promotion.documentCandidates().size(), evidence.size());
+
+        // Stage 5.5: Compound evidence synthesis + audit
+        if (reviewProperties.getSynthesis().isEnableCompoundSynthesizer()) {
+            List<SynthesizedCompoundRecord> synthesized;
+
+            if (reviewProperties.getAgent().isEnabled() && perPaperGraph != null) {
+                synthesized = runAgentSynthesis(taskId, included, knowledgeContexts, evidence);
+            } else {
+                synthesized = compoundEvidenceSynthesizer.synthesize(evidence, knowledgeContexts);
+            }
+            log.info("Task {}: Synthesized {} compound records", taskId, synthesized.size());
+
+            if (!reviewProperties.getAgent().isEnabled() && reviewProperties.getAudit().isEnableCoverageAudit()) {
+                Map<String, List<RetrievedChunk>> chunksByChunkId = included.stream()
+                        .collect(Collectors.toMap(RetrievedChunk::chunkId, c -> List.of(c), (a, b) -> a));
+                for (int i = 0; i < synthesized.size(); i++) {
+                    SynthesizedCompoundRecord rec = synthesized.get(i);
+                    List<RetrievedChunk> sourceChunks = rec.evidenceChunkIds() != null
+                            ? rec.evidenceChunkIds().stream()
+                            .map(chunksByChunkId::get)
+                            .filter(java.util.Objects::nonNull)
+                            .flatMap(List::stream)
+                            .toList()
+                            : List.of();
+                    List<ExtractedEvidence> sourceEvidence = evidence.stream()
+                            .filter(ev -> rec.evidenceChunkIds() != null
+                                    && rec.evidenceChunkIds().contains(ev.chunkId()))
+                            .toList();
+                    CompoundProfileAuditor.AuditResult auditResult = compoundProfileAuditor.audit(
+                            rec, sourceEvidence, sourceChunks, knowledgeContexts);
+                    synthesized.set(i, auditResult.recordWithWarnings());
+                }
+            }
+
+            for (SynthesizedCompoundRecord rec : synthesized) {
+                reviewRepository.insertSynthesizedCompound(taskId, rec);
+            }
+            ctx.synthesizedRecords = synthesized;
+        }
 
         // Stage 6: Evidence fusion
         updateStage(taskId, ReviewStage.EVIDENCE_FUSION);
@@ -540,6 +607,41 @@ public class ReviewPipelineService {
         String userGuidance;
         List<String> focusSubQuestions;
         List<ExtractedEvidence> evidence;
+        List<SynthesizedCompoundRecord> synthesizedRecords;
+    }
+
+    private List<SynthesizedCompoundRecord> runAgentSynthesis(
+            UUID taskId,
+            List<RetrievedChunk> included,
+            Map<UUID, DocumentKnowledgeContext> knowledgeContexts,
+            List<ExtractedEvidence> evidence) {
+        Map<UUID, List<RetrievedChunk>> byDoc = included.stream()
+                .filter(c -> c.documentId() != null)
+                .collect(Collectors.groupingBy(RetrievedChunk::documentId));
+
+        java.util.List<SynthesizedCompoundRecord> allResults = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        byDoc.entrySet().parallelStream().forEach(entry -> {
+            UUID docId = entry.getKey();
+            List<RetrievedChunk> docChunks = entry.getValue();
+            try {
+                var initData = new java.util.HashMap<String, Object>();
+                initData.put(com.example.demo_01.ai.review.agent.PerPaperAgentState.DOCUMENT_ID, docId);
+                initData.put(com.example.demo_01.ai.review.agent.PerPaperAgentState.SEED_CHUNKS, docChunks);
+                initData.put(com.example.demo_01.ai.review.agent.PerPaperAgentState.TASK_ID, taskId);
+                initData.put(com.example.demo_01.ai.review.agent.PerPaperAgentState.KNOWLEDGE_CONTEXTS,
+                        new java.util.HashMap<>(knowledgeContexts));
+                var finalState = perPaperGraph.invoke(initData);
+                finalState.map(com.example.demo_01.ai.review.agent.PerPaperAgentState::profiles)
+                        .ifPresent(allResults::addAll);
+            } catch (Exception ex) {
+                log.warn("Task {}: Agent graph failed for doc {}, falling back to legacy synthesis", taskId, docId, ex);
+                List<ExtractedEvidence> docEvidence = evidence.stream()
+                        .filter(e -> docId.toString().equals(e.documentId()))
+                        .toList();
+                allResults.addAll(compoundEvidenceSynthesizer.synthesize(docEvidence, knowledgeContexts));
+            }
+        });
+        return allResults;
     }
 
     private ReviewTaskMetrics mergeMetrics(ReviewTaskMetrics existing,

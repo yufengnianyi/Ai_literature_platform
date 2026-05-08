@@ -1,11 +1,11 @@
 package com.example.demo_01.ai.review.service;
 
-import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
-import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
-import com.example.demo_01.ai.review.model.ReviewModels.ReviewSummaryTable;
-import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskRecord;
-import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
+import com.example.demo_01.ai.review.config.ReviewProperties;
+import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
+import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.ComparativeRelationRow;
+import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.DoseResponseRow;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
@@ -37,20 +37,36 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewXlsxService {
 
+    @Resource
+    private ReviewProperties reviewProperties;
+
     public byte[] generateXlsx(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords) {
+        return generateXlsx(task, evidenceRecords, null);
+    }
+
+    public byte[] generateXlsx(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords,
+                                List<SynthesizedCompoundRecord> synthesizedRecords) {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             CellStyle headerStyle = createHeaderStyle(workbook);
 
-            createCompoundActivitySheet(workbook, headerStyle, evidenceRecords);
+            createCompoundActivitySheet(workbook, headerStyle, evidenceRecords, synthesizedRecords);
+            if (synthesizedRecords != null && !synthesizedRecords.isEmpty()
+                    && reviewProperties.getXlsx().isEnableThreeSheet()) {
+                createDoseResponseSheet(workbook, headerStyle, synthesizedRecords);
+                createComparativeRelationSheet(workbook, headerStyle, synthesizedRecords);
+            }
+            if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
+                createPerPaperRankingSheet(workbook, headerStyle, synthesizedRecords);
+            }
             createGeneProteinSheet(workbook, headerStyle, evidenceRecords);
             createCategorySheet(workbook, headerStyle, "Process-Pathway Summary", evidenceRecords,
-                    typed -> merge(typed.pathwayOrProcess(), typed.phenotype()), "Process/Pathway");
+                    typed -> merge(typed.pathwayOrProcess(), typed.phenotype()), "Process/Pathway", synthesizedRecords);
             createCategorySheet(workbook, headerStyle, "Stage Summary", evidenceRecords,
-                    TypedEntities::developmentalStage, "Developmental Stage");
+                    TypedEntities::developmentalStage, "Developmental Stage", synthesizedRecords);
             createCategorySheet(workbook, headerStyle, "Species Summary", evidenceRecords,
-                    TypedEntities::species, "Species");
+                    TypedEntities::species, "Species", synthesizedRecords);
             createCategorySheet(workbook, headerStyle, "Method Summary", evidenceRecords,
-                    TypedEntities::method, "Method");
+                    TypedEntities::method, "Method", synthesizedRecords);
             createConceptSheet(workbook, headerStyle, task, evidenceRecords);
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -62,8 +78,9 @@ public class ReviewXlsxService {
         }
     }
 
-    public List<ReviewSummaryTable> buildSummaryTables(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords) {
-        byte[] xlsxBytes = generateXlsx(task, evidenceRecords);
+    public List<ReviewSummaryTable> buildSummaryTables(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords,
+                                                       List<SynthesizedCompoundRecord> synthesizedRecords) {
+        byte[] xlsxBytes = generateXlsx(task, evidenceRecords, synthesizedRecords);
         DataFormatter formatter = new DataFormatter();
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsxBytes))) {
             List<ReviewSummaryTable> tables = new ArrayList<>();
@@ -109,7 +126,8 @@ public class ReviewXlsxService {
     }
 
     private void createCompoundActivitySheet(Workbook workbook, CellStyle headerStyle,
-                                             List<ReviewEvidenceRecord> evidenceRecords) {
+                                             List<ReviewEvidenceRecord> evidenceRecords,
+                                             List<SynthesizedCompoundRecord> synthesizedRecords) {
         Sheet sheet = workbook.createSheet("Compound Activity Summary");
         String[] headers = {
                 "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "作用病原菌",
@@ -117,22 +135,122 @@ public class ReviewXlsxService {
         };
         createHeaderRow(sheet, headerStyle, headers);
 
-        int rowIdx = 1;
-        for (CompoundActivityRow activity : CompoundEvidenceAggregator.fromEvidenceRecords(evidenceRecords)) {
-            Row row = sheet.createRow(rowIdx++);
-            row.createCell(0).setCellValue(activity.compoundName());
-            row.createCell(1).setCellValue(activity.structureType());
-            row.createCell(2).setCellValue(activity.source());
-            row.createCell(3).setCellValue(activity.antimicrobialActivity());
-            row.createCell(4).setCellValue(activity.targetPathogen());
-            row.createCell(5).setCellValue(activity.assayMethod());
-            row.createCell(6).setCellValue(activity.mechanism());
-            row.createCell(7).setCellValue(activity.cytotoxicitySafety());
-            row.createCell(8).setCellValue(activity.reference());
-            row.createCell(9).setCellValue(activity.patentStatus());
-        }
+        CellStyle wrapStyle = workbook.createCellStyle();
+        wrapStyle.setWrapText(true);
 
+        int rowIdx = 1;
+        if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
+            List<SynthesizedCompoundRecord> sorted = sortSynthesizedRecords(synthesizedRecords);
+            for (SynthesizedCompoundRecord rec : sorted) {
+                Row row = sheet.createRow(rowIdx++);
+                String compoundLabel = (rec.compoundName() != null ? rec.compoundName() : "unknown");
+                if (rec.role() != null) compoundLabel += " [" + rec.role().name() + "]";
+                row.createCell(0).setCellValue(compoundLabel);
+                row.createCell(1).setCellValue(safe(rec.structureType()));
+                row.createCell(2).setCellValue(safe(rec.source()));
+
+                Cell activityCell = row.createCell(3);
+                activityCell.setCellValue(formatParadigmActivities(rec.paradigmActivities()));
+                activityCell.setCellStyle(wrapStyle);
+
+                row.createCell(4).setCellValue(rec.targetOrganisms() != null
+                        ? String.join("; ", rec.targetOrganisms()) : CompoundEvidenceAggregator.NOT_MENTIONED);
+                row.createCell(5).setCellValue(formatParadigmNames(rec.paradigmActivities()));
+
+                String mechanism = safe(rec.mechanismSummary());
+                if (rec.comparisons() != null && !rec.comparisons().isEmpty()) {
+                    String comparisons = rec.comparisons().stream()
+                            .filter(c -> c.relation() != null && !c.relation().isBlank())
+                            .map(c -> c.relation() + (c.referenceCompound() != null ? " (vs " + c.referenceCompound() + ")" : ""))
+                            .collect(Collectors.joining("; "));
+                    if (!comparisons.isBlank()) {
+                        mechanism = mechanism.isBlank() ? comparisons : mechanism + "\n" + comparisons;
+                    }
+                }
+                Cell mechCell = row.createCell(6);
+                mechCell.setCellValue(mechanism.isBlank() ? CompoundEvidenceAggregator.NOT_MENTIONED : mechanism);
+                mechCell.setCellStyle(wrapStyle);
+
+                row.createCell(7).setCellValue(rec.safetyProfile() != null && !rec.safetyProfile().isBlank()
+                        ? rec.safetyProfile() : CompoundEvidenceAggregator.NOT_MENTIONED);
+                row.createCell(8).setCellValue(rec.reference() != null && !rec.reference().isBlank()
+                        ? rec.reference() : safe(rec.documentTitle()));
+                row.createCell(9).setCellValue(CompoundEvidenceAggregator.NOT_MENTIONED);
+            }
+        } else {
+            for (CompoundActivityRow activity : CompoundEvidenceAggregator.fromEvidenceRecords(evidenceRecords)) {
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(activity.compoundName());
+                row.createCell(1).setCellValue(activity.structureType());
+                row.createCell(2).setCellValue(activity.source());
+                row.createCell(3).setCellValue(activity.antimicrobialActivity());
+                row.createCell(4).setCellValue(activity.targetPathogen());
+                row.createCell(5).setCellValue(activity.assayMethod());
+                row.createCell(6).setCellValue(activity.mechanism());
+                row.createCell(7).setCellValue(activity.cytotoxicitySafety());
+                row.createCell(8).setCellValue(activity.reference());
+                row.createCell(9).setCellValue(activity.patentStatus());
+            }
+        }
         autoSize(sheet, headers.length);
+    }
+
+    private List<SynthesizedCompoundRecord> sortSynthesizedRecords(List<SynthesizedCompoundRecord> records) {
+        return records.stream().sorted((a, b) -> {
+            int docCmp = safe(a.documentId()).compareTo(safe(b.documentId()));
+            if (docCmp != 0) return docCmp;
+            int roleA = a.role() == CompoundRole.SUBJECT ? 0 : 1;
+            int roleB = b.role() == CompoundRole.SUBJECT ? 0 : 1;
+            if (roleA != roleB) return Integer.compare(roleA, roleB);
+            return Double.compare(b.confidence(), a.confidence());
+        }).toList();
+    }
+
+    private String formatParadigmActivities(List<ParadigmActivityBlock> activities) {
+        if (activities == null || activities.isEmpty()) return CompoundEvidenceAggregator.NOT_MENTIONED;
+        StringBuilder sb = new StringBuilder();
+        for (ParadigmActivityBlock block : activities) {
+            if (!sb.isEmpty()) sb.append("\n");
+            sb.append("[").append(block.paradigm() != null ? block.paradigm() : "UNKNOWN").append("] ");
+            if (block.keyMetric() != null && block.keyMetric().type() != null) {
+                sb.append(block.keyMetric().type()).append("=")
+                        .append(block.keyMetric().value() != null ? block.keyMetric().value() : "N/A");
+            }
+            if (block.doseGradient() != null && !block.doseGradient().isEmpty()) {
+                String gradient = block.doseGradient().stream()
+                        .map(dr -> {
+                            String s = dr.concentration() != null ? dr.concentration() : "";
+                            if (dr.effect() != null && !dr.effect().isBlank()) s += "→" + dr.effect();
+                            if (dr.timepoint() != null && !dr.timepoint().isBlank()) s += " (" + dr.timepoint() + ")";
+                            return s;
+                        })
+                        .filter(s -> !s.isBlank())
+                        .collect(Collectors.joining("; "));
+                if (!gradient.isBlank()) {
+                    if (block.keyMetric() != null && block.keyMetric().type() != null) sb.append("; ");
+                    sb.append(gradient);
+                }
+            }
+            if (block.doseDependent() != null && block.doseDependent()) sb.append(" (dose-dependent)");
+            if (block.durability() != null && !block.durability().isBlank())
+                sb.append(" [").append(block.durability()).append("]");
+            if (block.observation() != null && !block.observation().isBlank())
+                sb.append(" ").append(block.observation());
+        }
+        return sb.toString();
+    }
+
+    private String formatParadigmNames(List<ParadigmActivityBlock> activities) {
+        if (activities == null || activities.isEmpty()) return CompoundEvidenceAggregator.NOT_MENTIONED;
+        return activities.stream()
+                .map(ParadigmActivityBlock::paradigm)
+                .filter(p -> p != null && !p.isBlank())
+                .distinct()
+                .collect(Collectors.joining("; "));
+    }
+
+    private String safe(String s) {
+        return s == null ? "" : s;
     }
 
     private void createGeneProteinSheet(Workbook workbook, CellStyle headerStyle,
@@ -178,12 +296,14 @@ public class ReviewXlsxService {
                                      String sheetName,
                                      List<ReviewEvidenceRecord> evidenceRecords,
                                      Function<TypedEntities, List<String>> extractor,
-                                     String label) {
+                                     String label,
+                                     List<SynthesizedCompoundRecord> synthesizedRecords) {
         Sheet sheet = workbook.createSheet(sheetName);
-        String[] headers = {
-                label, "Related Sub-question", "Evidence Count", "Linked Gene/Protein",
-                "Key Finding", "Source Papers", "Confidence (avg)"
-        };
+        boolean hasSynthesized = synthesizedRecords != null && !synthesizedRecords.isEmpty();
+        String[] headers = hasSynthesized
+                ? new String[]{label, "Compound", "Best Dose/Effect", "Evidence Count", "Source Papers", "Confidence (avg)"}
+                : new String[]{label, "Related Sub-question", "Evidence Count", "Linked Gene/Protein",
+                "Key Finding", "Source Papers", "Confidence (avg)"};
         createHeaderRow(sheet, headerStyle, headers);
 
         Map<String, List<ReviewEvidenceRecord>> byCategory = new LinkedHashMap<>();
@@ -194,19 +314,60 @@ public class ReviewXlsxService {
         }
 
         int rowIdx = 1;
-        for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCategory.entrySet()) {
-            List<ReviewEvidenceRecord> records = entry.getValue();
-            Row row = sheet.createRow(rowIdx++);
-            row.createCell(0).setCellValue(entry.getKey());
-            row.createCell(1).setCellValue(joinDistinct(records, r -> listOf(r.subQuestion())));
-            row.createCell(2).setCellValue(records.size());
-            row.createCell(3).setCellValue(joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::geneOrProtein)));
-            row.createCell(4).setCellValue(truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500));
-            row.createCell(5).setCellValue(joinDistinct(records, r -> listOf(documentLabel(r))));
-            row.createCell(6).setCellValue(avgConfidence(records));
+        if (hasSynthesized) {
+            for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCategory.entrySet()) {
+                String category = entry.getKey();
+                List<ReviewEvidenceRecord> records = entry.getValue();
+                Set<String> compoundsInCategory = new LinkedHashSet<>();
+                for (ReviewEvidenceRecord r : records) {
+                    TypedEntities typed = r.typedEntities();
+                    if (typed != null) {
+                        List<String> names = typed.compoundCanonicalName();
+                        if (names == null || names.isEmpty()) names = typed.moleculeOrMetabolite();
+                        if (names != null) names.forEach(n -> { if (n != null && !n.isBlank()) compoundsInCategory.add(n.trim()); });
+                    }
+                }
+                if (compoundsInCategory.isEmpty()) compoundsInCategory.add("(general)");
+                for (String compound : compoundsInCategory) {
+                    Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(category);
+                    row.createCell(1).setCellValue(compound);
+                    String bestDoseEffect = findBestDoseEffect(synthesizedRecords, compound, category);
+                    row.createCell(2).setCellValue(bestDoseEffect);
+                    row.createCell(3).setCellValue(records.size());
+                    row.createCell(4).setCellValue(joinDistinct(records, r -> listOf(documentLabel(r))));
+                    row.createCell(5).setCellValue(avgConfidence(records));
+                }
+            }
+        } else {
+            for (Map.Entry<String, List<ReviewEvidenceRecord>> entry : byCategory.entrySet()) {
+                List<ReviewEvidenceRecord> records = entry.getValue();
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(entry.getKey());
+                row.createCell(1).setCellValue(joinDistinct(records, r -> listOf(r.subQuestion())));
+                row.createCell(2).setCellValue(records.size());
+                row.createCell(3).setCellValue(joinDistinct(records, r -> typedList(r.typedEntities(), TypedEntities::geneOrProtein)));
+                row.createCell(4).setCellValue(truncate(firstNonBlank(records.stream().map(ReviewEvidenceRecord::finding).toList()), 500));
+                row.createCell(5).setCellValue(joinDistinct(records, r -> listOf(documentLabel(r))));
+                row.createCell(6).setCellValue(avgConfidence(records));
+            }
         }
-
         autoSize(sheet, headers.length);
+    }
+
+    private String findBestDoseEffect(List<SynthesizedCompoundRecord> records, String compound, String category) {
+        String categoryLower = category.toLowerCase(java.util.Locale.ROOT);
+        for (SynthesizedCompoundRecord rec : records) {
+            if (rec.compoundName() == null || !rec.compoundName().equalsIgnoreCase(compound)) continue;
+            if (rec.paradigmActivities() == null) continue;
+            for (ParadigmActivityBlock pab : rec.paradigmActivities()) {
+                if (pab.bestDose() != null && !pab.bestDose().isBlank()) return pab.bestDose();
+                if (pab.keyMetric() != null && pab.keyMetric().value() != null) {
+                    return pab.keyMetric().type() + "=" + pab.keyMetric().value();
+                }
+            }
+        }
+        return "";
     }
 
     private void createConceptSheet(Workbook workbook, CellStyle headerStyle,
@@ -266,6 +427,107 @@ public class ReviewXlsxService {
         }
 
         autoSize(sheet, headers.length);
+    }
+
+    private void createDoseResponseSheet(Workbook workbook, CellStyle headerStyle,
+                                         List<SynthesizedCompoundRecord> synthesizedRecords) {
+        Sheet sheet = workbook.createSheet("Dose-Response Detail");
+        String[] headers = {"化合物", "实验范式", "浓度", "效果", "时间点", "条件", "目标病原菌"};
+        createHeaderRow(sheet, headerStyle, headers);
+
+        int rowIdx = 1;
+        for (DoseResponseRow dr : CompoundEvidenceAggregator.doseResponseRows(synthesizedRecords)) {
+            Row row = sheet.createRow(rowIdx++);
+            row.createCell(0).setCellValue(dr.compoundName());
+            row.createCell(1).setCellValue(dr.paradigm());
+            row.createCell(2).setCellValue(dr.concentration());
+            row.createCell(3).setCellValue(dr.effect());
+            row.createCell(4).setCellValue(dr.timepoint());
+            row.createCell(5).setCellValue(dr.conditions());
+            row.createCell(6).setCellValue(dr.targetOrganism());
+        }
+        autoSize(sheet, headers.length);
+    }
+
+    private void createComparativeRelationSheet(Workbook workbook, CellStyle headerStyle,
+                                                 List<SynthesizedCompoundRecord> synthesizedRecords) {
+        Sheet sheet = workbook.createSheet("Comparative Relations");
+        String[] headers = {"Document", "化合物", "参考化合物", "关系", "比较基础", "等效换算"};
+        createHeaderRow(sheet, headerStyle, headers);
+
+        int rowIdx = 1;
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (SynthesizedCompoundRecord rec : synthesizedRecords) {
+            if (rec.comparisons() == null) continue;
+            for (ComparativeRelation cr : rec.comparisons()) {
+                if (cr.relation() == null || cr.relation().isBlank()) continue;
+                String dedup = safe(rec.documentTitle()) + "|" + safe(rec.compoundName()) + "|"
+                        + safe(cr.referenceCompound()) + "|" + safe(cr.relation());
+                if (!seen.add(dedup)) continue;
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(safe(rec.documentTitle()));
+                row.createCell(1).setCellValue(safe(rec.compoundName()));
+                row.createCell(2).setCellValue(safe(cr.referenceCompound()));
+                row.createCell(3).setCellValue(safe(cr.relation()));
+                row.createCell(4).setCellValue(safe(cr.basis()));
+                row.createCell(5).setCellValue(safe(cr.derivedEquivalence()));
+            }
+        }
+        autoSize(sheet, headers.length);
+    }
+
+    private void createPerPaperRankingSheet(Workbook workbook, CellStyle headerStyle,
+                                            List<SynthesizedCompoundRecord> synthesizedRecords) {
+        Sheet sheet = workbook.createSheet("Per-Paper Compound Ranking");
+        String[] headers = {"Document", "Paradigm", "Compound", "Concentration", "Effect", "Conclusion"};
+        createHeaderRow(sheet, headerStyle, headers);
+
+        int rowIdx = 1;
+        Map<String, List<SynthesizedCompoundRecord>> byDoc = synthesizedRecords.stream()
+                .collect(Collectors.groupingBy(r -> safe(r.documentTitle()), java.util.LinkedHashMap::new, Collectors.toList()));
+
+        for (var entry : byDoc.entrySet()) {
+            String docTitle = entry.getKey();
+            for (SynthesizedCompoundRecord rec : entry.getValue()) {
+                if (rec.paradigmActivities() == null) continue;
+                for (ParadigmActivityBlock pab : rec.paradigmActivities()) {
+                    Row row = sheet.createRow(rowIdx++);
+                    row.createCell(0).setCellValue(docTitle);
+                    row.createCell(1).setCellValue(safe(pab.paradigm()));
+                    row.createCell(2).setCellValue(safe(rec.compoundName()));
+
+                    String conc = "";
+                    String effect = "";
+                    if (pab.keyMetric() != null && pab.keyMetric().type() != null) {
+                        conc = pab.keyMetric().type() + "=" + safe(pab.keyMetric().value());
+                    }
+                    if (pab.doseGradient() != null && !pab.doseGradient().isEmpty()) {
+                        DoseResponse best = pab.doseGradient().get(0);
+                        if (conc.isBlank() && best.concentration() != null) conc = best.concentration();
+                        if (best.effect() != null) effect = best.effect();
+                    }
+                    if (pab.observation() != null && !pab.observation().isBlank()) {
+                        effect = effect.isBlank() ? pab.observation() : effect + "; " + pab.observation();
+                    }
+                    row.createCell(3).setCellValue(conc);
+                    row.createCell(4).setCellValue(effect);
+
+                    String conclusion = deriveConclusion(rec, pab);
+                    row.createCell(5).setCellValue(conclusion);
+                }
+            }
+        }
+        autoSize(sheet, headers.length);
+    }
+
+    private String deriveConclusion(SynthesizedCompoundRecord rec, ParadigmActivityBlock pab) {
+        if (rec.comparisons() != null) {
+            for (ComparativeRelation cr : rec.comparisons()) {
+                if (cr.relation() != null && !cr.relation().isBlank()) return cr.relation();
+            }
+        }
+        if (rec.role() == CompoundRole.SUBJECT && rec.confidence() >= 0.8) return "most active candidate";
+        return "";
     }
 
     private boolean mentionsConcept(ReviewEvidenceRecord evidence, String conceptLower) {

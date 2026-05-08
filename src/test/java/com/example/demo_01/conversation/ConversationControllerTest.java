@@ -109,8 +109,8 @@ class ConversationControllerTest {
     void shouldListConversationMessages() throws Exception {
         when(userService.getLoginUser(any())).thenReturn(mockLoginUser());
         when(conversationService.listConversationMessages("u-1", "c-1")).thenReturn(List.of(
-                new ConversationService.ConversationMessageResponse(1L, "user", "hello", Instant.parse("2026-03-12T04:00:00Z")),
-                new ConversationService.ConversationMessageResponse(2L, "assistant", "hi", Instant.parse("2026-03-12T04:00:02Z"))
+                new ConversationService.ConversationMessageResponse(1L, "user", "hello", null, Instant.parse("2026-03-12T04:00:00Z")),
+                new ConversationService.ConversationMessageResponse(2L, "assistant", "hi", null, Instant.parse("2026-03-12T04:00:02Z"))
         ));
 
         mockMvc.perform(get("/conversations/c-1/messages"))

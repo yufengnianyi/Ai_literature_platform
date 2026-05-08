@@ -14,13 +14,17 @@ langchain4j:
     dashscope:
       chat-model:
         api-key: ${DASHSCOPE_API_KEY:}
-        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+        model-name: ${DASHSCOPE_CHAT_MODEL:qwen3-max-2026-01-23}
+        enable-thinking: ${DASHSCOPE_ENABLE_THINKING:false}
+        thinking-budget: ${DASHSCOPE_THINKING_BUDGET:81920}
       embedding-model:
         api-key: ${DASHSCOPE_API_KEY:}
         model-name: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v4}
       streaming-chat-model:
         api-key: ${DASHSCOPE_API_KEY:}
-        model-name: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+        model-name: ${DASHSCOPE_CHAT_MODEL:qwen3-max-2026-01-23}
+        enable-thinking: ${DASHSCOPE_ENABLE_THINKING:false}
+        thinking-budget: ${DASHSCOPE_THINKING_BUDGET:81920}
 
 app:
   user:

@@ -30,6 +30,21 @@ public class ReviewProperties {
     @Valid
     private Report report = new Report();
 
+    @Valid
+    private Reasoning reasoning = new Reasoning();
+
+    @Valid
+    private Synthesis synthesis = new Synthesis();
+
+    @Valid
+    private Audit audit = new Audit();
+
+    @Valid
+    private Xlsx xlsx = new Xlsx();
+
+    @Valid
+    private Agent agent = new Agent();
+
     @Data
     public static class Retrieval {
 
@@ -59,6 +74,13 @@ public class ReviewProperties {
 
         @Min(1)
         private int maxCandidates = 300;
+
+        private boolean enableQuantitativeAnchor = true;
+
+        @Min(1)
+        private int maxAnchorsPerDocument = 10;
+
+        private boolean enableCompoundDefinitionAnchor = true;
     }
 
     @Data
@@ -78,6 +100,10 @@ public class ReviewProperties {
 
         @Min(1)
         private int batchSize = 3;
+
+        private boolean enableAliasInlineAnnotation = true;
+
+        private String activitySchemaVersion = "v2-paradigm";
     }
 
     @Data
@@ -85,5 +111,68 @@ public class ReviewProperties {
 
         @Min(1)
         private int maxTokens = 8000;
+    }
+
+    @Data
+    public static class Reasoning {
+
+        /**
+         * Deep thinking is reserved for synthesis-quality review decisions.
+         * Bulk screening/extraction/enrichment calls should stay in standard mode to reduce timeout risk.
+         */
+        private boolean coreDeepThinking = true;
+
+        @Min(1)
+        private int coreThinkingBudget = 8192;
+
+        private boolean standardDeepThinking = false;
+
+        @Min(0)
+        private int standardThinkingBudget = 0;
+    }
+
+    @Data
+    public static class Synthesis {
+
+        private boolean enableCompoundSynthesizer = true;
+
+        private boolean parallel = true;
+
+        private boolean cacheEnabled = true;
+    }
+
+    @Data
+    public static class Audit {
+
+        private boolean enableCoverageAudit = true;
+
+        @Min(0)
+        private int maxResynthesisAttempts = 1;
+    }
+
+    @Data
+    public static class Xlsx {
+
+        private boolean legacyCompoundSheet = true;
+
+        private boolean enableThreeSheet = true;
+    }
+
+    @Data
+    public static class Agent {
+
+        private boolean enabled = false;
+
+        @Min(1)
+        private int maxIterationsPerCompound = 2;
+
+        @Min(1)
+        private int maxLlmCallsPerPaper = 12;
+
+        @Min(1)
+        private int maxConcurrentPapers = 2;
+
+        @Min(1)
+        private int retrieverKPerDirective = 6;
     }
 }

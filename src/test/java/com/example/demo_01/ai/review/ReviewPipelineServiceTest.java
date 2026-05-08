@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.review;
 
+import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.repository.ReviewRepository;
 import com.example.demo_01.ai.review.service.*;
@@ -42,6 +43,10 @@ class ReviewPipelineServiceTest {
         ReflectionTestUtils.setField(service, "evidenceExtractionService", evidenceExtractionService);
         ReflectionTestUtils.setField(service, "evidenceFusionService", evidenceFusionService);
         ReflectionTestUtils.setField(service, "reportGeneratorService", reportGeneratorService);
+        ReviewProperties reviewProperties = new ReviewProperties();
+        reviewProperties.getRetrieval().setEnableQuantitativeAnchor(false);
+        reviewProperties.getSynthesis().setEnableCompoundSynthesizer(false);
+        ReflectionTestUtils.setField(service, "reviewProperties", reviewProperties);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(service, "reviewTaskExecutor", (TaskExecutor) Runnable::run);
 
@@ -79,24 +84,24 @@ class ReviewPipelineServiceTest {
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
         when(highRecallRetrievalService.retrieveSeedChunks(List.of(canonicalQuestion))).thenReturn(candidates);
         when(documentPromotionService.promote(analysis, canonicalQuestion, candidates)).thenReturn(promotionResult);
-        when(reviewRerankerService.rerank(canonicalQuestion, candidates)).thenReturn(candidates);
+        when(reviewRerankerService.rerank(eq(canonicalQuestion), eq(candidates), any())).thenReturn(candidates);
         when(reviewRerankerService.getJudgmentMap(canonicalQuestion, candidates)).thenReturn(
                 Map.of("chunk-1", new ChunkRelevanceJudgment("chunk-1", Relevance.HIGH, "direct evidence"))
         );
         when(documentKnowledgeEnrichmentService.enrich(any(UUID.class), eq(analysis), eq(candidates))).thenReturn(Map.of());
         when(evidenceExtractionService.extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of())).thenReturn(evidence);
         when(evidenceFusionService.fuse(analysis.subQuestions(), evidence)).thenReturn(groups);
-        when(reportGeneratorService.generateReport(analysis, groups, evidence)).thenReturn("report");
+        when(reportGeneratorService.generateReport(eq(analysis), eq(groups), eq(evidence), any())).thenReturn("report");
 
         service.submit("user-1", rawPrompt);
 
         verify(reviewRepository).insertTask(any(UUID.class), eq("user-1"), eq(rawPrompt));
         verify(documentPromotionService).promote(analysis, canonicalQuestion, candidates);
-        verify(reviewRerankerService).rerank(canonicalQuestion, candidates);
+        verify(reviewRerankerService).rerank(eq(canonicalQuestion), eq(candidates), any());
         verify(reviewRerankerService).getJudgmentMap(canonicalQuestion, candidates);
         verify(documentKnowledgeEnrichmentService).enrich(any(UUID.class), eq(analysis), eq(candidates));
         verify(evidenceExtractionService).extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of());
-        verify(reportGeneratorService).generateReport(analysis, groups, evidence);
+        verify(reportGeneratorService).generateReport(eq(analysis), eq(groups), eq(evidence), any());
         verify(reportGeneratorService, never()).generateReport(eq(rawPrompt), any());
     }
 }

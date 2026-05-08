@@ -138,4 +138,68 @@ class ReportGeneratorServiceTest {
         assertTrue(report.contains("菌丝生长: 25 uM: 0% growth (5d); 100 uM: 6% growth"));
         assertTrue(report.contains("EC50、MIC、抑制率"));
     }
+    @Test
+    void generateReportShouldRenderDisplaySubQuestionForChineseReports() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        String canonicalSubQuestion = "Which specific antifungal compounds have been identified as effective against oomycetes?";
+        String displaySubQuestion = "\u54ea\u4e9b\u6291\u83cc\u5316\u5408\u7269\u5df2\u88ab\u8bc1\u5b9e\u5bf9\u5375\u83cc\u6709\u6548\uff1f";
+        ExtractedEvidence evidence = new ExtractedEvidence(
+                "chunk-3",
+                "doc-3",
+                "Paper C",
+                "Carvacrol inhibits Phytophthora infestans.",
+                "Carvacrol reduced oomycete growth in vitro.",
+                "growth inhibition assay",
+                new TypedEntities(
+                        List.of("Phytophthora infestans"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("growth inhibition assay"),
+                        List.of("Carvacrol"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("Phytophthora infestans"),
+                        List.of(),
+                        List.of(),
+                        List.of("Paper C"),
+                        List.of("not mentioned")
+                ),
+                List.of("Carvacrol", "Phytophthora infestans"),
+                "EXPERIMENTAL",
+                0.91,
+                "Carvacrol reduced oomycete growth in vitro.",
+                canonicalSubQuestion
+        );
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Which antimicrobial compounds inhibit oomycetes?",
+                List.of(canonicalSubQuestion),
+                List.of("oomycetes"),
+                List.of("antimicrobial compounds"),
+                "zh",
+                "\u54ea\u4e9b\u6291\u83cc\u5316\u5408\u7269\u5bf9\u5375\u83cc\u6709\u6548\uff1f",
+                List.of(displaySubQuestion)
+        );
+
+        String report = service.generateReport(
+                analysis,
+                List.of(new FusedEvidenceGroup(
+                        canonicalSubQuestion,
+                        "Several antifungal compounds have been identified as effective against oomycetes.",
+                        List.of(),
+                        1,
+                        0,
+                        List.of()
+                )),
+                List.of(evidence)
+        );
+
+        assertTrue(report.contains("### " + displaySubQuestion));
+        assertFalse(report.contains("### " + canonicalSubQuestion));
+        assertFalse(report.contains("Several antifungal compounds have been identified as effective against oomycetes."));
+        assertTrue(report.contains("\u56f4\u7ed5\u201c" + displaySubQuestion + "\u201d"));
+    }
 }

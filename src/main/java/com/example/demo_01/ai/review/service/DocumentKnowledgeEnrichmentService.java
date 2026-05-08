@@ -50,6 +50,9 @@ public class DocumentKnowledgeEnrichmentService {
     @Resource
     private DocumentKnowledgeMerger documentKnowledgeMerger;
 
+    @Resource
+    private CompoundDefinitionAnchorRetriever compoundDefinitionAnchorRetriever;
+
     public Map<UUID, DocumentKnowledgeContext> enrich(UUID taskId,
                                                       QueryAnalysis analysis,
                                                       List<RetrievedChunk> approvedChunks) {
@@ -88,7 +91,8 @@ public class DocumentKnowledgeEnrichmentService {
             return toContext(knowledge, aliases(documentId));
         }
 
-        DocumentKnowledgeRecord extracted = extractKnowledge(analysis, documentId, chunks, existing.orElse(null));
+        List<RetrievedChunk> enrichedChunks = injectDefinitionChunks(documentId, chunks);
+        DocumentKnowledgeRecord extracted = extractKnowledge(analysis, documentId, enrichedChunks, existing.orElse(null));
         DocumentKnowledgeRecord withIdentity = attachCompoundIdentities(extracted, documentId);
         DocumentKnowledgeRecord merged = documentKnowledgeMerger.merge(
                 existing.orElse(null),
@@ -100,11 +104,12 @@ public class DocumentKnowledgeEnrichmentService {
                 KNOWLEDGE_VERSION,
                 chunks.stream().map(RetrievedChunk::chunkId).filter(Objects::nonNull).toList()
         );
-        persistCompounds(documentId, merged.compounds());
-        documentKnowledgeRepository.upsertKnowledge(merged);
+        List<DocumentKnowledgeCompound> persistedCompounds = persistCompounds(documentId, merged.compounds());
+        DocumentKnowledgeRecord persisted = withCompounds(merged, persistedCompounds);
+        documentKnowledgeRepository.upsertKnowledge(persisted);
         documentKnowledgeRepository.insertUpdateLog(taskId, documentId, PROMPT_VERSION,
-                updatedFields(status, merged), merged.coverageChunkIds());
-        return toContext(merged, aliases(documentId));
+                updatedFields(status, persisted), persisted.coverageChunkIds());
+        return toContext(persisted, aliases(documentId));
     }
 
     private KnowledgeStatus classify(DocumentKnowledgeRecord existing,
@@ -145,6 +150,25 @@ public class DocumentKnowledgeEnrichmentService {
                 || combined.contains("metabolite")
                 || combined.contains("molecule")
                 || combined.contains("化合物");
+    }
+
+    private List<RetrievedChunk> injectDefinitionChunks(UUID documentId, List<RetrievedChunk> existing) {
+        try {
+            List<RetrievedChunk> defChunks = compoundDefinitionAnchorRetriever.findDefinitionChunks(documentId, 3);
+            if (defChunks.isEmpty()) return existing;
+            Set<String> existingIds = existing.stream().map(RetrievedChunk::chunkId).collect(java.util.stream.Collectors.toSet());
+            List<RetrievedChunk> combined = new ArrayList<>(existing);
+            for (RetrievedChunk dc : defChunks) {
+                if (!existingIds.contains(dc.chunkId())) {
+                    combined.add(new RetrievedChunk(dc.chunkId(), dc.documentId(), dc.documentTitle(),
+                            "[COMPOUND_DEFINITION_CHUNK] " + dc.text(), dc.sectionPath(), dc.score(), "DEF_ANCHOR"));
+                }
+            }
+            return combined;
+        } catch (Exception e) {
+            log.debug("Definition chunk injection skipped for {}: {}", documentId, e.getMessage());
+            return existing;
+        }
     }
 
     private DocumentKnowledgeRecord extractKnowledge(QueryAnalysis analysis,
@@ -274,15 +298,45 @@ public class DocumentKnowledgeEnrichmentService {
         );
     }
 
-    private void persistCompounds(UUID documentId, List<DocumentKnowledgeCompound> compounds) {
+    private DocumentKnowledgeRecord withCompounds(DocumentKnowledgeRecord record, List<DocumentKnowledgeCompound> compounds) {
+        return new DocumentKnowledgeRecord(
+                record.documentId(), record.documentSummary(), record.researchObjects(), record.species(),
+                record.genesOrProteins(), record.pathwaysOrProcesses(), record.developmentalStages(),
+                record.methods(), compounds, record.keyFindings(), record.innovationPoints(),
+                record.limitations(), record.evidenceAnchors(), record.knowledgeStatus(),
+                record.promptVersion(), record.knowledgeVersion(), record.confidence(),
+                record.coverageChunkIds(), record.lastSeenTaskId(), record.updatedAt()
+        );
+    }
+
+    private DocumentKnowledgeCompound withNormalizedCompoundId(DocumentKnowledgeCompound compound, UUID normalizedCompoundId) {
+        if (compound == null || normalizedCompoundId == null) {
+            return compound;
+        }
+        return new DocumentKnowledgeCompound(
+                compound.localAlias(), compound.resolvedName(), compound.canonicalName(),
+                compound.iupacName(), compound.casNumber(), compound.smiles(), compound.inchiKey(),
+                compound.molecularFormula(), compound.structureType(), compound.source(), compound.bioactivity(),
+                safeList(compound.targetOrganism()), safeList(compound.mechanism()), compound.resolutionStatus(),
+                compound.evidenceChunkId(), compound.evidenceText(), compound.confidence(),
+                normalizedCompoundId.toString()
+        );
+    }
+
+    private List<DocumentKnowledgeCompound> persistCompounds(UUID documentId, List<DocumentKnowledgeCompound> compounds) {
+        List<DocumentKnowledgeCompound> persisted = new ArrayList<>();
         for (DocumentKnowledgeCompound compound : safeList(compounds)) {
             CompoundIdentity identity = compoundIdentityResolver.resolve(compound);
-            documentKnowledgeRepository.upsertCompoundIdentity(identity);
-            documentKnowledgeRepository.upsertAlias(documentId, compound);
+            UUID persistedIdentityId = documentKnowledgeRepository.upsertCompoundIdentity(identity);
+            DocumentKnowledgeCompound aliasCompound = withNormalizedCompoundId(compound, persistedIdentityId);
+            documentKnowledgeRepository.upsertAlias(documentId, aliasCompound);
+            persisted.add(aliasCompound);
         }
+        return persisted;
     }
 
     private DocumentKnowledgeContext toContext(DocumentKnowledgeRecord knowledge, List<DocumentCompoundAlias> aliases) {
+        Map<String, String> aliasMap = buildAliasResolutionMap(knowledge, aliases);
         return new DocumentKnowledgeContext(
                 knowledge.documentId(),
                 knowledge.knowledgeStatus(),
@@ -294,8 +348,39 @@ public class DocumentKnowledgeEnrichmentService {
                 safeList(knowledge.developmentalStages()),
                 safeList(knowledge.methods()),
                 safeList(knowledge.keyFindings()),
-                safeList(knowledge.innovationPoints())
+                safeList(knowledge.innovationPoints()),
+                aliasMap
         );
+    }
+
+    private Map<String, String> buildAliasResolutionMap(DocumentKnowledgeRecord knowledge,
+                                                         List<DocumentCompoundAlias> aliases) {
+        Map<String, String> map = new java.util.LinkedHashMap<>();
+        for (DocumentKnowledgeCompound compound : safeList(knowledge.compounds())) {
+            if (compound.localAlias() != null && !compound.localAlias().isBlank()) {
+                String key = compound.localAlias().toLowerCase(java.util.Locale.ROOT).trim();
+                String canonical = compound.canonicalName() != null ? compound.canonicalName()
+                        : compound.resolvedName();
+                if (canonical != null && !canonical.isBlank()
+                        && compound.resolutionStatus() != CompoundResolutionStatus.UNRESOLVED) {
+                    map.put(key, canonical);
+                } else {
+                    map.putIfAbsent(key, "local:" + knowledge.documentId() + ":" + compound.localAlias().trim());
+                }
+            }
+        }
+        for (DocumentCompoundAlias alias : safeList(aliases)) {
+            if (alias.localAlias() != null) {
+                String key = alias.localAlias().toLowerCase(java.util.Locale.ROOT).trim();
+                if (alias.resolvedName() != null && !alias.resolvedName().isBlank()
+                        && alias.resolutionStatus() != CompoundResolutionStatus.UNRESOLVED) {
+                    map.putIfAbsent(key, alias.resolvedName());
+                } else {
+                    map.putIfAbsent(key, "local:" + knowledge.documentId() + ":" + alias.localAlias().trim());
+                }
+            }
+        }
+        return map;
     }
 
     private List<String> knownCompounds(DocumentKnowledgeRecord knowledge, List<DocumentCompoundAlias> aliases) {

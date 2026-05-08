@@ -434,6 +434,89 @@ public class ReviewRepository {
         return jdbcTemplate.query(sql, (rs, rowNum) -> mapRetrievedChunk(rs, "DOC_PROMOTED"), params.toArray());
     }
 
+    public List<RetrievedChunk> findAllChunksByDocumentId(UUID documentId) {
+        if (documentId == null) return List.of();
+        String table = vectorTable();
+        String sql = """
+                SELECT embedding_id::text AS embedding_id,
+                       coalesce(text, '') AS text,
+                       metadata::text AS metadata_json
+                FROM %s
+                WHERE metadata->>'document_id' = ?
+                """.formatted(table);
+        return jdbcTemplate.query(sql, (rs, rowNum) -> mapRetrievedChunk(rs, "DOC_ALL"), documentId.toString());
+    }
+
+    public void insertChunkAnchors(UUID taskId, List<ChunkAnchor> anchors) {
+        if (anchors == null || anchors.isEmpty()) return;
+        for (ChunkAnchor anchor : anchors) {
+            jdbcTemplate.update("""
+                    INSERT INTO review_chunk_anchor (task_id, chunk_id, anchor_type, reason, matched_tokens)
+                    VALUES (?, ?, ?, ?, ?)
+                    """, taskId, anchor.chunkId(), anchor.type().name(), anchor.reason(),
+                    anchor.matchedTokens() != null ? String.join(",", anchor.matchedTokens()) : null);
+        }
+    }
+
+    public void upsertDocumentAlias(UUID documentId, String localAlias, String canonicalName, String resolutionStatus) {
+        jdbcTemplate.update("""
+                INSERT INTO review_document_alias_map (document_id, local_alias, canonical_name, resolution_status)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (document_id, local_alias) DO UPDATE
+                SET canonical_name = EXCLUDED.canonical_name, resolution_status = EXCLUDED.resolution_status
+                """, documentId, localAlias, canonicalName, resolutionStatus);
+    }
+
+    public void insertSynthesizedCompound(UUID taskId, SynthesizedCompoundRecord record) {
+        String compoundKey = (record.compoundName() != null ? record.compoundName() : "unknown").toLowerCase(java.util.Locale.ROOT);
+        UUID documentId = record.documentId() != null ? parseUuid(record.documentId()) : null;
+        jdbcTemplate.update("""
+                INSERT INTO review_synthesized_compound
+                    (task_id, document_id, compound_key, compound_name, role, payload_json, coverage_warnings, confidence)
+                VALUES (?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), ?)
+                ON CONFLICT (task_id, document_id, compound_key) DO UPDATE
+                SET compound_name = EXCLUDED.compound_name,
+                    role = EXCLUDED.role,
+                    payload_json = EXCLUDED.payload_json,
+                    coverage_warnings = EXCLUDED.coverage_warnings,
+                    confidence = EXCLUDED.confidence
+                """, taskId, documentId, compoundKey, record.compoundName(),
+                record.role() != null ? record.role().name() : null,
+                toJson(record), toJson(record.coverageWarnings()), record.confidence());
+    }
+
+    public List<SynthesizedCompoundRecord> findSynthesizedCompoundsByTask(UUID taskId) {
+        return jdbcTemplate.query("""
+                SELECT payload_json, document_id, coverage_warnings, confidence
+                FROM review_synthesized_compound
+                WHERE task_id = ?
+                ORDER BY document_id, confidence DESC
+                """, (rs, rowNum) -> {
+            String payloadJson = rs.getString("payload_json");
+            SynthesizedCompoundRecord base = fromJson(payloadJson, SynthesizedCompoundRecord.class);
+            UUID documentId = rs.getObject("document_id", UUID.class);
+            List<String> warnings = fromJsonList(rs.getString("coverage_warnings"));
+            return new SynthesizedCompoundRecord(
+                    base.compoundName(),
+                    documentId != null ? documentId.toString() : base.documentId(),
+                    base.documentTitle(),
+                    base.role(),
+                    base.structureType(),
+                    base.source(),
+                    base.paradigmActivities(),
+                    base.mechanismSummary(),
+                    base.safetyProfile(),
+                    base.comparisons(),
+                    base.contextNote(),
+                    base.targetOrganisms(),
+                    base.confidence(),
+                    base.reference(),
+                    base.evidenceChunkIds(),
+                    warnings != null && !warnings.isEmpty() ? warnings : base.coverageWarnings()
+            );
+        }, taskId);
+    }
+
     private ReviewTaskRecord mapTask(ResultSet rs, int rowNum) throws SQLException {
         Timestamp createdAt = rs.getTimestamp("created_at");
         Timestamp updatedAt = rs.getTimestamp("updated_at");

@@ -20,6 +20,14 @@
         Send
       </a-button>
     </div>
+    <div class="composer-options">
+      <a-switch
+        v-model:checked="deepThinking"
+        size="small"
+        :disabled="disabled"
+      />
+      <span>深度思考</span>
+    </div>
   </div>
 </template>
 
@@ -32,10 +40,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'send', text: string): void
+  (e: 'send', text: string, options: { deepThinking: boolean }): void
 }>();
 
 const inputText = ref('');
+const deepThinking = ref(false);
 
 const handleSend = () => {
   const text = inputText.value.trim();
@@ -43,7 +52,7 @@ const handleSend = () => {
     return;
   }
 
-  emit('send', text);
+  emit('send', text, { deepThinking: deepThinking.value });
   inputText.value = '';
 };
 
@@ -87,6 +96,16 @@ const handlePressEnter = (e: KeyboardEvent) => {
 
 .input-wrapper-disabled {
   opacity: 0.72;
+}
+
+.composer-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .custom-textarea {

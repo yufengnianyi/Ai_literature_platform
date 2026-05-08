@@ -20,9 +20,9 @@ public class KgProperties {
     @Min(1)
     private int asyncThreads = 2;
 
-    private String entityModel = "qwen-max";
+    private String entityModel = "qwen3-max-2026-01-23";
 
-    private String relationModel = "qwen-max";
+    private String relationModel = "qwen3-max-2026-01-23";
 
     private String schemaVersion = "v1";
 
@@ -47,7 +47,7 @@ public class KgProperties {
 
         private String endpoint;
 
-        private String model = "qwen-max";
+        private String model = "qwen3-max-2026-01-23";
 
         @Min(1)
         private int batchSize = 1;

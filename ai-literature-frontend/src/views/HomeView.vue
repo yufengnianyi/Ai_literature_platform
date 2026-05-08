@@ -102,11 +102,11 @@ const scrollToBottom = async () => {
   }
 };
 
-const handleSend = (text: string) => {
+const handleSend = (text: string, options: { deepThinking: boolean }) => {
   if (!activeConversationId.value) {
     return;
   }
-  sendMessage(text, activeConversationId.value, scrollToBottom);
+  sendMessage(text, activeConversationId.value, scrollToBottom, options);
 };
 
 watch(

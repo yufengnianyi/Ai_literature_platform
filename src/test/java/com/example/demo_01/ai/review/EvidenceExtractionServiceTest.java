@@ -4,9 +4,9 @@ import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.ExtractedEvidence;
 import com.example.demo_01.ai.review.model.ReviewModels.RetrievedChunk;
 import com.example.demo_01.ai.review.service.EvidenceExtractionService;
+import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
@@ -26,11 +26,11 @@ class EvidenceExtractionServiceTest {
     @Test
     void extractShouldCoerceScalarTypedEntityFieldsFromLlmJson() {
         EvidenceExtractionService service = new EvidenceExtractionService();
-        ChatModel chatModel = mock(ChatModel.class);
+        ReviewReasoningChatClient reasoningChatClient = mock(ReviewReasoningChatClient.class);
         ReviewProperties properties = new ReviewProperties();
         properties.getExtraction().setBatchSize(3);
 
-        ReflectionTestUtils.setField(service, "chatModel", chatModel);
+        ReflectionTestUtils.setField(service, "reasoningChatClient", reasoningChatClient);
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(service, "reviewProperties", properties);
         ReflectionTestUtils.setField(service, "reviewTaskExecutor", (TaskExecutor) Runnable::run);
@@ -45,7 +45,7 @@ class EvidenceExtractionServiceTest {
                 0.92,
                 "BM25"
         );
-        when(chatModel.chat(any(), any())).thenReturn(response("""
+        when(reasoningChatClient.chatStandard(any(), any())).thenReturn(response("""
                 [{
                   "chunkId": "chunk-1",
                   "documentId": "%s",

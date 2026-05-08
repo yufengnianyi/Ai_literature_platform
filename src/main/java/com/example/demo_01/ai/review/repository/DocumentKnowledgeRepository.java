@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
@@ -95,16 +96,44 @@ public class DocumentKnowledgeRepository {
                 Timestamp.from(Instant.now()));
     }
 
-    public void upsertCompoundIdentity(CompoundIdentity identity) {
+    public UUID upsertCompoundIdentity(CompoundIdentity identity) {
         if (identity == null || identity.compoundId() == null || identity.compoundId().isBlank()) {
-            return;
+            return null;
         }
-        jdbcTemplate.update("""
+        try {
+            return upsertCompoundIdentityByConflict(identity, """
+                    ON CONFLICT (compound_id) DO UPDATE
+                    """);
+        } catch (DuplicateKeyException e) {
+            String message = e.getMostSpecificCause() == null
+                    ? e.getMessage()
+                    : e.getMostSpecificCause().getMessage();
+            if (message != null && message.contains("idx_review_compound_identity_inchi") && hasText(identity.inchiKey())) {
+                return upsertCompoundIdentityByConflict(identity, """
+                        ON CONFLICT (inchi_key) WHERE inchi_key IS NOT NULL AND inchi_key <> '' DO UPDATE
+                        """);
+            }
+            if (message != null && message.contains("idx_review_compound_identity_smiles") && hasText(identity.smiles())) {
+                return upsertCompoundIdentityByConflict(identity, """
+                        ON CONFLICT (smiles) WHERE smiles IS NOT NULL AND smiles <> '' DO UPDATE
+                        """);
+            }
+            if (message != null && message.contains("idx_review_compound_identity_cas") && hasText(identity.casNumber())) {
+                return upsertCompoundIdentityByConflict(identity, """
+                        ON CONFLICT (cas_number) WHERE cas_number IS NOT NULL AND cas_number <> '' DO UPDATE
+                        """);
+            }
+            throw e;
+        }
+    }
+
+    private UUID upsertCompoundIdentityByConflict(CompoundIdentity identity, String conflictClause) {
+        return jdbcTemplate.queryForObject("""
                 INSERT INTO review_compound_identity
                     (compound_id, canonical_name, iupac_name, cas_number, smiles, inchi_key,
                      molecular_formula, structure_type, synonyms_json, confidence, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?)
-                ON CONFLICT (compound_id) DO UPDATE
+                %s
                 SET canonical_name = coalesce(EXCLUDED.canonical_name, review_compound_identity.canonical_name),
                     iupac_name = coalesce(EXCLUDED.iupac_name, review_compound_identity.iupac_name),
                     cas_number = coalesce(EXCLUDED.cas_number, review_compound_identity.cas_number),
@@ -115,7 +144,9 @@ public class DocumentKnowledgeRepository {
                     synonyms_json = EXCLUDED.synonyms_json,
                     confidence = greatest(coalesce(review_compound_identity.confidence, 0), coalesce(EXCLUDED.confidence, 0)),
                     updated_at = EXCLUDED.updated_at
-                """,
+                RETURNING compound_id
+                """.formatted(conflictClause),
+                UUID.class,
                 UUID.fromString(identity.compoundId()),
                 identity.canonicalName(),
                 identity.iupacName(),
@@ -261,5 +292,9 @@ public class DocumentKnowledgeRepository {
             }
         }
         return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
