@@ -3,9 +3,9 @@
     <section class="review-shell">
       <header class="review-header">
         <div>
-          <div class="eyebrow">Single-paper demo</div>
+          <div class="eyebrow">Multi-paper review</div>
           <h2>Review 文献解读</h2>
-          <p>问题命中 chunk 后自动选择最高分文献，回溯该文献全部 chunks，生成报告、模板表格和 xlsx。</p>
+          <p>先检索命中文献，由你选择多篇文献后逐篇回溯全部 chunks，生成报告、模板表格和 xlsx。</p>
         </div>
         <a-tag color="blue">antimicrobial_compound</a-tag>
       </header>
@@ -28,9 +28,9 @@
           </div>
         </div>
         <div class="action-bar">
-          <a-button type="primary" size="large" :disabled="!question.trim()" @click="handleDirectSubmit">
+          <a-button type="primary" size="large" :disabled="!question.trim()" :loading="isSubmitting" @click="handleDirectSubmit">
             <ThunderboltOutlined />
-            运行单篇 demo
+            检索文献
           </a-button>
           <a-button size="large" :disabled="!question.trim()" :loading="isSubmitting" @click="handleAsyncSubmit">
             后台提交
@@ -38,11 +38,21 @@
         </div>
       </div>
 
+      <ReviewScopePanel
+        v-if="stage === 'selecting' && scopePreview"
+        :preview="scopePreview"
+        :original-question="question"
+        :language-code="activeLanguage"
+        mode="candidate"
+        @confirm-candidates="handleConfirmDocuments"
+        @cancel="handleBackToInput"
+      />
+
       <div v-if="stage === 'generating'" class="progress-panel">
         <a-spin />
         <div>
           <h3>{{ stageLabel }}</h3>
-          <p>正在检索文献、选择最高分文献并生成单篇解读。</p>
+          <p>正在按已选择文献逐篇回溯全文 chunks，并生成多篇解读。</p>
         </div>
         <a-button danger @click="handleCancel">取消</a-button>
       </div>
@@ -121,7 +131,9 @@ import {
 } from '@ant-design/icons-vue';
 import {
   reviewService,
+  type CandidateReviewRequest,
   type ReviewStreamHandle,
+  type ReviewScopePreview,
   type ReviewSummaryTable,
   type ReviewTaskRecord,
 } from '@/services/review';
@@ -132,8 +144,9 @@ import {
   translateReviewStatus,
 } from '@/utils/reviewPresentation';
 import ReviewTablePreview from '@/components/review/ReviewTablePreview.vue';
+import ReviewScopePanel from '@/components/review/ReviewScopePanel.vue';
 
-type ReviewStage = 'inputting' | 'generating' | 'completed';
+type ReviewStage = 'inputting' | 'selecting' | 'generating' | 'completed';
 
 const TEMPLATE_ID = 'antimicrobial_compound';
 
@@ -162,6 +175,7 @@ const xlsxDownloadUrl = ref('');
 const taskHistory = ref<ReviewTaskRecord[]>([]);
 const loadingHistory = ref(false);
 const isSubmitting = ref(false);
+const scopePreview = ref<ReviewScopePreview | null>(null);
 let streamHandle: ReviewStreamHandle | null = null;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -217,36 +231,23 @@ const loadTaskHistory = async () => {
   }
 };
 
-const handleDirectSubmit = () => {
+const handleDirectSubmit = async () => {
   if (!question.value.trim()) return;
   cleanupPolling();
   streamHandle?.close();
   resetResult();
-  stage.value = 'generating';
-  stageLabel.value = '检索并生成报告';
-
-  streamHandle = reviewService.streamReport({
-    question: question.value,
-    templateId: TEMPLATE_ID,
-    onMessage: (data) => {
-      stageLabel.value = '生成报告中';
-      reportContent.value += data;
-    },
-    onError: (error) => {
-      stage.value = reportContent.value ? 'completed' : 'inputting';
-      errorMessage.value = error instanceof Error ? error.message : 'Review 生成失败';
-    },
-    onComplete: () => {
-      stage.value = 'completed';
-      if (streamHandle?.taskId) {
-        currentTaskId.value = streamHandle.taskId;
-        xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(streamHandle.taskId);
-        void loadSummaryTables(streamHandle.taskId);
-      }
-      void loadTaskHistory();
-    },
-  });
-  currentTaskId.value = streamHandle.taskId ?? '';
+  scopePreview.value = null;
+  isSubmitting.value = true;
+  try {
+    const result = await reviewService.submitTask(question.value, TEMPLATE_ID);
+    currentTaskId.value = result.taskId;
+    pollTask(result.taskId);
+  } catch (error) {
+    stage.value = 'inputting';
+    errorMessage.value = error instanceof Error ? error.message : '文献检索失败';
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 
 const handleAsyncSubmit = async () => {
@@ -256,12 +257,38 @@ const handleAsyncSubmit = async () => {
   try {
     const result = await reviewService.submitTask(question.value, TEMPLATE_ID);
     message.success(`已提交任务: ${result.taskId}`);
+    currentTaskId.value = result.taskId;
     await loadTaskHistory();
     pollTask(result.taskId);
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '后台提交失败';
   } finally {
     isSubmitting.value = false;
+  }
+};
+
+const handleBackToInput = () => {
+  cleanupPolling();
+  stage.value = 'inputting';
+};
+
+const handleConfirmDocuments = async (request: CandidateReviewRequest) => {
+  if (!currentTaskId.value || !request.selectedDocumentIds?.length) {
+    message.warning('请至少选择一篇文献');
+    return;
+  }
+  if (request.selectedDocumentIds.length > 5) {
+    message.warning('已选择超过 5 篇文献，生成时间可能较长');
+  }
+  resetResult();
+  stage.value = 'generating';
+  stageLabel.value = `正在解读 ${request.selectedDocumentIds.length} 篇文献`;
+  try {
+    await reviewService.confirmDocuments(currentTaskId.value, request.selectedDocumentIds);
+    pollTask(currentTaskId.value);
+  } catch (error) {
+    stage.value = 'selecting';
+    errorMessage.value = error instanceof Error ? error.message : '确认文献失败';
   }
 };
 
@@ -279,6 +306,7 @@ const handleNewReport = () => {
   stage.value = 'inputting';
   question.value = '';
   currentTaskId.value = '';
+  scopePreview.value = null;
   resetResult();
 };
 
@@ -329,6 +357,9 @@ const loadTask = async (taskId: string) => {
       xlsxDownloadUrl.value = reviewService.getXlsxDownloadUrl(taskId);
       stage.value = 'completed';
       await loadSummaryTables(taskId);
+    } else if (task.status === 'AWAITING_USER') {
+      scopePreview.value = await reviewService.getScopePreview(taskId);
+      stage.value = 'selecting';
     } else if (task.status === 'RUNNING' || task.status === 'QUEUED') {
       pollTask(taskId);
     } else if (task.status === 'FAILED') {
@@ -347,7 +378,15 @@ const pollTask = (taskId: string) => {
     try {
       const task = await reviewService.getTask(taskId);
       stageLabel.value = translateReviewStage(task.stage, activeLanguage.value);
-      if (task.status === 'COMPLETED') {
+      if (task.status === 'AWAITING_USER') {
+        cleanupPolling();
+        question.value = task.question;
+        reviewLanguageCode.value = task.queryAnalysis?.languageCode ?? 'zh';
+        currentTaskId.value = taskId;
+        scopePreview.value = await reviewService.getScopePreview(taskId);
+        stage.value = 'selecting';
+        await loadTaskHistory();
+      } else if (task.status === 'COMPLETED') {
         cleanupPolling();
         reportContent.value = task.reportMarkdown ?? '';
         question.value = task.question;

@@ -12,8 +12,11 @@ import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -84,7 +87,7 @@ public class ReviewPipelineService {
         UUID taskId = UUID.randomUUID();
         String resolvedTemplate = normalizeTemplateId(templateId);
         reviewRepository.insertTask(taskId, userId, question, resolvedTemplate);
-        reviewTaskExecutor.execute(() -> executePipeline(taskId, question, resolvedTemplate));
+        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, question, resolvedTemplate));
         return new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.QUEUED);
     }
 
@@ -97,7 +100,25 @@ public class ReviewPipelineService {
         }
 
         reviewRepository.resetTaskForRetry(taskId);
-        reviewTaskExecutor.execute(() -> executePipeline(taskId, task.question(), normalizeTemplateId(task.templateId())));
+        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, task.question(), normalizeTemplateId(task.templateId())));
+        return new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.QUEUED);
+    }
+
+    public ReviewTaskAcceptedResponse confirmDocuments(UUID taskId, List<UUID> selectedDocumentIds) {
+        List<UUID> safeIds = selectedDocumentIds == null ? List.of() : selectedDocumentIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (safeIds.isEmpty()) {
+            throw new IllegalArgumentException("At least one document must be selected.");
+        }
+        ReviewTaskRecord task = reviewRepository.findTask(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+        if (task.status() == ReviewTaskStatus.RUNNING) {
+            throw new IllegalStateException("Task is still running, cannot confirm documents.");
+        }
+        reviewRepository.updateDocumentSelection(taskId, safeIds);
+        reviewTaskExecutor.execute(() -> executeSelectedDocuments(taskId, safeIds));
         return new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.QUEUED);
     }
 
@@ -112,7 +133,7 @@ public class ReviewPipelineService {
         return Flux.create(sink -> {
             reviewTaskExecutor.execute(() -> {
                 try {
-                    PipelineContext ctx = runPreReportStages(taskId, question, resolvedTemplate);
+                    PipelineContext ctx = runAutoReportStages(taskId, question, resolvedTemplate);
                     streamReportPhase(taskId, ctx, sink);
                 } catch (Exception e) {
                     failTask(taskId, "PIPELINE_ERROR", e);
@@ -154,16 +175,45 @@ public class ReviewPipelineService {
                 .subscribe();
     }
 
-    private void executePipeline(UUID taskId, String question, String templateId) {
+    private void executeCandidateDiscovery(UUID taskId, String question, String templateId) {
         try {
-            PipelineContext ctx = runPreReportStages(taskId, question, templateId);
+            runCandidateDiscoveryStages(taskId, question, templateId);
+        } catch (Exception e) {
+            failTask(taskId, "PIPELINE_ERROR", e);
+        }
+    }
+
+    private void executeSelectedDocuments(UUID taskId, List<UUID> selectedDocumentIds) {
+        try {
+            ReviewTaskRecord task = reviewRepository.findTask(taskId)
+                    .orElseThrow(() -> new IllegalArgumentException("Task not found: " + taskId));
+            PipelineContext ctx = contextFromTask(task);
+            runSelectedDocumentAnalysis(taskId, ctx, selectedDocumentIds);
             finalizeWithGeneratedReport(taskId, ctx);
         } catch (Exception e) {
             failTask(taskId, "PIPELINE_ERROR", e);
         }
     }
 
-    private PipelineContext runPreReportStages(UUID taskId, String question, String templateId) {
+    private PipelineContext runAutoReportStages(UUID taskId, String question, String templateId) {
+        PipelineContext ctx = runCandidateDiscoveryStages(taskId, question, templateId);
+        List<ReviewDocumentCandidate> candidates = reviewRepository.findDocumentCandidates(taskId);
+        UUID firstDocumentId = candidates.stream()
+                .filter(ReviewDocumentCandidate::selected)
+                .map(ReviewDocumentCandidate::documentId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElseGet(() -> candidates.stream()
+                        .map(ReviewDocumentCandidate::documentId)
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("No document candidate is available.")));
+        reviewRepository.updateDocumentSelection(taskId, List.of(firstDocumentId));
+        runSelectedDocumentAnalysis(taskId, ctx, List.of(firstDocumentId));
+        return ctx;
+    }
+
+    private PipelineContext runCandidateDiscoveryStages(UUID taskId, String question, String templateId) {
         PipelineContext ctx = new PipelineContext();
         ctx.pipelineStart = Instant.now();
         ctx.templateId = normalizeTemplateId(templateId);
@@ -177,11 +227,12 @@ public class ReviewPipelineService {
         reviewRepository.updateQueryAnalysis(taskId, analysis);
         reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.RUNNING, ReviewStage.QUERY_ANALYSIS);
 
-        return runExpansionAndBeyond(taskId, ctx, analysis);
+        runExpansionAndBeyond(taskId, ctx, analysis);
+        return ctx;
     }
 
-    private PipelineContext runExpansionAndBeyond(UUID taskId, PipelineContext ctx,
-                                                  QueryAnalysis analysis) {
+    private void runExpansionAndBeyond(UUID taskId, PipelineContext ctx,
+                                       QueryAnalysis analysis) {
         // Stage 2: Query expansion
         updateStage(taskId, ReviewStage.QUERY_EXPANSION);
         List<String> expandedQueries = queryExpansionService.expand(analysis);
@@ -191,10 +242,10 @@ public class ReviewPipelineService {
         Instant retrievalStart = Instant.now();
         List<RetrievedChunk> seedChunks = highRecallRetrievalService.retrieveSeedChunks(expandedQueries);
         ctx.retrievalMs = Duration.between(retrievalStart, Instant.now()).toMillis();
-        log.info("Task {}: Retrieved {} seed candidates in {}ms", taskId, seedChunks.size(), ctx.retrievalMs);
         if (seedChunks == null || seedChunks.isEmpty()) {
             throw new IllegalStateException("No literature chunks were retrieved for this review question.");
         }
+        log.info("Task {}: Retrieved {} seed candidates in {}ms", taskId, seedChunks.size(), ctx.retrievalMs);
 
         reviewRepository.insertCandidates(taskId, seedChunks.stream()
                 .map(c -> toSeedCandidate(taskId, c))
@@ -202,63 +253,89 @@ public class ReviewPipelineService {
 
         updateStage(taskId, ReviewStage.DOCUMENT_PROMOTION);
         Instant promotionStart = Instant.now();
-        SelectedDocument selected = selectBestDocument(seedChunks);
+        List<SelectedDocument> selectedDocuments = rankDocuments(seedChunks);
         ctx.documentPromotionMs = Duration.between(promotionStart, Instant.now()).toMillis();
         ctx.rerankMs = 0L;
-        ctx.selectedSeedChunks = selected.seedChunks();
-        reviewRepository.updateSelectedDocument(taskId, selected.documentId(), selected.documentTitle());
-        reviewRepository.insertDocumentCandidates(taskId, List.of(toSinglePaperDocumentCandidate(taskId, selected)));
+        SelectedDocument defaultSelected = selectedDocuments.get(0);
+        ctx.selectedSeedChunks = defaultSelected.seedChunks();
+        reviewRepository.updateSelectedDocument(taskId, defaultSelected.documentId(), defaultSelected.documentTitle());
+        reviewRepository.insertDocumentCandidates(taskId, selectedDocuments.stream()
+                .map(selected -> toDocumentCandidate(taskId, selected, selected.documentId().equals(defaultSelected.documentId())))
+                .toList());
 
         updateStage(taskId, ReviewStage.RERANKING);
         for (RetrievedChunk c : seedChunks) {
-            boolean included = selected.documentId().equals(c.documentId());
+            boolean included = defaultSelected.documentId().equals(c.documentId());
             reviewRepository.updateCandidateReranking(taskId, c.chunkId(),
                     c.score(), included ? Relevance.HIGH : Relevance.LOW,
-                    included ? "Selected as the highest-scoring paper for the single-paper demo."
-                            : "Not selected because another paper scored higher.",
+                    included ? "Default selected as the highest-scoring paper; user may select more papers."
+                            : "Available for user selection in the multi-paper review step.",
                     included);
         }
 
-        runSinglePaperAnalysis(taskId, ctx, analysis, selected, seedChunks.size());
-
-        return ctx;
+        reviewRepository.updateTaskCounts(taskId, seedChunks.size(), selectedDocuments.size(), 0);
+        reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.AWAITING_USER, ReviewStage.RERANKING);
+        log.info("Task {}: Prepared {} document candidates for user selection", taskId, selectedDocuments.size());
     }
 
-    private void runSinglePaperAnalysis(UUID taskId,
-                                        PipelineContext ctx,
-                                        QueryAnalysis analysis,
-                                        SelectedDocument selected,
-                                        int candidateCount) {
+    private void runSelectedDocumentAnalysis(UUID taskId,
+                                             PipelineContext ctx,
+                                             List<UUID> selectedDocumentIds) {
         updateStage(taskId, ReviewStage.EVIDENCE_EXTRACTION);
         Instant analysisStart = Instant.now();
-        List<RetrievedChunk> allChunks = reviewRepository.findAllChunksByDocumentId(selected.documentId());
-        if (allChunks == null || allChunks.isEmpty()) {
-            allChunks = selected.seedChunks();
+        List<ReviewDocumentCandidate> candidates = reviewRepository.findDocumentCandidates(taskId);
+        Map<UUID, ReviewDocumentCandidate> candidateByDocument = candidates.stream()
+                .filter(candidate -> candidate.documentId() != null)
+                .collect(Collectors.toMap(ReviewDocumentCandidate::documentId, candidate -> candidate,
+                        (left, right) -> left, LinkedHashMap::new));
+        Map<UUID, List<RetrievedChunk>> seedChunksByDocument = reviewRepository.findAllCandidates(taskId).stream()
+                .filter(candidate -> candidate.documentId() != null)
+                .collect(Collectors.groupingBy(
+                        ReviewCandidate::documentId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(this::toRetrievedChunk, Collectors.toList())));
+
+        List<ReviewPaperEvidenceTable> tables = new ArrayList<>();
+        for (UUID documentId : selectedDocumentIds == null ? List.<UUID>of() : selectedDocumentIds) {
+            ReviewDocumentCandidate candidate = candidateByDocument.get(documentId);
+            if (candidate == null) {
+                continue;
+            }
+            List<RetrievedChunk> seedChunks = seedChunksByDocument.getOrDefault(documentId, List.of());
+            List<RetrievedChunk> allChunks = reviewRepository.findAllChunksByDocumentId(documentId);
+            if (allChunks == null || allChunks.isEmpty()) {
+                allChunks = seedChunks;
+            }
+            String documentTitle = allChunks.stream()
+                    .map(RetrievedChunk::documentTitle)
+                    .filter(Objects::nonNull)
+                    .filter(title -> !title.isBlank())
+                    .findFirst()
+                    .orElse(candidate.documentTitle());
+            ReviewPaperEvidenceTable table = paperEvidenceTableSynthesisService.synthesizeBestTable(
+                    taskId,
+                    ctx.analysis,
+                    ctx.canonicalQuestion,
+                    documentId,
+                    documentTitle,
+                    allChunks,
+                    List.of(),
+                    null,
+                    ctx.templateId,
+                    seedChunks
+            );
+            tables.add(table);
+            reviewRepository.upsertPaperEvidenceTable(table);
+            log.info("Task {}: Generated paper evidence table for doc {}", taskId, documentId);
         }
-        String documentTitle = allChunks.stream()
-                .map(RetrievedChunk::documentTitle)
-                .filter(java.util.Objects::nonNull)
-                .filter(title -> !title.isBlank())
-                .findFirst()
-                .orElse(selected.documentTitle());
-        ReviewPaperEvidenceTable table = paperEvidenceTableSynthesisService.synthesizeBestTable(
-                taskId,
-                analysis,
-                ctx.canonicalQuestion,
-                selected.documentId(),
-                documentTitle,
-                allChunks,
-                List.of(),
-                null,
-                ctx.templateId,
-                selected.seedChunks()
-        );
-        ctx.paperEvidenceTables = List.of(table);
+        if (tables.isEmpty()) {
+            throw new IllegalStateException("No selected document candidates were found for this task.");
+        }
+        ctx.paperEvidenceTables = tables;
         ctx.extractionMs = Duration.between(analysisStart, Instant.now()).toMillis();
-        reviewRepository.upsertPaperEvidenceTable(table);
-        reviewRepository.updateTaskCounts(taskId, candidateCount, 1, 0);
-        log.info("Task {}: Generated single-paper evidence table for doc {} in {}ms",
-                taskId, selected.documentId(), ctx.extractionMs);
+        int candidateCount = reviewRepository.findAllCandidates(taskId).size();
+        reviewRepository.updateTaskCounts(taskId, candidateCount, tables.size(), 0);
+        log.info("Task {}: Generated {} paper evidence tables in {}ms", taskId, tables.size(), ctx.extractionMs);
     }
 
     private void finalizeWithGeneratedReport(UUID taskId, PipelineContext ctx) {
@@ -320,6 +397,29 @@ public class ReviewPipelineService {
         List<RetrievedChunk> selectedSeedChunks;
     }
 
+    private PipelineContext contextFromTask(ReviewTaskRecord task) {
+        PipelineContext ctx = new PipelineContext();
+        ctx.pipelineStart = Instant.now();
+        ctx.templateId = normalizeTemplateId(task.templateId());
+        QueryAnalysis analysis = task.queryAnalysis() == null
+                ? queryAnalyzerService.analyze(task.question())
+                : task.queryAnalysis();
+        ctx.analysis = analysis;
+        ctx.canonicalQuestion = analysis.mainQuestion() != null && !analysis.mainQuestion().isBlank()
+                ? analysis.mainQuestion()
+                : task.question();
+        if (task.queryAnalysis() == null) {
+            reviewRepository.updateQueryAnalysis(task.taskId(), analysis);
+        }
+        ReviewTaskMetrics metrics = task.metrics();
+        if (metrics != null) {
+            ctx.retrievalMs = metrics.retrievalMs() == null ? 0L : metrics.retrievalMs();
+            ctx.documentPromotionMs = metrics.documentPromotionMs() == null ? 0L : metrics.documentPromotionMs();
+            ctx.rerankMs = metrics.rerankMs() == null ? 0L : metrics.rerankMs();
+        }
+        return ctx;
+    }
+
     private String normalizeTemplateId(String templateId) {
         if (templateId == null || templateId.isBlank()) {
             return PaperEvidenceTableSynthesisService.ANTIMICROBIAL_TEMPLATE_ID;
@@ -330,7 +430,7 @@ public class ReviewPipelineService {
         return templateId;
     }
 
-    private SelectedDocument selectBestDocument(List<RetrievedChunk> chunks) {
+    private List<SelectedDocument> rankDocuments(List<RetrievedChunk> chunks) {
         Map<UUID, List<RetrievedChunk>> byDoc = chunks.stream()
                 .filter(chunk -> chunk.documentId() != null)
                 .collect(Collectors.groupingBy(RetrievedChunk::documentId,
@@ -358,16 +458,17 @@ public class ReviewPipelineService {
                     double finalScore = maxScore + Math.min(0.2, docChunks.size() * 0.02);
                     return new SelectedDocument(entry.getKey(), title, docChunks, maxScore, top3Avg, finalScore);
                 })
-                .max(java.util.Comparator
+                .sorted(java.util.Comparator
                         .comparingDouble(SelectedDocument::finalScore)
-                        .thenComparingInt(item -> item.seedChunks().size()))
-                .orElseThrow(() -> new IllegalStateException("No eligible paper was found after retrieval."));
+                        .thenComparingInt(item -> item.seedChunks().size())
+                        .reversed())
+                .toList();
     }
 
-    private ReviewDocumentCandidate toSinglePaperDocumentCandidate(UUID taskId, SelectedDocument selected) {
+    private ReviewDocumentCandidate toDocumentCandidate(UUID taskId, SelectedDocument selected, boolean defaultSelected) {
         List<String> seedIds = selected.seedChunks().stream()
                 .map(RetrievedChunk::chunkId)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .toList();
         return new ReviewDocumentCandidate(
                 null,
@@ -382,13 +483,28 @@ public class ReviewPipelineService {
                 0.0,
                 selected.finalScore(),
                 selected.finalScore(),
-                Relevance.HIGH,
-                "Automatically selected as the highest-scoring paper for the single-paper demo.",
+                defaultSelected ? Relevance.HIGH : Relevance.MEDIUM,
+                defaultSelected
+                        ? "Default selected as the highest-scoring paper; user may select more papers."
+                        : "Candidate paper available for multi-paper review selection.",
                 null,
                 List.of(),
                 List.of(),
                 true,
-                true
+                defaultSelected
+        );
+    }
+
+    private RetrievedChunk toRetrievedChunk(ReviewCandidate candidate) {
+        double score = candidate.rerankScore() != null ? candidate.rerankScore() : candidate.retrievalScore();
+        return new RetrievedChunk(
+                candidate.chunkId(),
+                candidate.documentId(),
+                candidate.documentTitle(),
+                candidate.chunkText(),
+                candidate.sectionPath(),
+                score,
+                candidate.retrievalSource()
         );
     }
 

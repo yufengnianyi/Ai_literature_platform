@@ -145,6 +145,23 @@ public class ReviewController {
         return ResultUtils.success(reviewRepository.findPaperEvidenceTablesByTask(taskId));
     }
 
+    @PostMapping("/tasks/{taskId}/documents/confirm")
+    public BaseResponse<ReviewTaskAcceptedResponse> confirmDocuments(@PathVariable UUID taskId,
+                                                                     @RequestBody CandidateReviewRequest request,
+                                                                     HttpServletRequest httpRequest) {
+        User user = userService.getLoginUser(httpRequest);
+        ReviewTaskRecord task = reviewRepository.findTask(taskId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
+                        "Review task not found: " + taskId));
+        if (!task.userId().equals(user.getUserId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "Not authorized");
+        }
+        if (request.selectedDocumentIds() == null || request.selectedDocumentIds().isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "selectedDocumentIds is required");
+        }
+        return ResultUtils.success(reviewPipelineService.confirmDocuments(taskId, request.selectedDocumentIds()));
+    }
+
     // ── Original endpoints ──
 
     @GetMapping("/tasks/{taskId}/stream")

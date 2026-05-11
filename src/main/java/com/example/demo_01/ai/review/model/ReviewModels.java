@@ -351,9 +351,13 @@ public final class ReviewModels {
     ) {
     }
 
-    public record ReviewTaskSubmitRequest(String question, String templateId) {
+    public record ReviewTaskSubmitRequest(String question, String templateId, List<UUID> selectedDocumentIds) {
         public ReviewTaskSubmitRequest(String question) {
-            this(question, null);
+            this(question, null, List.of());
+        }
+
+        public ReviewTaskSubmitRequest(String question, String templateId) {
+            this(question, templateId, List.of());
         }
     }
 

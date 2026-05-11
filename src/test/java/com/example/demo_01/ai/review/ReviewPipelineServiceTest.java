@@ -10,9 +10,9 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 class ReviewPipelineServiceTest {
 
     @Test
-    void submitShouldUseCanonicalQuestionInDownstreamStages() {
+    void submitShouldPrepareDocumentCandidatesAndConfirmShouldAnalyzeSelectedPapers() {
         ReviewPipelineService service = new ReviewPipelineService();
         ReviewRepository reviewRepository = mock(ReviewRepository.class);
         QueryAnalyzerService queryAnalyzerService = mock(QueryAnalyzerService.class);
@@ -72,33 +72,59 @@ class ReviewPipelineServiceTest {
                 "chunk-2", documentId, "Paper A", "full paper chunk", "Section 2", 0.0, "DOC_ALL");
         List<RetrievedChunk> candidates = List.of(candidate);
         List<RetrievedChunk> allPaperChunks = List.of(candidate, fullChunk);
-        DocumentPromotionService.DocumentPromotionResult promotionResult =
-                new DocumentPromotionService.DocumentPromotionResult(List.of(), List.of());
-        List<ExtractedEvidence> evidence = List.of();
-        List<FusedEvidenceGroup> groups = List.of(
-                new FusedEvidenceGroup(
-                        "哪些基因/蛋白与疫霉菌的生长过程相关，证据强度分别如何？",
-                        "summary",
-                        List.of(),
-                        0,
-                        0,
-                        List.of()
-                )
-        );
-        ReviewPaperEvidenceTable paperTable = new ReviewPaperEvidenceTable(
-                null, documentId, "Paper A", canonicalQuestion, "paper summary",
-                List.of("Finding", "Evidence"), List.of(List.of("finding", "evidence")),
-                List.of("chunk-1", "chunk-2"), 2, 0.8, List.of(), null);
-
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
         when(highRecallRetrievalService.retrieveSeedChunks(List.of(canonicalQuestion))).thenReturn(candidates);
-        when(documentPromotionService.promote(analysis, canonicalQuestion, candidates)).thenReturn(promotionResult);
-        when(reviewRerankerService.rerank(eq(canonicalQuestion), eq(candidates), any())).thenReturn(candidates);
-        when(reviewRerankerService.getJudgmentMap(canonicalQuestion, candidates)).thenReturn(
-                Map.of("chunk-1", new ChunkRelevanceJudgment("chunk-1", Relevance.HIGH, "direct evidence"))
+
+        ReviewTaskAcceptedResponse accepted = service.submit("user-1", rawPrompt);
+        assertEquals(ReviewTaskStatus.QUEUED, accepted.status());
+
+        verify(reviewRepository).insertTask(eq(accepted.taskId()), eq("user-1"), eq(rawPrompt), eq("antimicrobial_compound"));
+        verify(reviewRepository).insertDocumentCandidates(eq(accepted.taskId()), argThat(documents ->
+                documents.size() == 1 && documents.get(0).documentId().equals(documentId) && documents.get(0).selected()));
+        verify(reviewRepository).updateTaskStatus(accepted.taskId(), ReviewTaskStatus.AWAITING_USER, ReviewStage.RERANKING);
+        verify(reviewRepository, never()).findAllChunksByDocumentId(any());
+        verify(reportGeneratorService, never()).generateReport(any(), any(), any(), any(), any());
+
+        ReviewPaperEvidenceTable paperTable = new ReviewPaperEvidenceTable(
+                accepted.taskId(), documentId, "Paper A", canonicalQuestion, "paper summary",
+                List.of("Finding", "Evidence"), List.of(List.of("finding", "evidence")),
+                List.of("chunk-1", "chunk-2"), 2, 0.8, List.of(), null);
+        ReviewTaskRecord task = new ReviewTaskRecord(
+                accepted.taskId(),
+                "user-1",
+                rawPrompt,
+                "antimicrobial_compound",
+                documentId,
+                "Paper A",
+                ReviewTaskStatus.AWAITING_USER,
+                ReviewStage.RERANKING,
+                analysis,
+                null,
+                1,
+                1,
+                0,
+                new ReviewTaskMetrics(1L, 1L, 0L, null, null, null, null),
+                null,
+                null,
+                null,
+                null,
+                null
         );
-        when(documentKnowledgeEnrichmentService.enrich(any(UUID.class), eq(analysis), eq(candidates))).thenReturn(Map.of());
+        ReviewDocumentCandidate documentCandidate = new ReviewDocumentCandidate(
+                null, accepted.taskId(), documentId, "Paper A", 1, List.of("chunk-1"),
+                0.9, 0.9, 0.0, 0.0, 0.92, 0.92, Relevance.HIGH,
+                "selected", null, List.of(), List.of(), true, true
+        );
+        ReviewCandidate storedCandidate = new ReviewCandidate(
+                null, accepted.taskId(), "chunk-1", documentId, "Paper A", 0.9, "BM25",
+                "Section 1", "SEED", null, null, null, 0.9, Relevance.HIGH,
+                "selected", true, "chunk text"
+        );
+
+        when(reviewRepository.findTask(accepted.taskId())).thenReturn(java.util.Optional.of(task));
+        when(reviewRepository.findDocumentCandidates(accepted.taskId())).thenReturn(List.of(documentCandidate));
+        when(reviewRepository.findAllCandidates(accepted.taskId())).thenReturn(List.of(storedCandidate));
         when(reviewRepository.findAllChunksByDocumentId(documentId)).thenReturn(allPaperChunks);
         when(paperEvidenceTableSynthesisService.synthesizeBestTable(
                 any(UUID.class), eq(analysis), eq(canonicalQuestion), eq(documentId), eq("Paper A"),
@@ -106,9 +132,9 @@ class ReviewPipelineServiceTest {
                 .thenReturn(paperTable);
         when(reportGeneratorService.generateReport(eq(analysis), isNull(), isNull(), isNull(), eq(List.of(paperTable)))).thenReturn("report");
 
-        service.submit("user-1", rawPrompt);
+        service.confirmDocuments(accepted.taskId(), List.of(documentId));
 
-        verify(reviewRepository).insertTask(any(UUID.class), eq("user-1"), eq(rawPrompt), eq("antimicrobial_compound"));
+        verify(reviewRepository).updateDocumentSelection(accepted.taskId(), List.of(documentId));
         verify(reviewRepository).findAllChunksByDocumentId(documentId);
         verify(documentPromotionService, never()).promote(any(), any(), any());
         verify(reviewRerankerService, never()).rerank(any(), any(), any());

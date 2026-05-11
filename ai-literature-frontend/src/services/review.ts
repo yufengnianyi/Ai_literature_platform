@@ -252,6 +252,15 @@ export const reviewService = {
     return data as ReviewTaskAcceptedResponse;
   },
 
+  async confirmDocuments(taskId: string, selectedDocumentIds: string[]): Promise<ReviewTaskAcceptedResponse> {
+    const { data } = await myAxios.post(`/review/tasks/${taskId}/documents/confirm`, {
+      excludedChunkIds: [],
+      prioritizedChunkIds: [],
+      selectedDocumentIds,
+    });
+    return data as ReviewTaskAcceptedResponse;
+  },
+
   async getCandidates(taskId: string): Promise<ReviewCandidate[]> {
     const { data } = await myAxios.get(`/review/tasks/${taskId}/candidates`);
     return data as ReviewCandidate[];

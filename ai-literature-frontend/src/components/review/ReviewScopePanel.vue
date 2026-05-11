@@ -149,7 +149,7 @@
       <div class="spacer" />
       <a-button @click="selectAll">{{ labels.selectAll }}</a-button>
       <a-button @click="clearAll">{{ labels.clear }}</a-button>
-      <a-button type="primary" :disabled="selectedQuestionIds.size === 0" @click="confirm">
+      <a-button type="primary" :disabled="!canConfirm" @click="confirm">
         <ThunderboltOutlined />
         {{ mode === 'analysis' ? labels.confirmRetrieve : labels.confirmExtract }}
       </a-button>
@@ -201,7 +201,7 @@ const labels = computed(() => isChinese.value ? {
   analysisTitle: '研究范围预览',
   candidateTitle: '文献范围审阅',
   analysisDescription: '检索前请审阅子问题、实体和早期文献信号。',
-  candidateDescription: '确认哪些问题、实体和文献应进入证据抽取。',
+  candidateDescription: '选择要进入多篇解读的文献；超过 5 篇时生成时间可能较长。',
   questions: '个问题',
   entities: '个实体',
   papers: '篇文献',
@@ -226,12 +226,12 @@ const labels = computed(() => isChinese.value ? {
   selectAll: '全选',
   clear: '清空',
   confirmRetrieve: '确认并检索',
-  confirmExtract: '确认并抽取证据',
+  confirmExtract: '确认并总结文献',
 } : {
   analysisTitle: 'Research Scope Preview',
   candidateTitle: 'Literature Scope Review',
   analysisDescription: 'Review the questions, entities, and early paper signals before retrieval.',
-  candidateDescription: 'Confirm the questions, entities, and papers that should move into evidence extraction.',
+  candidateDescription: 'Select the papers to include in the multi-paper review. More than 5 papers may take longer.',
   questions: 'questions',
   entities: 'entities',
   papers: 'papers',
@@ -256,7 +256,15 @@ const labels = computed(() => isChinese.value ? {
   selectAll: 'Select all',
   clear: 'Clear',
   confirmRetrieve: 'Confirm & Retrieve',
-  confirmExtract: 'Confirm & Extract Evidence',
+  confirmExtract: 'Confirm & Summarize',
+});
+
+const canConfirm = computed(() => {
+  if (selectedQuestionIds.value.size === 0) return false;
+  if (props.mode === 'candidate') {
+    return selectedDocumentIds.value.size > 0;
+  }
+  return true;
 });
 
 const resetSelections = () => {

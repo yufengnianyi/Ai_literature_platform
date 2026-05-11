@@ -60,6 +60,50 @@ public class ReviewRepository {
                 """, documentId, documentTitle, Timestamp.from(Instant.now()), taskId);
     }
 
+    public void updateDocumentSelection(UUID taskId, List<UUID> selectedDocumentIds) {
+        List<UUID> safeIds = selectedDocumentIds == null ? List.of() : selectedDocumentIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        jdbcTemplate.update("""
+                UPDATE review_document_candidate
+                SET selected = FALSE
+                WHERE task_id = ?
+                """, taskId);
+        jdbcTemplate.update("""
+                UPDATE review_candidate
+                SET included = FALSE
+                WHERE task_id = ?
+                """, taskId);
+        for (UUID documentId : safeIds) {
+            jdbcTemplate.update("""
+                    UPDATE review_document_candidate
+                    SET selected = TRUE
+                    WHERE task_id = ? AND document_id = ?
+                    """, taskId, documentId);
+            jdbcTemplate.update("""
+                    UPDATE review_candidate
+                    SET included = TRUE, relevance = COALESCE(relevance, ?), screening_reason = ?
+                    WHERE task_id = ? AND document_id = ?
+                    """, Relevance.HIGH.name(), "Selected by user for multi-paper review.", taskId, documentId);
+        }
+
+        UUID firstDocumentId = safeIds.isEmpty() ? null : safeIds.get(0);
+        String selectedTitle = null;
+        if (safeIds.size() == 1) {
+            selectedTitle = jdbcTemplate.query("""
+                    SELECT document_title FROM review_document_candidate
+                    WHERE task_id = ? AND document_id = ?
+                    """, (rs, rowNum) -> rs.getString("document_title"), taskId, firstDocumentId)
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+        } else if (safeIds.size() > 1) {
+            selectedTitle = safeIds.size() + " papers selected";
+        }
+        updateSelectedDocument(taskId, firstDocumentId, selectedTitle);
+    }
+
     public void updateTaskStatus(UUID taskId, ReviewTaskStatus status, ReviewStage stage) {
         jdbcTemplate.update("""
                 UPDATE review_task SET status = ?, stage = ?, updated_at = ? WHERE task_id = ?
