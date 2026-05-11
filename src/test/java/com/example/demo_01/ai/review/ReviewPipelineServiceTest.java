@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 class ReviewPipelineServiceTest {
@@ -32,6 +33,7 @@ class ReviewPipelineServiceTest {
         EvidenceExtractionService evidenceExtractionService = mock(EvidenceExtractionService.class);
         EvidenceFusionService evidenceFusionService = mock(EvidenceFusionService.class);
         ReportGeneratorService reportGeneratorService = mock(ReportGeneratorService.class);
+        PaperEvidenceTableSynthesisService paperEvidenceTableSynthesisService = mock(PaperEvidenceTableSynthesisService.class);
 
         ReflectionTestUtils.setField(service, "reviewRepository", reviewRepository);
         ReflectionTestUtils.setField(service, "queryAnalyzerService", queryAnalyzerService);
@@ -43,6 +45,7 @@ class ReviewPipelineServiceTest {
         ReflectionTestUtils.setField(service, "evidenceExtractionService", evidenceExtractionService);
         ReflectionTestUtils.setField(service, "evidenceFusionService", evidenceFusionService);
         ReflectionTestUtils.setField(service, "reportGeneratorService", reportGeneratorService);
+        ReflectionTestUtils.setField(service, "paperEvidenceTableSynthesisService", paperEvidenceTableSynthesisService);
         ReviewProperties reviewProperties = new ReviewProperties();
         reviewProperties.getRetrieval().setEnableQuantitativeAnchor(false);
         reviewProperties.getSynthesis().setEnableCompoundSynthesizer(false);
@@ -65,7 +68,10 @@ class ReviewPipelineServiceTest {
         UUID documentId = UUID.randomUUID();
         RetrievedChunk candidate = new RetrievedChunk(
                 "chunk-1", documentId, "Paper A", "chunk text", "Section 1", 0.9, "BM25");
+        RetrievedChunk fullChunk = new RetrievedChunk(
+                "chunk-2", documentId, "Paper A", "full paper chunk", "Section 2", 0.0, "DOC_ALL");
         List<RetrievedChunk> candidates = List.of(candidate);
+        List<RetrievedChunk> allPaperChunks = List.of(candidate, fullChunk);
         DocumentPromotionService.DocumentPromotionResult promotionResult =
                 new DocumentPromotionService.DocumentPromotionResult(List.of(), List.of());
         List<ExtractedEvidence> evidence = List.of();
@@ -79,6 +85,10 @@ class ReviewPipelineServiceTest {
                         List.of()
                 )
         );
+        ReviewPaperEvidenceTable paperTable = new ReviewPaperEvidenceTable(
+                null, documentId, "Paper A", canonicalQuestion, "paper summary",
+                List.of("Finding", "Evidence"), List.of(List.of("finding", "evidence")),
+                List.of("chunk-1", "chunk-2"), 2, 0.8, List.of(), null);
 
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
@@ -89,19 +99,28 @@ class ReviewPipelineServiceTest {
                 Map.of("chunk-1", new ChunkRelevanceJudgment("chunk-1", Relevance.HIGH, "direct evidence"))
         );
         when(documentKnowledgeEnrichmentService.enrich(any(UUID.class), eq(analysis), eq(candidates))).thenReturn(Map.of());
-        when(evidenceExtractionService.extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of())).thenReturn(evidence);
-        when(evidenceFusionService.fuse(analysis.subQuestions(), evidence)).thenReturn(groups);
-        when(reportGeneratorService.generateReport(eq(analysis), eq(groups), eq(evidence), any())).thenReturn("report");
+        when(reviewRepository.findAllChunksByDocumentId(documentId)).thenReturn(allPaperChunks);
+        when(paperEvidenceTableSynthesisService.synthesizeBestTable(
+                any(UUID.class), eq(analysis), eq(canonicalQuestion), eq(documentId), eq("Paper A"),
+                eq(allPaperChunks), eq(List.of()), isNull(), eq("antimicrobial_compound"), eq(candidates)))
+                .thenReturn(paperTable);
+        when(reportGeneratorService.generateReport(eq(analysis), isNull(), isNull(), isNull(), eq(List.of(paperTable)))).thenReturn("report");
 
         service.submit("user-1", rawPrompt);
 
-        verify(reviewRepository).insertTask(any(UUID.class), eq("user-1"), eq(rawPrompt));
-        verify(documentPromotionService).promote(analysis, canonicalQuestion, candidates);
-        verify(reviewRerankerService).rerank(eq(canonicalQuestion), eq(candidates), any());
-        verify(reviewRerankerService).getJudgmentMap(canonicalQuestion, candidates);
-        verify(documentKnowledgeEnrichmentService).enrich(any(UUID.class), eq(analysis), eq(candidates));
-        verify(evidenceExtractionService).extract(canonicalQuestion, analysis.subQuestions(), candidates, Map.of());
-        verify(reportGeneratorService).generateReport(eq(analysis), eq(groups), eq(evidence), any());
+        verify(reviewRepository).insertTask(any(UUID.class), eq("user-1"), eq(rawPrompt), eq("antimicrobial_compound"));
+        verify(reviewRepository).findAllChunksByDocumentId(documentId);
+        verify(documentPromotionService, never()).promote(any(), any(), any());
+        verify(reviewRerankerService, never()).rerank(any(), any(), any());
+        verify(reviewRerankerService, never()).getJudgmentMap(any(), any());
+        verify(documentKnowledgeEnrichmentService, never()).enrich(any(UUID.class), any(), any());
+        verify(evidenceExtractionService, never()).extract(any(), any(), any(), any());
+        verify(evidenceFusionService, never()).fuse(any(), any());
+        verify(paperEvidenceTableSynthesisService).synthesizeBestTable(
+                any(UUID.class), eq(analysis), eq(canonicalQuestion), eq(documentId), eq("Paper A"),
+                eq(allPaperChunks), eq(List.of()), isNull(), eq("antimicrobial_compound"), eq(candidates));
+        verify(reviewRepository).upsertPaperEvidenceTable(paperTable);
+        verify(reportGeneratorService).generateReport(eq(analysis), isNull(), isNull(), isNull(), eq(List.of(paperTable)));
         verify(reportGeneratorService, never()).generateReport(eq(rawPrompt), any());
     }
 }

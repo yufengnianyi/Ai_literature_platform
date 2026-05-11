@@ -6,7 +6,7 @@ import { redirectToLogin } from '@/request';
 export interface ChatSseParams {
   conversationId: string;
   prompt: string;
-  deepThinking?: boolean;
+  enableThinking?: boolean;
   onThinking?: (data: string) => void;
   onMessage: (data: string) => void;
   onSources?: (sources: MessageSource[]) => void;
@@ -55,10 +55,10 @@ const parseEventBlock = (rawBlock: string): { eventName: string; data: string } 
 };
 
 export const chatService = {
-  streamChat({ conversationId, prompt, deepThinking = false, onThinking, onMessage, onSources, onError, onComplete }: ChatSseParams): ChatStreamHandle {
+  streamChat({ conversationId, prompt, enableThinking = false, onThinking, onMessage, onSources, onError, onComplete }: ChatSseParams): ChatStreamHandle {
     const encodedConversationId = encodeURIComponent(conversationId);
     const encodedPrompt = encodeURIComponent(prompt);
-    const url = `${API_BASE_URL}/ai?conversationId=${encodedConversationId}&prompt=${encodedPrompt}&deepThinking=${deepThinking}`;
+    const url = `${API_BASE_URL}/ai?conversationId=${encodedConversationId}&prompt=${encodedPrompt}&enableThinking=${enableThinking}`;
     const controller = new AbortController();
 
     let completed = false;

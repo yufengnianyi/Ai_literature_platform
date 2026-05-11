@@ -174,5 +174,8 @@ public class ReviewProperties {
 
         @Min(1)
         private int retrieverKPerDirective = 6;
+
+        @Min(1)
+        private int maxPaperTableIterations = 3;
     }
 }

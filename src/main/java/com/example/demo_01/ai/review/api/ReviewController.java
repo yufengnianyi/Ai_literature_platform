@@ -55,7 +55,7 @@ public class ReviewController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
         }
         ReviewTaskAcceptedResponse response = reviewPipelineService.submit(
-                user.getUserId(), request.question());
+                user.getUserId(), request.question(), request.templateId());
         return ResultUtils.success(response);
     }
 
@@ -116,11 +116,6 @@ public class ReviewController {
         return ResultUtils.success(reviewScopePreviewService.buildTaskPreview(taskId));
     }
 
-    @GetMapping("/tasks/{taskId}/evidence")
-    public BaseResponse<List<ReviewEvidenceRecord>> getEvidence(@PathVariable UUID taskId) {
-        return ResultUtils.success(reviewRepository.findEvidenceByTask(taskId));
-    }
-
     @GetMapping("/tasks/{taskId}/summary-tables")
     public BaseResponse<List<ReviewSummaryTable>> getSummaryTables(@PathVariable UUID taskId,
                                                                    HttpServletRequest httpRequest) {
@@ -128,37 +123,18 @@ public class ReviewController {
         ReviewTaskRecord task = reviewRepository.findTask(taskId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
                         "Review task not found: " + taskId));
-        List<ReviewEvidenceRecord> evidence = reviewRepository.findEvidenceByTask(taskId);
-        List<SynthesizedCompoundRecord> synthesized = reviewRepository.findSynthesizedCompoundsByTask(taskId);
-        return ResultUtils.success(reviewXlsxService.buildSummaryTables(task, evidence, synthesized));
+        List<ReviewPaperEvidenceTable> paperTables = reviewRepository.findPaperEvidenceTablesByTask(taskId);
+        if (paperTables != null && !paperTables.isEmpty()) {
+            return ResultUtils.success(reviewXlsxService.buildPaperEvidenceSummaryTables(task, paperTables));
+        }
+        return ResultUtils.success(List.of());
     }
 
     // ── Interactive checkpoint endpoints ──
 
-    @PostMapping("/tasks/{taskId}/retrieve")
-    public BaseResponse<ReviewTaskAcceptedResponse> startRetrieval(
-            @PathVariable UUID taskId,
-            @RequestBody ReviewGenerateRequest request,
-            HttpServletRequest httpRequest) {
-        User user = userService.getLoginUser(httpRequest);
-        if (request.question() == null || request.question().isBlank()) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
-        }
-        var existing = reviewRepository.findTask(taskId);
-        if (existing.isEmpty()) {
-            reviewRepository.insertTask(taskId, user.getUserId(), request.question());
-        } else if (!existing.get().userId().equals(user.getUserId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "Not authorized");
-        }
-        reviewPipelineService.executeRetrievalSegment(taskId, request.question(), request.toFilteredAnalysis());
-        return ResultUtils.success(new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.RUNNING));
-    }
-
-    @PostMapping("/tasks/{taskId}/extract")
-    public BaseResponse<ReviewTaskAcceptedResponse> startExtraction(
-            @PathVariable UUID taskId,
-            @RequestBody CandidateReviewRequest request,
-            HttpServletRequest httpRequest) {
+    @GetMapping("/tasks/{taskId}/paper-evidence-tables")
+    public BaseResponse<List<ReviewPaperEvidenceTable>> getPaperEvidenceTables(@PathVariable UUID taskId,
+                                                                               HttpServletRequest httpRequest) {
         User user = userService.getLoginUser(httpRequest);
         ReviewTaskRecord task = reviewRepository.findTask(taskId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
@@ -166,50 +142,7 @@ public class ReviewController {
         if (!task.userId().equals(user.getUserId())) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "Not authorized");
         }
-        if (task.status() != ReviewTaskStatus.AWAITING_USER) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR,
-                    "Task is not awaiting user review, current status: " + task.status());
-        }
-        reviewPipelineService.executeEvidenceSegment(taskId, request);
-        return ResultUtils.success(new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.RUNNING));
-    }
-
-    @PostMapping("/tasks/{taskId}/generate")
-    public Flux<ServerSentEvent<String>> startGeneration(
-            @PathVariable UUID taskId,
-            @RequestBody EvidenceReviewRequest request,
-            HttpServletRequest httpRequest) {
-        User user = userService.getLoginUser(httpRequest);
-        ReviewTaskRecord task = reviewRepository.findTask(taskId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
-                        "Review task not found: " + taskId));
-        if (!task.userId().equals(user.getUserId())) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "Not authorized");
-        }
-        if (task.status() != ReviewTaskStatus.AWAITING_USER) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR,
-                    "Task is not awaiting user review, current status: " + task.status());
-        }
-
-        Flux<ServerSentEvent<String>> messageEvents = reviewPipelineService
-                .executeReportSegment(taskId, request)
-                .map(chunk -> ServerSentEvent.<String>builder()
-                        .event("message")
-                        .data(chunk)
-                        .build());
-
-        Flux<ServerSentEvent<String>> xlsxReadyEvent = Flux.just(
-                ServerSentEvent.<String>builder()
-                        .event("xlsx_ready")
-                        .data("{\"downloadUrl\":\"/review/tasks/" + taskId + "/xlsx\"}")
-                        .build());
-
-        Flux<ServerSentEvent<String>> completeEvent = Flux.just(
-                ServerSentEvent.<String>builder()
-                        .event("complete")
-                        .build());
-
-        return messageEvents.concatWith(xlsxReadyEvent).concatWith(completeEvent);
+        return ResultUtils.success(reviewRepository.findPaperEvidenceTablesByTask(taskId));
     }
 
     // ── Original endpoints ──
@@ -218,11 +151,12 @@ public class ReviewController {
     public Flux<ServerSentEvent<String>> streamReport(
             @PathVariable UUID taskId,
             @RequestParam String question,
+            @RequestParam(required = false) String templateId,
             HttpServletRequest httpRequest) {
         User user = userService.getLoginUser(httpRequest);
 
         Flux<ServerSentEvent<String>> messageEvents = reviewPipelineService
-                .submitStreaming(user.getUserId(), taskId, question)
+                .submitStreaming(user.getUserId(), taskId, question, templateId)
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .event("message")
                         .data(chunk)
@@ -236,35 +170,22 @@ public class ReviewController {
         return messageEvents.concatWith(completeEvent);
     }
 
-    @PostMapping("/tasks/{taskId}/stream")
-    public Flux<ServerSentEvent<String>> streamReportWithSelections(
-            @PathVariable UUID taskId,
-            @RequestBody ReviewGenerateRequest request,
+    public Flux<ServerSentEvent<String>> streamReport(
+            UUID taskId,
+            String question,
             HttpServletRequest httpRequest) {
         User user = userService.getLoginUser(httpRequest);
-        if (request.question() == null || request.question().isBlank()) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
-        }
-
         Flux<ServerSentEvent<String>> messageEvents = reviewPipelineService
-                .submitStreamingWithSelections(user.getUserId(), taskId, request)
+                .submitStreaming(user.getUserId(), taskId, question)
                 .map(chunk -> ServerSentEvent.<String>builder()
                         .event("message")
                         .data(chunk)
                         .build());
-
-        Flux<ServerSentEvent<String>> xlsxReadyEvent = Flux.just(
-                ServerSentEvent.<String>builder()
-                        .event("xlsx_ready")
-                        .data("{\"downloadUrl\":\"/review/tasks/" + taskId + "/xlsx\"}")
-                        .build());
-
         Flux<ServerSentEvent<String>> completeEvent = Flux.just(
                 ServerSentEvent.<String>builder()
                         .event("complete")
                         .build());
-
-        return messageEvents.concatWith(xlsxReadyEvent).concatWith(completeEvent);
+        return messageEvents.concatWith(completeEvent);
     }
 
     @GetMapping("/tasks/{taskId}/xlsx")
@@ -275,9 +196,13 @@ public class ReviewController {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR,
                         "Review task not found: " + taskId));
 
-        List<ReviewEvidenceRecord> evidence = reviewRepository.findEvidenceByTask(taskId);
-        List<SynthesizedCompoundRecord> synthesized = reviewRepository.findSynthesizedCompoundsByTask(taskId);
-        byte[] xlsxBytes = reviewXlsxService.generateXlsx(task, evidence, synthesized);
+        List<ReviewPaperEvidenceTable> paperTables = reviewRepository.findPaperEvidenceTablesByTask(taskId);
+        byte[] xlsxBytes;
+        if (paperTables != null && !paperTables.isEmpty()) {
+            xlsxBytes = reviewXlsxService.generatePaperEvidenceXlsx(task, paperTables);
+        } else {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Paper evidence table not yet generated");
+        }
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,

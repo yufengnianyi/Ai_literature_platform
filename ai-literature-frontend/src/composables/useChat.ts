@@ -103,7 +103,7 @@ export function useChat() {
     text: string,
     conversationId: string,
     onScrollToBottom?: () => void,
-    options?: { deepThinking?: boolean },
+    options?: { enableThinking?: boolean },
   ) => {
     if (!text.trim() || !conversationId || isGenerating.value || isHistoryLoading.value) {
       return;
@@ -141,7 +141,7 @@ export function useChat() {
     currentStream.value = chatService.streamChat({
       conversationId,
       prompt: text,
-      deepThinking: options?.deepThinking ?? false,
+      enableThinking: options?.enableThinking ?? false,
       onThinking: (newData) => {
         updateAssistantMessage(messages.value, aiMessageId, (message) => {
           message.thinkingContent = `${message.thinkingContent ?? ''}${newData}`;

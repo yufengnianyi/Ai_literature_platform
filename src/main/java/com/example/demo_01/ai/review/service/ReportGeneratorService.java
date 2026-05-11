@@ -47,6 +47,14 @@ public class ReportGeneratorService {
         return buildReport(analysis, groups, evidence, null, null, synthesizedRecords);
     }
 
+    public String generateReport(QueryAnalysis analysis,
+                                 List<FusedEvidenceGroup> groups,
+                                 List<ExtractedEvidence> evidence,
+                                 List<SynthesizedCompoundRecord> synthesizedRecords,
+                                 List<ReviewPaperEvidenceTable> paperEvidenceTables) {
+        return buildReport(analysis, groups, evidence, null, null, synthesizedRecords, paperEvidenceTables);
+    }
+
     public String generateReport(String mainQuestion,
                                  List<FusedEvidenceGroup> groups,
                                  List<ExtractedEvidence> evidence) {
@@ -73,6 +81,22 @@ public class ReportGeneratorService {
                                                 List<String> focusSubQuestions,
                                                 List<SynthesizedCompoundRecord> synthesizedRecords) {
         String report = buildReport(analysis, groups, evidence, userGuidance, focusSubQuestions, synthesizedRecords);
+        return streamMarkdown(report);
+    }
+
+    public Flux<String> generateReportStreaming(QueryAnalysis analysis,
+                                                List<FusedEvidenceGroup> groups,
+                                                List<ExtractedEvidence> evidence,
+                                                String userGuidance,
+                                                List<String> focusSubQuestions,
+                                                List<SynthesizedCompoundRecord> synthesizedRecords,
+                                                List<ReviewPaperEvidenceTable> paperEvidenceTables) {
+        String report = buildReport(analysis, groups, evidence, userGuidance, focusSubQuestions,
+                synthesizedRecords, paperEvidenceTables);
+        return streamMarkdown(report);
+    }
+
+    private Flux<String> streamMarkdown(String report) {
         MarkdownChunkBuffer buffer = new MarkdownChunkBuffer();
         List<String> pieces = new ArrayList<>();
         pieces.addAll(buffer.append(report));
@@ -102,18 +126,41 @@ public class ReportGeneratorService {
                                String userGuidance,
                                List<String> focusSubQuestions,
                                List<SynthesizedCompoundRecord> synthesizedRecords) {
+        return buildReport(analysis, groups, evidence, userGuidance, focusSubQuestions,
+                synthesizedRecords, null);
+    }
+
+    private String buildReport(QueryAnalysis analysis,
+                               List<FusedEvidenceGroup> groups,
+                               List<ExtractedEvidence> evidence,
+                               String userGuidance,
+                               List<String> focusSubQuestions,
+                               List<SynthesizedCompoundRecord> synthesizedRecords,
+                               List<ReviewPaperEvidenceTable> paperEvidenceTables) {
         boolean zh = "zh".equalsIgnoreCase(analysis == null ? null : analysis.languageCode());
         String question = displayQuestion(analysis);
         List<ExtractedEvidence> safeEvidence = sanitizeEvidence(evidence);
+        List<ReviewPaperEvidenceTable> safePaperTables = paperEvidenceTables == null ? List.of() : paperEvidenceTables.stream()
+                .filter(Objects::nonNull)
+                .toList();
         List<FusedEvidenceGroup> safeGroups = groups == null ? List.of() : groups.stream()
                 .filter(Objects::nonNull)
                 .toList();
+
+        if (!safePaperTables.isEmpty()) {
+            return paperCentricReport(question, safePaperTables, userGuidance, zh);
+        }
 
         StringBuilder report = new StringBuilder();
         int section = 1;
         report.append("# ").append(zh ? "文献综述报告" : "Systematic Review Report").append("\n\n");
         report.append(heading(section++, zh, "研究主题的概述", "Research Topic Overview"));
         report.append(topicOverview(question, safeEvidence, userGuidance, zh)).append("\n\n");
+
+        if (!safePaperTables.isEmpty()) {
+            report.append(heading(section++, zh, "逐篇文献证据表聚合", "Per-Paper Evidence Table Synthesis"));
+            report.append(paperEvidenceTableSynthesis(safePaperTables, zh)).append("\n\n");
+        }
 
         List<CompoundActivityRow> compoundRows;
         if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
@@ -142,6 +189,75 @@ public class ReportGeneratorService {
         report.append(heading(zh, "参考文献", "References"));
         report.append(references(safeEvidence, zh));
         return report.toString().trim();
+    }
+
+    private String paperCentricReport(String question,
+                                      List<ReviewPaperEvidenceTable> tables,
+                                      String userGuidance,
+                                      boolean zh) {
+        StringBuilder report = new StringBuilder();
+        report.append("# ").append(zh ? "\u6587\u732e\u7efc\u8ff0\u62a5\u544a" : "Systematic Review Report").append("\n\n");
+        report.append("## ").append(zh ? "1. \u7814\u7a76\u4e3b\u9898\u6982\u8ff0" : "1. Research Topic Overview").append("\n\n");
+        if (zh) {
+            report.append("\u672c\u62a5\u544a\u56f4\u7ed5: ").append(safeDefault(question, "-")).append("\u3002");
+            report.append("\u7cfb\u7edf\u5df2\u6839\u636e\u9501\u5b9a\u7684\u76f8\u5173\u7247\u6bb5\u56de\u6eaf\u5230 ")
+                    .append(tables.size()).append(" \u7bc7\u6587\u732e\uff0c\u5e76\u5bf9\u6bcf\u7bc7\u6587\u732e\u7684\u5168\u90e8\u53ef\u7528 chunks \u8fdb\u884c\u8bc1\u636e\u8868\u7efc\u5408\u3002");
+            if (userGuidance != null && !userGuidance.isBlank()) {
+                report.append("\u8865\u5145\u8981\u6c42: ").append(userGuidance).append("\u3002");
+            }
+        } else {
+            report.append("This report addresses: ").append(safeDefault(question, "-")).append(". ");
+            report.append("The system traced locked relevant chunks back to ")
+                    .append(tables.size()).append(" papers and analyzed all available chunks for each paper. ");
+            if (userGuidance != null && !userGuidance.isBlank()) {
+                report.append("User guidance: ").append(userGuidance).append(". ");
+            }
+        }
+        report.append("\n\n");
+        report.append("## ").append(zh ? "2. \u9010\u7bc7\u6587\u732e\u8bc1\u636e\u603b\u7ed3" : "2. Per-Paper Evidence Summaries").append("\n\n");
+        report.append(paperEvidenceTableSynthesis(tables, zh)).append("\n\n");
+        report.append("## ").append(zh ? "3. \u8868\u683c\u4e0b\u8f7d\u8bf4\u660e" : "3. Table Export").append("\n\n");
+        report.append(zh
+                ? "\u4e0b\u8f7d\u7684 xlsx \u6587\u4ef6\u5c06\u6bcf\u7bc7\u6587\u732e\u7684\u5173\u952e\u8bc1\u636e\u884c\u6574\u5408\u5230\u7edf\u4e00\u8868\u683c\uff0c\u5e76\u4fdd\u7559\u6587\u732e\u6807\u9898\u3001\u8bc1\u636e\u8868\u6458\u8981\u3001\u7f6e\u4fe1\u5ea6\u3001\u8b66\u544a\u548c\u6e90 chunk ids\u3002"
+                : "The downloadable xlsx integrates key evidence rows across papers and preserves paper title, paper summary, confidence, warnings, and source chunk ids.");
+        return report.toString().trim();
+    }
+
+    private String paperEvidenceTableSynthesis(List<ReviewPaperEvidenceTable> tables, boolean zh) {
+        StringBuilder out = new StringBuilder();
+        if (zh) {
+            out.append("本节以每篇文献的最佳证据表为主要依据进行聚合，共纳入 ")
+                    .append(tables.size()).append(" 篇文献。");
+        } else {
+            out.append("This section aggregates the best evidence table from each matched paper. It includes ")
+                    .append(tables.size()).append(" papers.");
+        }
+        out.append("\n\n");
+        for (ReviewPaperEvidenceTable table : tables) {
+            String title = safeDefault(table.documentTitle(),
+                    table.documentId() == null ? "unknown" : table.documentId().toString());
+            out.append("### ").append(title).append("\n\n");
+            out.append(safeDefault(table.paperSummary(), "-")).append("\n\n");
+            List<String> headers = table.headers() == null || table.headers().isEmpty()
+                    ? List.of("Finding", "Evidence", "Source")
+                    : table.headers();
+            out.append("| ").append(headers.stream().map(this::cell).collect(Collectors.joining(" | "))).append(" |\n");
+            out.append("|").append(headers.stream().map(header -> "---").collect(Collectors.joining("|"))).append("|\n");
+            List<List<String>> rows = table.rows() == null ? List.of() : table.rows();
+            for (List<String> row : rows) {
+                out.append("| ")
+                        .append(row.stream().map(this::cell).collect(Collectors.joining(" | ")))
+                        .append(" |\n");
+            }
+            if (table.warnings() != null && !table.warnings().isEmpty()) {
+                out.append("\n")
+                        .append(zh ? "证据表警告: " : "Table warnings: ")
+                        .append(String.join("; ", table.warnings()))
+                        .append("\n");
+            }
+            out.append("\n");
+        }
+        return out.toString().trim();
     }
 
     private String displayQuestion(QueryAnalysis analysis) {
@@ -297,7 +413,7 @@ public class ReportGeneratorService {
             out.append("来源分布：").append(formatCounts(limitMap(bySource, 8))).append("。");
             out.append("作用病原菌覆盖：").append(formatCounts(limitMap(byPathogen, 8))).append("。");
             if (!activityExamples.isEmpty()) {
-                out.append("\n\n代表性抑菌活性记录：\n");
+                out.append("\n\n代表性抑菌浓度记录：\n");
                 appendNumbered(out, activityExamples);
             }
             if (!notableRows.isEmpty()) {

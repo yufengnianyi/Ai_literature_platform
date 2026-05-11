@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.rag;
 
+import com.example.demo_01.ai.rag.retrieval.AntimicrobialCompoundQueryExpandingRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25ContentRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25IndexService;
 import com.example.demo_01.ai.rag.retrieval.EmbeddingStoreTextRepository;
@@ -57,6 +58,6 @@ public class RagRetrieverConfig {
                 ragRetrievalProperties.getRrfK(),
                 ragRetrievalProperties.getFusedMaxResults()
         );
-        return textRetriever;
+        return new AntimicrobialCompoundQueryExpandingRetriever(textRetriever);
     }
 }

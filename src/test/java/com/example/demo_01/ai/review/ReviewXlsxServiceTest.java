@@ -2,6 +2,7 @@ package com.example.demo_01.ai.review;
 
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewEvidenceRecord;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewPaperEvidenceTable;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewStage;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewSummaryTable;
 import com.example.demo_01.ai.review.model.ReviewModels.ReviewTaskMetrics;
@@ -20,6 +21,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ReviewXlsxServiceTest {
 
@@ -131,7 +133,7 @@ class ReviewXlsxServiceTest {
             assertNotNull(workbook.getSheet("Stage Summary"));
             assertNotNull(workbook.getSheet("Compound Activity Summary"));
             String[] expectedHeaders = {
-                    "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "作用病原菌",
+                    "化合物名称（英文）", "结构类型", "来源", "抑菌浓度", "作用病原菌",
                     "试验方法", "可能的作用靶标/机制", "细胞毒性/安全性数据", "参考文献", "专利情况"
             };
             for (int i = 0; i < expectedHeaders.length; i++) {
@@ -163,6 +165,58 @@ class ReviewXlsxServiceTest {
             String patentValue = workbook.getSheet("Compound Activity Summary").getRow(1).getCell(9).getStringCellValue();
             assertEquals("未提及", patentValue);
             assertFalse(geneValue.contains("zoospore"));
+        }
+    }
+
+    @Test
+    void paperEvidenceSummaryPreviewShouldHideConcentrationDetailButXlsxShouldKeepDedicatedSheet() throws Exception {
+        ReviewXlsxService service = new ReviewXlsxService();
+        ReviewTaskRecord task = task();
+        ReviewPaperEvidenceTable paperTable = new ReviewPaperEvidenceTable(
+                task.taskId(),
+                UUID.randomUUID(),
+                "Anti-oomycete activities from Paper A",
+                "请帮我总结当前疫霉菌领域的抑菌化合物",
+                "Paper A reports concentration-dependent inhibition.",
+                List.of("化合物名称", "结构类型", "来源", "抑菌浓度", "作用病原菌",
+                        "试验方法", "可能的作用靶标/机制", "细胞毒性/安全性数据", "来源文献", "专利信息"),
+                List.of(List.of("compound 34", "ellipticine derivative", "synthetic",
+                        "25 uM strongly inhibited mycelial growth; 25 uM blocked zoospore formation",
+                        "Phytophthora infestans", "mycelial growth and zoospore assay",
+                        "未提及", "未提及", "Paper A", "未提及")),
+                List.of("chunk-1", "chunk-2"),
+                1,
+                0.92,
+                List.of(),
+                Instant.now(),
+                "antimicrobial_compound",
+                "Summary: 25 uM strongly inhibited growth.",
+                List.of("化合物/标签", "抑菌浓度", "浓度类型", "观察效果", "作用病原菌",
+                        "试验方法/条件", "来源 chunk ids", "备注"),
+                List.of(List.of("compound 34", "25 uM", "test concentration",
+                        "strong mycelial growth inhibition", "Phytophthora infestans",
+                        "mycelial growth assay", "chunk-1", "day 5 and day 13 observations")),
+                "25 uM strongly inhibited growth and blocked zoospore formation.",
+                List.of("chunk-1"),
+                List.of("chunk-1", "chunk-2")
+        );
+
+        List<ReviewSummaryTable> previewTables = service.buildPaperEvidenceSummaryTables(task, List.of(paperTable));
+        assertEquals(List.of("Paper Evidence Summary", "1 Anti-oomycete activities from"),
+                previewTables.stream().map(ReviewSummaryTable::title).toList());
+        assertEquals("抑菌浓度", previewTables.get(1).headers().get(3));
+
+        byte[] bytes = service.generatePaperEvidenceXlsx(task, List.of(paperTable));
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            assertNull(workbook.getSheet("Concentration Details"));
+            var concentrationSheet = workbook.getSheet("抑菌浓度专门总结");
+            assertNotNull(concentrationSheet);
+            assertEquals("文献", concentrationSheet.getRow(0).getCell(0).getStringCellValue());
+            assertEquals("抑菌浓度", concentrationSheet.getRow(0).getCell(2).getStringCellValue());
+            assertEquals("compound 34", concentrationSheet.getRow(1).getCell(1).getStringCellValue());
+            assertEquals("25 uM", concentrationSheet.getRow(1).getCell(2).getStringCellValue());
+            assertEquals("25 uM strongly inhibited growth and blocked zoospore formation.",
+                    concentrationSheet.getRow(1).getCell(9).getStringCellValue());
         }
     }
 

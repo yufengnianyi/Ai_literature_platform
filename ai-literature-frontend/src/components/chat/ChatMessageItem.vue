@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="message-wrapper"
-    :class="message.role === 'user' ? 'user-message' : 'ai-message'"
-  >
+  <div class="message-wrapper" :class="message.role === 'user' ? 'user-message' : 'ai-message'">
     <div class="message-stack">
       <div class="message-content">
         <div v-if="message.role === 'user'" class="text-content">
@@ -10,16 +7,10 @@
         </div>
 
         <template v-else>
-          <a-collapse
-            v-if="message.thinkingContent"
-            ghost
-            class="thinking-collapse"
-            size="small"
-          >
-            <a-collapse-panel key="thinking" header="思考过程">
-              <pre class="thinking-content">{{ message.thinkingContent }}</pre>
-            </a-collapse-panel>
-          </a-collapse>
+          <details v-if="message.thinkingContent" class="thinking-details">
+            <summary>{{ message.isLoading ? '思考中' : '已思考' }}</summary>
+            <pre class="thinking-content">{{ message.thinkingContent }}</pre>
+          </details>
 
           <div
             class="markdown-content"
@@ -44,29 +35,18 @@
             <ol class="citations-list">
               <li
                 v-for="cite in parsed.citations"
-                :key="`${cite.index}-${cite.source}-${cite.chunk ?? ''}-${cite.page ?? ''}-${cite.excerpt ?? ''}`"
+                :key="`${cite.index}-${cite.source}`"
                 class="citation-item"
                 :id="cite.referenceId"
+                :title="citationTitle(cite)"
               >
                 <span class="citation-index">{{ cite.index }}.</span>
                 <div class="citation-body">
                   <span class="citation-source">{{ cite.source }}</span>
-                  <span
-                    v-if="cite.section || cite.chunk || cite.page"
-                    class="citation-meta"
-                  >
-                    <span v-if="cite.section">{{ cite.section }}</span>
-                    <span v-if="cite.chunk">chunk {{ cite.chunk }}</span>
-                    <span v-if="cite.page">page {{ cite.page }}</span>
-                  </span>
-                  <p v-if="cite.excerpt" class="citation-excerpt">
-                    {{ cite.excerpt }}
-                  </p>
                 </div>
               </li>
             </ol>
           </div>
-
         </template>
       </div>
     </div>
@@ -78,6 +58,7 @@ import { computed } from 'vue';
 
 import type { Message } from '../../types/chat';
 import { parseAIResponse } from '../../utils/markdown';
+import type { Citation } from '../../utils/markdown';
 
 const props = defineProps<{
   message: Message;
@@ -95,26 +76,31 @@ const referenceScope = computed(() => {
 
 const handleCitationClick = (event: MouseEvent) => {
   const target = event.target;
-  if (!(target instanceof Element)) {
-    return;
-  }
+  if (!(target instanceof Element)) return;
 
   const citationLink = target.closest('a[data-reference-target]');
-  if (!(citationLink instanceof HTMLAnchorElement)) {
-    return;
-  }
+  if (!(citationLink instanceof HTMLAnchorElement)) return;
 
   event.preventDefault();
   const targetId = citationLink.dataset.referenceTarget;
-  if (!targetId) {
-    return;
-  }
+  if (!targetId) return;
 
   document.getElementById(targetId)?.scrollIntoView({
     behavior: 'smooth',
     block: 'nearest',
   });
 };
+
+const citationTitle = (cite: Citation) =>
+  [
+    cite.source,
+    cite.section,
+    cite.chunk ? `chunk ${cite.chunk}` : undefined,
+    cite.page ? `page ${cite.page}` : undefined,
+    cite.excerpt,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
 const parsed = computed(() => {
   if (props.message.role !== 'assistant') {
@@ -139,99 +125,93 @@ const parsed = computed(() => {
 <style scoped>
 .message-wrapper {
   display: flex;
-  margin-bottom: 24px;
   width: 100%;
+  margin-bottom: 22px;
 }
 
 .user-message {
   justify-content: flex-end;
-  margin-left: auto;
 }
 
 .ai-message {
   justify-content: flex-start;
-  margin-right: auto;
 }
 
 .message-stack {
   min-width: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  width: fit-content;
-  max-width: min(92%, 920px);
-}
-
-.citations-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #334155;
-}
-
-.citations-count {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 11px;
-  line-height: 1;
 }
 
 .message-content {
   min-width: 0;
-  padding: 14px 16px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.7;
+  padding: 0;
+  border: none;
+  font-size: 16px;
+  line-height: 1.75;
+  color: #111827;
   word-break: break-word;
-  border: 1px solid #dbe7f5;
-}
-
-.thinking-collapse {
-  margin: -4px 0 10px;
-  border: 1px solid #fde68a;
-  border-radius: 12px;
-  background: #fffbeb;
-}
-
-.thinking-content {
-  max-height: 240px;
-  margin: 0;
-  white-space: pre-wrap;
-  overflow: auto;
-  color: #78350f;
-  font-size: 12px;
-  line-height: 1.6;
 }
 
 .user-message .message-content {
   width: fit-content;
-  max-width: min(100%, 42rem);
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  max-width: min(100%, 38rem);
+  margin-left: auto;
+  padding: 11px 15px;
+  border-radius: 18px;
+  background: #f3f4f6;
 }
 
 .ai-message .message-content {
-  width: min(100%, 920px);
-  background: #ffffff;
-  color: #111827;
+  width: 100%;
+  background: #fff;
 }
 
-.text-content {
-  white-space: pre-wrap;
-}
-
+.text-content,
 .question-text {
   white-space: pre-wrap;
+}
+
+.thinking-details {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.thinking-details summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.thinking-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-details summary::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  vertical-align: 1px;
+}
+
+.thinking-content {
+  max-height: 240px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid #e5e7eb;
+  background: #f9fafb;
+  color: #4b5563;
+  white-space: pre-wrap;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .markdown-content :deep(p:first-child) {
@@ -245,7 +225,7 @@ const parsed = computed(() => {
 .markdown-content :deep(pre) {
   margin: 12px 0;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #0f172a;
   color: #e5e7eb;
   overflow-x: auto;
@@ -256,7 +236,7 @@ const parsed = computed(() => {
   border-radius: 6px;
   background: #f3f4f6;
   font-family: 'Cascadia Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .markdown-content :deep(pre code) {
@@ -270,8 +250,9 @@ const parsed = computed(() => {
 .markdown-content :deep(h4) {
   margin-top: 1.25em;
   margin-bottom: 0.4em;
-  font-weight: 600;
   color: #111827;
+  font-weight: 650;
+  line-height: 1.3;
 }
 
 .markdown-content :deep(ul),
@@ -282,14 +263,17 @@ const parsed = computed(() => {
 .markdown-content :deep(blockquote) {
   margin: 12px 0;
   padding-left: 12px;
-  border-left: 3px solid #bfdbfe;
-  color: #475569;
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
 }
 
 .markdown-content :deep(table) {
+  display: block;
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 12px 0;
+  overflow-x: auto;
 }
 
 .markdown-content :deep(th),
@@ -298,6 +282,11 @@ const parsed = computed(() => {
   border: 1px solid #e5e7eb;
   text-align: left;
   vertical-align: top;
+  font-size: 15px;
+}
+
+.markdown-content :deep(th) {
+  background: #f9fafb;
 }
 
 .markdown-content :deep(.citation-marker) {
@@ -312,26 +301,22 @@ const parsed = computed(() => {
   min-width: 1.35em;
   height: 1.35em;
   padding: 0 0.34em;
-  border: 1px solid #93c5fd;
+  border: 1px solid #d1d5db;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-  color: #1d4ed8;
+  background: #f9fafb;
+  color: #111827;
   text-decoration: none;
   font-weight: 800;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.18);
-  transform: translateY(-0.05em);
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
 .markdown-content :deep(.citation-link:hover) {
-  border-color: #2563eb;
-  background: #2563eb;
-  color: #ffffff;
+  border-color: #111827;
+  background: #111827;
+  color: #fff;
   text-decoration: none;
-  transform: translateY(-0.15em);
 }
 
 .plaintext-content {
@@ -382,12 +367,31 @@ const parsed = computed(() => {
 
 .citations-section {
   margin-top: 16px;
-  padding: 12px;
-  border: 1px solid #dbeafe;
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.78)),
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.14), transparent 38%);
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.citations-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.citations-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .citations-list {
@@ -396,40 +400,34 @@ const parsed = computed(() => {
   margin: 10px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .citation-item {
   position: relative;
-  padding: 10px 10px 10px 36px;
-  border: 1px solid rgba(191, 219, 254, 0.75);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
-  font-size: 12px;
-  color: #475569;
+  padding: 8px 0 8px 28px;
+  font-size: 13px;
+  color: #4b5563;
   line-height: 1.6;
   scroll-margin-top: 24px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .citation-item:target {
-  border-color: #2563eb;
-  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.16);
-  transform: translateY(-1px);
+  background: #f9fafb;
 }
 
 .citation-index {
   position: absolute;
-  left: 10px;
-  top: 10px;
+  left: 0;
+  top: 9px;
   width: 18px;
   height: 18px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #2563eb;
-  color: #ffffff;
+  background: #111827;
+  color: #fff;
   font-size: 11px;
   font-weight: 800;
 }
@@ -443,39 +441,5 @@ const parsed = computed(() => {
 .citation-source {
   color: #111827;
   font-weight: 700;
-}
-
-.citation-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: #64748b;
-}
-
-.citation-meta span {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
-}
-
-.citation-excerpt {
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border-left: 3px solid #38bdf8;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #334155;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-@media (max-width: 960px) {
-  .message-wrapper {
-    max-width: 100%;
-  }
-
 }
 </style>

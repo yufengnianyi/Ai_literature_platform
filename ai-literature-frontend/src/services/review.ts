@@ -4,6 +4,7 @@ import { redirectToLogin } from '@/request';
 
 export interface ReviewTaskSubmitRequest {
   question: string;
+  templateId?: 'antimicrobial_compound' | string;
 }
 
 export interface ReviewTaskAcceptedResponse {
@@ -139,6 +140,9 @@ export interface ReviewTaskRecord {
   taskId: string;
   userId: string;
   question: string;
+  templateId: string | null;
+  selectedDocumentId: string | null;
+  selectedDocumentTitle: string | null;
   status: 'QUEUED' | 'RUNNING' | 'AWAITING_USER' | 'COMPLETED' | 'FAILED';
   stage: string | null;
   queryAnalysis: QueryAnalysis | null;
@@ -218,8 +222,8 @@ export const reviewService = {
     return data as ReviewScopePreview;
   },
 
-  async submitTask(question: string): Promise<ReviewTaskAcceptedResponse> {
-    const { data } = await myAxios.post('/review/tasks', { question });
+  async submitTask(question: string, templateId = 'antimicrobial_compound'): Promise<ReviewTaskAcceptedResponse> {
+    const { data } = await myAxios.post('/review/tasks', { question, templateId });
     return data as ReviewTaskAcceptedResponse;
   },
 
@@ -248,11 +252,6 @@ export const reviewService = {
     return data as ReviewTaskAcceptedResponse;
   },
 
-  async startRetrieval(taskId: string, request: ReviewGenerateRequest): Promise<ReviewTaskAcceptedResponse> {
-    const { data } = await myAxios.post(`/review/tasks/${taskId}/retrieve`, request);
-    return data as ReviewTaskAcceptedResponse;
-  },
-
   async getCandidates(taskId: string): Promise<ReviewCandidate[]> {
     const { data } = await myAxios.get(`/review/tasks/${taskId}/candidates`);
     return data as ReviewCandidate[];
@@ -263,113 +262,9 @@ export const reviewService = {
     return data as ReviewScopePreview;
   },
 
-  async startExtraction(taskId: string, request: CandidateReviewRequest): Promise<ReviewTaskAcceptedResponse> {
-    const { data } = await myAxios.post(`/review/tasks/${taskId}/extract`, request);
-    return data as ReviewTaskAcceptedResponse;
-  },
-
-  async getEvidence(taskId: string): Promise<ReviewEvidenceRecord[]> {
-    const { data } = await myAxios.get(`/review/tasks/${taskId}/evidence`);
-    return data as ReviewEvidenceRecord[];
-  },
-
   async getSummaryTables(taskId: string): Promise<ReviewSummaryTable[]> {
     const { data } = await myAxios.get(`/review/tasks/${taskId}/summary-tables`);
     return data as ReviewSummaryTable[];
-  },
-
-  startGeneration(params: {
-    taskId: string;
-    request: EvidenceReviewRequest;
-    onMessage: (data: string) => void;
-    onXlsxReady: (downloadUrl: string) => void;
-    onError: (error: unknown) => void;
-    onComplete: () => void;
-  }): ReviewStreamHandle {
-    const url = `${API_BASE_URL}/review/tasks/${params.taskId}/generate`;
-    const controller = new AbortController();
-    let completed = false;
-
-    const finalize = () => {
-      if (!completed) {
-        completed = true;
-        params.onComplete();
-      }
-    };
-
-    void (async () => {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-          },
-          credentials: 'include',
-          signal: controller.signal,
-          body: JSON.stringify(params.request),
-        });
-
-        if (response.status === 401) {
-          redirectToLogin();
-          throw new Error('Unauthorized');
-        }
-
-        if (!response.ok) {
-          throw new Error(`Request failed: ${response.status}`);
-        }
-
-        if (!response.body) {
-          throw new Error('Response body is empty');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-          let separatorIndex = buffer.indexOf('\n\n');
-
-          while (separatorIndex >= 0) {
-            const rawBlock = buffer.slice(0, separatorIndex);
-            buffer = buffer.slice(separatorIndex + 2);
-
-            const parsed = parseEventBlock(rawBlock);
-            if (parsed) {
-              if (parsed.eventName === 'complete') {
-                finalize();
-                return;
-              }
-              if (parsed.eventName === 'xlsx_ready') {
-                params.onXlsxReady(reviewService.getXlsxDownloadUrl(params.taskId));
-                continue;
-              }
-              params.onMessage(decodePayload(parsed.data));
-            }
-            separatorIndex = buffer.indexOf('\n\n');
-          }
-        }
-
-        finalize();
-      } catch (error) {
-        if (controller.signal.aborted) {
-          finalize();
-          return;
-        }
-        params.onError(error);
-      }
-    })();
-
-    return {
-      taskId: params.taskId,
-      close: () => {
-        if (!controller.signal.aborted) controller.abort();
-      },
-    };
   },
 
   getXlsxDownloadUrl(taskId: string): string {
@@ -388,13 +283,15 @@ export const reviewService = {
 
   streamReport(params: {
     question: string;
+    templateId?: string;
     onMessage: (data: string) => void;
     onError: (error: unknown) => void;
     onComplete: () => void;
   }): ReviewStreamHandle {
     const encodedQuestion = encodeURIComponent(params.question);
+    const encodedTemplate = encodeURIComponent(params.templateId ?? 'antimicrobial_compound');
     const taskId = crypto.randomUUID();
-    const url = `${API_BASE_URL}/review/tasks/${taskId}/stream?question=${encodedQuestion}`;
+    const url = `${API_BASE_URL}/review/tasks/${taskId}/stream?question=${encodedQuestion}&templateId=${encodedTemplate}`;
     const controller = new AbortController();
     let completed = false;
 
@@ -472,97 +369,4 @@ export const reviewService = {
     };
   },
 
-  streamReportWithSelections(params: {
-    request: ReviewGenerateRequest;
-    onMessage: (data: string) => void;
-    onXlsxReady: (downloadUrl: string) => void;
-    onError: (error: unknown) => void;
-    onComplete: () => void;
-  }): ReviewStreamHandle {
-    const taskId = crypto.randomUUID();
-    const url = `${API_BASE_URL}/review/tasks/${taskId}/stream`;
-    const controller = new AbortController();
-    let completed = false;
-
-    const finalize = () => {
-      if (!completed) {
-        completed = true;
-        params.onComplete();
-      }
-    };
-
-    void (async () => {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'text/event-stream',
-          },
-          credentials: 'include',
-          signal: controller.signal,
-          body: JSON.stringify(params.request),
-        });
-
-        if (response.status === 401) {
-          redirectToLogin();
-          throw new Error('Unauthorized');
-        }
-
-        if (!response.ok) {
-          throw new Error(`Request failed: ${response.status}`);
-        }
-
-        if (!response.body) {
-          throw new Error('Response body is empty');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-          let separatorIndex = buffer.indexOf('\n\n');
-
-          while (separatorIndex >= 0) {
-            const rawBlock = buffer.slice(0, separatorIndex);
-            buffer = buffer.slice(separatorIndex + 2);
-
-            const parsed = parseEventBlock(rawBlock);
-            if (parsed) {
-              if (parsed.eventName === 'complete') {
-                finalize();
-                return;
-              }
-              if (parsed.eventName === 'xlsx_ready') {
-                params.onXlsxReady(reviewService.getXlsxDownloadUrl(taskId));
-                continue;
-              }
-              params.onMessage(decodePayload(parsed.data));
-            }
-            separatorIndex = buffer.indexOf('\n\n');
-          }
-        }
-
-        finalize();
-      } catch (error) {
-        if (controller.signal.aborted) {
-          finalize();
-          return;
-        }
-        params.onError(error);
-      }
-    })();
-
-    return {
-      taskId,
-      close: () => {
-        if (!controller.signal.aborted) controller.abort();
-      },
-    };
-  },
 };

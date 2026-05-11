@@ -39,13 +39,25 @@ public class ReviewRepository {
     private AiPersistenceProperties aiProperties;
 
     public void insertTask(UUID taskId, String userId, String question) {
+        insertTask(taskId, userId, question, "antimicrobial_compound");
+    }
+
+    public void insertTask(UUID taskId, String userId, String question, String templateId) {
         jdbcTemplate.update("""
-                INSERT INTO review_task (task_id, user_id, question, status, stage, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO review_task (task_id, user_id, question, template_id, status, stage, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                taskId, userId, question,
+                taskId, userId, question, firstNonBlank(templateId, "antimicrobial_compound"),
                 ReviewTaskStatus.QUEUED.name(), ReviewStage.QUERY_ANALYSIS.name(),
                 Timestamp.from(Instant.now()), Timestamp.from(Instant.now()));
+    }
+
+    public void updateSelectedDocument(UUID taskId, UUID documentId, String documentTitle) {
+        jdbcTemplate.update("""
+                UPDATE review_task
+                SET selected_document_id = ?, selected_document_title = ?, updated_at = ?
+                WHERE task_id = ?
+                """, documentId, documentTitle, Timestamp.from(Instant.now()), taskId);
     }
 
     public void updateTaskStatus(UUID taskId, ReviewTaskStatus status, ReviewStage stage) {
@@ -129,6 +141,7 @@ public class ReviewRepository {
     }
 
     public void resetTaskForRetry(UUID taskId) {
+        jdbcTemplate.update("DELETE FROM review_paper_evidence_table WHERE task_id = ?", taskId);
         jdbcTemplate.update("DELETE FROM review_document_candidate WHERE task_id = ?", taskId);
         jdbcTemplate.update("DELETE FROM review_evidence WHERE task_id = ?", taskId);
         jdbcTemplate.update("DELETE FROM review_candidate WHERE task_id = ?", taskId);
@@ -136,6 +149,7 @@ public class ReviewRepository {
                 UPDATE review_task
                 SET status = ?, stage = ?, query_analysis = NULL,
                     report_json = NULL, report_markdown = NULL,
+                    selected_document_id = NULL, selected_document_title = NULL,
                     candidate_count = NULL, document_count = NULL, evidence_count = NULL,
                     retrieval_ms = NULL, document_promotion_ms = NULL, rerank_ms = NULL, extraction_ms = NULL,
                     fusion_ms = NULL, report_ms = NULL, total_ms = NULL,
@@ -443,6 +457,11 @@ public class ReviewRepository {
                        metadata::text AS metadata_json
                 FROM %s
                 WHERE metadata->>'document_id' = ?
+                ORDER BY CASE
+                             WHEN metadata->>'chunk_index' ~ '^[0-9]+$' THEN (metadata->>'chunk_index')::int
+                             ELSE 2147483647
+                         END,
+                         embedding_id::text
                 """.formatted(table);
         return jdbcTemplate.query(sql, (rs, rowNum) -> mapRetrievedChunk(rs, "DOC_ALL"), documentId.toString());
     }
@@ -517,6 +536,53 @@ public class ReviewRepository {
         }, taskId);
     }
 
+    public void upsertPaperEvidenceTable(ReviewPaperEvidenceTable table) {
+        jdbcTemplate.update("""
+                INSERT INTO review_paper_evidence_table
+                    (task_id, document_id, document_title, review_question, paper_summary,
+                     headers_json, rows_json, source_chunk_ids, iterations, confidence,
+                     warnings_json, payload_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, cast(? as jsonb), cast(? as jsonb), cast(? as jsonb),
+                        ?, ?, cast(? as jsonb), cast(? as jsonb), ?, ?)
+                ON CONFLICT (task_id, document_id) DO UPDATE
+                SET document_title = EXCLUDED.document_title,
+                    review_question = EXCLUDED.review_question,
+                    paper_summary = EXCLUDED.paper_summary,
+                    headers_json = EXCLUDED.headers_json,
+                    rows_json = EXCLUDED.rows_json,
+                    source_chunk_ids = EXCLUDED.source_chunk_ids,
+                    iterations = EXCLUDED.iterations,
+                    confidence = EXCLUDED.confidence,
+                    warnings_json = EXCLUDED.warnings_json,
+                    payload_json = EXCLUDED.payload_json,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                table.taskId(),
+                table.documentId(),
+                table.documentTitle(),
+                table.reviewQuestion(),
+                table.paperSummary(),
+                toJson(table.headers()),
+                toJson(table.rows()),
+                toJson(table.sourceChunkIds()),
+                table.iterations(),
+                table.confidence(),
+                toJson(table.warnings()),
+                toJson(table),
+                Timestamp.from(table.createdAt() == null ? Instant.now() : table.createdAt()),
+                Timestamp.from(Instant.now()));
+    }
+
+    public List<ReviewPaperEvidenceTable> findPaperEvidenceTablesByTask(UUID taskId) {
+        return jdbcTemplate.query("""
+                SELECT payload_json, task_id, document_id, document_title, review_question, paper_summary,
+                       headers_json, rows_json, source_chunk_ids, iterations, confidence, warnings_json, created_at
+                FROM review_paper_evidence_table
+                WHERE task_id = ?
+                ORDER BY document_title NULLS LAST, document_id
+                """, this::mapPaperEvidenceTable, taskId);
+    }
+
     private ReviewTaskRecord mapTask(ResultSet rs, int rowNum) throws SQLException {
         Timestamp createdAt = rs.getTimestamp("created_at");
         Timestamp updatedAt = rs.getTimestamp("updated_at");
@@ -526,6 +592,9 @@ public class ReviewRepository {
                 rs.getObject("task_id", UUID.class),
                 rs.getString("user_id"),
                 rs.getString("question"),
+                firstNonBlank(getOptionalString(rs, "template_id"), "antimicrobial_compound"),
+                getOptionalUuid(rs, "selected_document_id"),
+                getOptionalString(rs, "selected_document_title"),
                 ReviewTaskStatus.valueOf(rs.getString("status")),
                 rs.getString("stage") == null ? null : ReviewStage.valueOf(rs.getString("stage")),
                 queryAnalysisJson == null ? null : fromJson(queryAnalysisJson, QueryAnalysis.class),
@@ -634,6 +703,57 @@ public class ReviewRepository {
         );
     }
 
+    private ReviewPaperEvidenceTable mapPaperEvidenceTable(ResultSet rs, int rowNum) throws SQLException {
+        String payload = rs.getString("payload_json");
+        if (payload != null && !payload.isBlank()) {
+            try {
+                return fromJson(payload, ReviewPaperEvidenceTable.class);
+            } catch (Exception ignored) {
+                // Fall through to column mapping for forward compatibility.
+            }
+        }
+        Timestamp createdAt = rs.getTimestamp("created_at");
+        return new ReviewPaperEvidenceTable(
+                rs.getObject("task_id", UUID.class),
+                rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
+                rs.getString("review_question"),
+                rs.getString("paper_summary"),
+                fromJsonList(rs.getString("headers_json")),
+                fromJsonStringRows(rs.getString("rows_json")),
+                fromJsonList(rs.getString("source_chunk_ids")),
+                rs.getInt("iterations"),
+                rs.getDouble("confidence"),
+                fromJsonList(rs.getString("warnings_json")),
+                createdAt == null ? null : createdAt.toInstant()
+        );
+    }
+
+    private String getOptionalString(ResultSet rs, String column) {
+        try {
+            return rs.getString(column);
+        } catch (SQLException ignored) {
+            return null;
+        }
+    }
+
+    private UUID getOptionalUuid(ResultSet rs, String column) {
+        try {
+            return rs.getObject(column, UUID.class);
+        } catch (SQLException ignored) {
+            return null;
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
     private String vectorTable() {
         String table = aiProperties.getRag().getVectorTable();
         if (!SAFE_SQL_ID.matcher(table).matches()) {
@@ -702,6 +822,17 @@ public class ReviewRepository {
         }
         try {
             return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
+    }
+
+    private List<List<String>> fromJsonStringRows(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
             return List.of();
         }

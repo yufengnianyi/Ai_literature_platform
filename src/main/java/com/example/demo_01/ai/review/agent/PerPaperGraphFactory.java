@@ -32,6 +32,7 @@ public class PerPaperGraphFactory {
             AuditNode audit,
             RetrieveNode retrieve,
             CompareNode compare,
+            PaperEvidenceTableNode paperTable,
             PersistNode persist,
             ReviewProperties props) throws GraphStateException {
 
@@ -42,6 +43,7 @@ public class PerPaperGraphFactory {
                 .addNode("audit", node_async(audit))
                 .addNode("retrieve", node_async(retrieve))
                 .addNode("compare", node_async(compare))
+                .addNode("paperTable", node_async(paperTable))
                 .addNode("persist", node_async(persist))
                 .addEdge(START, "plan")
                 .addEdge("plan", "pick")
@@ -51,7 +53,9 @@ public class PerPaperGraphFactory {
                 .addConditionalEdges("audit", edge_async(state -> routeAfterAudit(state, props)),
                         Map.of("retrieve", "retrieve", "pick", "pick"))
                 .addEdge("retrieve", "synth")
-                .addEdge("compare", "persist")
+                .addConditionalEdges("compare", edge_async(this::routeAfterCompare),
+                        Map.of("paperTable", "paperTable", "persist", "persist"))
+                .addEdge("paperTable", "persist")
                 .addEdge("persist", END);
 
         return graph.compile(CompileConfig.builder()
@@ -79,5 +83,10 @@ public class PerPaperGraphFactory {
         boolean budgetExhausted = calls >= props.getAgent().getMaxLlmCallsPerPaper()
                 || iter >= props.getAgent().getMaxIterationsPerCompound();
         return (coverageOk || budgetExhausted) ? "pick" : "retrieve";
+    }
+
+    private String routeAfterCompare(PerPaperAgentState state) {
+        String question = state.reviewQuestion();
+        return question == null || question.isBlank() ? "persist" : "paperTable";
     }
 }

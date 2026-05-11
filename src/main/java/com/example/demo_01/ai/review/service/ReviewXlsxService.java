@@ -37,11 +37,48 @@ import java.util.stream.Collectors;
 @Service
 public class ReviewXlsxService {
 
+    private static final String CONCENTRATION_SUMMARY_SHEET = "\u6291\u83cc\u6d53\u5ea6\u4e13\u95e8\u603b\u7ed3";
+    private static final String NOT_MENTIONED = "\u672a\u63d0\u53ca";
+    private static final List<String> DEFAULT_CONCENTRATION_HEADERS = List.of(
+            "\u5316\u5408\u7269/\u6807\u7b7e",
+            "\u6291\u83cc\u6d53\u5ea6",
+            "\u6d53\u5ea6\u7c7b\u578b",
+            "\u89c2\u5bdf\u6548\u679c",
+            "\u4f5c\u7528\u75c5\u539f\u83cc",
+            "\u8bd5\u9a8c\u65b9\u6cd5/\u6761\u4ef6",
+            "\u6765\u6e90 chunk ids",
+            "\u5907\u6ce8"
+    );
+
     @Resource
     private ReviewProperties reviewProperties;
 
     public byte[] generateXlsx(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords) {
         return generateXlsx(task, evidenceRecords, null);
+    }
+
+    public byte[] generatePaperEvidenceXlsx(ReviewTaskRecord task, List<ReviewPaperEvidenceTable> paperTables) {
+        return generatePaperEvidenceXlsx(task, paperTables, true);
+    }
+
+    private byte[] generatePaperEvidenceXlsx(ReviewTaskRecord task,
+                                             List<ReviewPaperEvidenceTable> paperTables,
+                                             boolean includeConcentrationSummarySheet) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            createIntegratedPaperEvidenceSheet(workbook, headerStyle, paperTables);
+            createPerPaperEvidenceSheets(workbook, headerStyle, paperTables);
+            if (includeConcentrationSummarySheet) {
+                createConcentrationSummarySheet(workbook, headerStyle, paperTables);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            log.error("Failed to generate paper evidence xlsx for task {}", task.taskId(), e);
+            throw new RuntimeException("Failed to generate paper evidence xlsx", e);
+        }
     }
 
     public byte[] generateXlsx(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords,
@@ -81,6 +118,16 @@ public class ReviewXlsxService {
     public List<ReviewSummaryTable> buildSummaryTables(ReviewTaskRecord task, List<ReviewEvidenceRecord> evidenceRecords,
                                                        List<SynthesizedCompoundRecord> synthesizedRecords) {
         byte[] xlsxBytes = generateXlsx(task, evidenceRecords, synthesizedRecords);
+        return readSummaryTables(task, xlsxBytes);
+    }
+
+    public List<ReviewSummaryTable> buildPaperEvidenceSummaryTables(ReviewTaskRecord task,
+                                                                    List<ReviewPaperEvidenceTable> paperTables) {
+        byte[] xlsxBytes = generatePaperEvidenceXlsx(task, paperTables, false);
+        return readSummaryTables(task, xlsxBytes);
+    }
+
+    private List<ReviewSummaryTable> readSummaryTables(ReviewTaskRecord task, byte[] xlsxBytes) {
         DataFormatter formatter = new DataFormatter();
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsxBytes))) {
             List<ReviewSummaryTable> tables = new ArrayList<>();
@@ -121,6 +168,146 @@ public class ReviewXlsxService {
         }
     }
 
+    private void createIntegratedPaperEvidenceSheet(Workbook workbook,
+                                                    CellStyle headerStyle,
+                                                    List<ReviewPaperEvidenceTable> paperTables) {
+        Sheet sheet = workbook.createSheet("Paper Evidence Summary");
+        String[] headers = {
+                "Paper",
+                "Paper Summary",
+                "Review Question",
+                "Evidence Row",
+                "Source Chunks",
+                "Confidence",
+                "Warnings"
+        };
+        createHeaderRow(sheet, headerStyle, headers);
+
+        int rowIdx = 1;
+        for (ReviewPaperEvidenceTable table : paperTables == null ? List.<ReviewPaperEvidenceTable>of() : paperTables) {
+            List<List<String>> rows = table.rows() == null || table.rows().isEmpty()
+                    ? List.of(List.of("No evidence row generated"))
+                    : table.rows();
+            List<String> tableHeaders = table.headers() == null ? List.of() : table.headers();
+            for (List<String> evidenceRow : rows) {
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(safeDefault(table.documentTitle(),
+                        table.documentId() == null ? "unknown" : table.documentId().toString()));
+                row.createCell(1).setCellValue(safe(table.paperSummary()));
+                row.createCell(2).setCellValue(safe(table.reviewQuestion()));
+                row.createCell(3).setCellValue(formatEvidenceRow(tableHeaders, evidenceRow));
+                row.createCell(4).setCellValue(table.sourceChunkIds() == null ? "" : String.join("; ", table.sourceChunkIds()));
+                row.createCell(5).setCellValue(table.confidence());
+                row.createCell(6).setCellValue(table.warnings() == null ? "" : String.join("; ", table.warnings()));
+            }
+        }
+        autoSize(sheet, headers.length);
+    }
+
+    private void createPerPaperEvidenceSheets(Workbook workbook,
+                                              CellStyle headerStyle,
+                                              List<ReviewPaperEvidenceTable> paperTables) {
+        int index = 1;
+        for (ReviewPaperEvidenceTable table : paperTables == null ? List.<ReviewPaperEvidenceTable>of() : paperTables) {
+            String title = safeDefault(table.documentTitle(), "Paper " + index);
+            Sheet sheet = workbook.createSheet(safeSheetName(index + " " + title));
+            List<String> headers = table.headers() == null || table.headers().isEmpty()
+                    ? List.of("Finding", "Evidence", "Source")
+                    : table.headers();
+            createHeaderRow(sheet, headerStyle, headers.toArray(String[]::new));
+            int rowIdx = 1;
+            for (List<String> values : table.rows() == null ? List.<List<String>>of() : table.rows()) {
+                Row row = sheet.createRow(rowIdx++);
+                for (int column = 0; column < headers.size(); column++) {
+                    String value = values != null && column < values.size() ? values.get(column) : "";
+                    row.createCell(column).setCellValue(safe(value));
+                }
+            }
+            autoSize(sheet, headers.size());
+            index++;
+        }
+    }
+
+    private void createConcentrationSummarySheet(Workbook workbook,
+                                                 CellStyle headerStyle,
+                                                 List<ReviewPaperEvidenceTable> paperTables) {
+        Sheet sheet = workbook.createSheet(CONCENTRATION_SUMMARY_SHEET);
+        List<String> headers = new ArrayList<>();
+        headers.add("\u6587\u732e");
+        headers.addAll(DEFAULT_CONCENTRATION_HEADERS);
+        headers.add("\u6d53\u5ea6\u603b\u7ed3");
+        createHeaderRow(sheet, headerStyle, headers.toArray(String[]::new));
+        int rowIdx = 1;
+        for (ReviewPaperEvidenceTable table : paperTables == null ? List.<ReviewPaperEvidenceTable>of() : paperTables) {
+            List<String> concentrationHeaders = table.concentrationHeaders() == null || table.concentrationHeaders().isEmpty()
+                    ? DEFAULT_CONCENTRATION_HEADERS
+                    : table.concentrationHeaders();
+            List<List<String>> concentrationRows = table.concentrationRows() == null || table.concentrationRows().isEmpty()
+                    ? fallbackConcentrationRows(table)
+                    : table.concentrationRows();
+            for (List<String> values : concentrationRows) {
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(safeDefault(table.documentTitle(),
+                        table.documentId() == null ? "unknown" : table.documentId().toString()));
+                for (int column = 0; column < DEFAULT_CONCENTRATION_HEADERS.size(); column++) {
+                    String value = valueForConcentrationColumn(concentrationHeaders, values, DEFAULT_CONCENTRATION_HEADERS.get(column));
+                    row.createCell(column + 1).setCellValue(safeDefault(value, NOT_MENTIONED));
+                }
+                row.createCell(DEFAULT_CONCENTRATION_HEADERS.size() + 1).setCellValue(
+                        safeDefault(table.concentrationSummary(), safeDefault(table.concentrationDocument(), NOT_MENTIONED)));
+            }
+        }
+        autoSize(sheet, headers.size());
+    }
+
+    private List<List<String>> fallbackConcentrationRows(ReviewPaperEvidenceTable table) {
+        List<String> row = new ArrayList<>(java.util.Collections.nCopies(DEFAULT_CONCENTRATION_HEADERS.size(), NOT_MENTIONED));
+        String legacyDocument = table == null ? null : table.concentrationDocument();
+        if (legacyDocument != null && !legacyDocument.isBlank()) {
+            row.set(DEFAULT_CONCENTRATION_HEADERS.size() - 1, legacyDocument);
+        }
+        return List.of(row);
+    }
+
+    private String valueForConcentrationColumn(List<String> headers, List<String> values, String targetHeader) {
+        int index = headers == null ? -1 : headers.indexOf(targetHeader);
+        if (index >= 0 && values != null && index < values.size()) {
+            return values.get(index);
+        }
+        int defaultIndex = DEFAULT_CONCENTRATION_HEADERS.indexOf(targetHeader);
+        if (defaultIndex >= 0 && values != null && defaultIndex < values.size()) {
+            return values.get(defaultIndex);
+        }
+        return NOT_MENTIONED;
+    }
+
+    private String formatEvidenceRow(List<String> headers, List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < values.size(); i++) {
+            String value = safe(values.get(i));
+            if (value.isBlank()) {
+                continue;
+            }
+            String header = headers != null && i < headers.size() ? safe(headers.get(i)) : "Column " + (i + 1);
+            parts.add(header + ": " + value);
+        }
+        return String.join("; ", parts);
+    }
+
+    private String safeSheetName(String value) {
+        String normalized = safeDefault(value, "Sheet")
+                .replaceAll("[\\\\/?*\\[\\]:]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (normalized.isBlank()) {
+            normalized = "Sheet";
+        }
+        return normalized.length() > 31 ? normalized.substring(0, 31).trim() : normalized;
+    }
+
     private String sheetId(String sheetName) {
         return sheetName.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
     }
@@ -130,7 +317,7 @@ public class ReviewXlsxService {
                                              List<SynthesizedCompoundRecord> synthesizedRecords) {
         Sheet sheet = workbook.createSheet("Compound Activity Summary");
         String[] headers = {
-                "化合物名称（英文）", "结构类型", "来源", "抑菌活性", "作用病原菌",
+                "化合物名称（英文）", "结构类型", "来源", "抑菌浓度", "作用病原菌",
                 "试验方法", "可能的作用靶标/机制", "细胞毒性/安全性数据", "参考文献", "专利情况"
         };
         createHeaderRow(sheet, headerStyle, headers);
@@ -251,6 +438,10 @@ public class ReviewXlsxService {
 
     private String safe(String s) {
         return s == null ? "" : s;
+    }
+
+    private String safeDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private void createGeneProteinSheet(Workbook workbook, CellStyle headerStyle,

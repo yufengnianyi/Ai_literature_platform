@@ -100,11 +100,12 @@ app:
         standard-deep-thinking: false
         standard-thinking-budget: 0
       agent:
-        enabled: false
+        enabled: true
         max-iterations-per-compound: 2
         max-llm-calls-per-paper: 12
         max-concurrent-papers: 2
         retriever-k-per-directive: 6
+        max-paper-table-iterations: 3
     kg:
       enabled: true
       async-threads: 2

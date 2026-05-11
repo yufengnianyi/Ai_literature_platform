@@ -67,6 +67,46 @@ assert.match(
 );
 assert.match(preparedCitations.plaintextText, /\[2\]/);
 
+const preparedRawHtmlCitation = prepareCitations(
+  'Finding <sup class="citation-marker" data-cite="11"><a class="citation-link" href="#old" title="Paper C · Evidence">11</a></sup>',
+  { referenceScope: 'message-html' },
+);
+assert.equal(preparedRawHtmlCitation.citations.length, 1);
+assert.equal(preparedRawHtmlCitation.citations[0]?.index, 11);
+assert.equal(preparedRawHtmlCitation.citations[0]?.source, 'Paper C');
+assert.doesNotMatch(preparedRawHtmlCitation.processedText, /&lt;sup|class=&quot;citation-marker/);
+assert.match(preparedRawHtmlCitation.processedText, /data-reference-target="message-html-ref-11"/);
+assert.equal(preparedRawHtmlCitation.plaintextText, 'Finding [11]');
+
+const parsedEscapedHtmlCitation = parseAIResponse(
+  'Finding &lt;sup class="citation-marker" data-cite="12"&gt;&lt;a class="citation-link" href="#old" title="Paper D · Evidence"&gt;12&lt;/a&gt;&lt;/sup&gt;',
+  { final: true, referenceScope: 'message-escaped' },
+);
+assert.equal(parsedEscapedHtmlCitation.citations.length, 1);
+assert.equal(parsedEscapedHtmlCitation.citations[0]?.index, 12);
+assert.equal(parsedEscapedHtmlCitation.citations[0]?.source, 'Paper D');
+assert.doesNotMatch(parsedEscapedHtmlCitation.html, /&lt;sup|class=&quot;citation-marker/);
+assert.match(parsedEscapedHtmlCitation.html, /data-reference-target="message-escaped-ref-12"/);
+
+const parsedCodeWrappedHtmlCitation = parseAIResponse(
+  'Finding `<sup class="citation-marker" data-cite="13"><a class="citation-link" href="#old" title="Paper E · Evidence">13</a></sup>`',
+  { final: true, referenceScope: 'message-code-wrapped' },
+);
+assert.equal(parsedCodeWrappedHtmlCitation.citations.length, 1);
+assert.equal(parsedCodeWrappedHtmlCitation.citations[0]?.index, 13);
+assert.equal(parsedCodeWrappedHtmlCitation.citations[0]?.source, 'Paper E');
+assert.doesNotMatch(parsedCodeWrappedHtmlCitation.html, /<code>|&lt;sup|class=&quot;citation-marker/);
+assert.match(parsedCodeWrappedHtmlCitation.html, /data-reference-target="message-code-wrapped-ref-13"/);
+
+const parsedCodeWrappedSourceCitation = parseAIResponse(
+  'Finding `{source=Paper F; chunk=7; quote=Evidence}`',
+  { final: true, referenceScope: 'message-source-code-wrapped' },
+);
+assert.equal(parsedCodeWrappedSourceCitation.citations.length, 1);
+assert.equal(parsedCodeWrappedSourceCitation.citations[0]?.source, 'Paper F');
+assert.doesNotMatch(parsedCodeWrappedSourceCitation.html, /<code>|source=Paper F/);
+assert.match(parsedCodeWrappedSourceCitation.html, /data-reference-target="message-source-code-wrapped-ref-1"/);
+
 const normalizedStringSources = normalizeSourcesPayload([' Paper A ', '', 'Paper B']);
 assert.deepEqual(normalizedStringSources, [
   { title: 'Paper A' },

@@ -1,6 +1,5 @@
 package com.example.demo_01.ai.controller;
 
-import com.example.demo_01.ai.AiCodeHelperService;
 import com.example.demo_01.ai.ChatStreamingService;
 import com.example.demo_01.conversation.ConversationService;
 import com.example.demo_01.exception.BusinessException;
@@ -33,9 +32,6 @@ class AiControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
-    private AiCodeHelperService aiCodeHelperService;
-
-    @MockBean
     private ChatStreamingService chatStreamingService;
 
     @MockBean
@@ -53,7 +49,19 @@ class AiControllerTest {
         loginUser.setUserId("u-1");
         when(userService.getLoginUser(any())).thenReturn(loginUser);
         when(conversationService.normalizeConversationId("conv-1")).thenReturn("conv-1");
-        when(aiCodeHelperService.chatWithFlux("u-1::conv-1", "hello")).thenReturn(Flux.just("hi"));
+        when(chatStreamingService.stream("u-1::conv-1", "hello", false)).thenReturn(Flux.just(
+                org.springframework.http.codec.ServerSentEvent.<String>builder()
+                        .event("sources")
+                        .data("[]")
+                        .build(),
+                org.springframework.http.codec.ServerSentEvent.<String>builder()
+                        .event("message")
+                        .data("hi")
+                        .build(),
+                org.springframework.http.codec.ServerSentEvent.<String>builder()
+                        .event("complete")
+                        .build()
+        ));
 
         mockMvc.perform(get("/ai")
                         .param("conversationId", "conv-1")
@@ -63,11 +71,34 @@ class AiControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.allOf(
                         org.hamcrest.Matchers.containsString("event:message"),
                         org.hamcrest.Matchers.containsString("data:hi"),
+                        org.hamcrest.Matchers.containsString("event:sources"),
                         org.hamcrest.Matchers.containsString("event:complete")
                 )));
 
         verify(conversationService).createConversationIfAbsent("u-1", "conv-1");
-        verify(aiCodeHelperService).chatWithFlux("u-1::conv-1", "hello");
+        verify(chatStreamingService).stream("u-1::conv-1", "hello", false);
+    }
+
+    @Test
+    void shouldPassEnableThinkingToChatStream() throws Exception {
+        User loginUser = new User();
+        loginUser.setUserId("u-1");
+        when(userService.getLoginUser(any())).thenReturn(loginUser);
+        when(conversationService.normalizeConversationId("conv-1")).thenReturn("conv-1");
+        when(chatStreamingService.stream("u-1::conv-1", "hello", true)).thenReturn(Flux.just(
+                org.springframework.http.codec.ServerSentEvent.<String>builder()
+                        .event("complete")
+                        .build()
+        ));
+
+        mockMvc.perform(get("/ai")
+                        .param("conversationId", "conv-1")
+                        .param("prompt", "hello")
+                        .param("enableThinking", "true")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(status().isOk());
+
+        verify(chatStreamingService).stream("u-1::conv-1", "hello", true);
     }
 
     @Test

@@ -301,6 +301,9 @@ public final class ReviewModels {
             UUID taskId,
             String userId,
             String question,
+            String templateId,
+            UUID selectedDocumentId,
+            String selectedDocumentTitle,
             ReviewTaskStatus status,
             ReviewStage stage,
             QueryAnalysis queryAnalysis,
@@ -315,6 +318,26 @@ public final class ReviewModels {
             Instant updatedAt,
             Instant finishedAt
     ) {
+        public ReviewTaskRecord(UUID taskId,
+                                String userId,
+                                String question,
+                                ReviewTaskStatus status,
+                                ReviewStage stage,
+                                QueryAnalysis queryAnalysis,
+                                String reportMarkdown,
+                                Integer candidateCount,
+                                Integer documentCount,
+                                Integer evidenceCount,
+                                ReviewTaskMetrics metrics,
+                                String errorCode,
+                                String errorMessage,
+                                Instant createdAt,
+                                Instant updatedAt,
+                                Instant finishedAt) {
+            this(taskId, userId, question, "antimicrobial_compound", null, null, status, stage,
+                    queryAnalysis, reportMarkdown, candidateCount, documentCount, evidenceCount,
+                    metrics, errorCode, errorMessage, createdAt, updatedAt, finishedAt);
+        }
     }
 
     public record ReviewTaskMetrics(
@@ -328,7 +351,10 @@ public final class ReviewModels {
     ) {
     }
 
-    public record ReviewTaskSubmitRequest(String question) {
+    public record ReviewTaskSubmitRequest(String question, String templateId) {
+        public ReviewTaskSubmitRequest(String question) {
+            this(question, null);
+        }
     }
 
     public record ReviewGenerateRequest(
@@ -511,6 +537,75 @@ public final class ReviewModels {
             List<String> headers,
             List<List<String>> rows
     ) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ReviewPaperEvidenceTable(
+            UUID taskId,
+            UUID documentId,
+            String documentTitle,
+            String reviewQuestion,
+            String paperSummary,
+            List<String> headers,
+            List<List<String>> rows,
+            List<String> sourceChunkIds,
+            int iterations,
+            double confidence,
+            List<String> warnings,
+            Instant createdAt,
+            String templateId,
+            String concentrationDocument,
+            List<String> concentrationHeaders,
+            List<List<String>> concentrationRows,
+            String concentrationSummary,
+            List<String> selectedSeedChunkIds,
+            List<String> allSourceChunkIds
+    ) {
+        public ReviewPaperEvidenceTable {
+            concentrationHeaders = concentrationHeaders == null ? List.of() : concentrationHeaders;
+            concentrationRows = concentrationRows == null ? List.of() : concentrationRows;
+            selectedSeedChunkIds = selectedSeedChunkIds == null ? List.of() : selectedSeedChunkIds;
+            allSourceChunkIds = allSourceChunkIds == null ? List.of() : allSourceChunkIds;
+        }
+
+        public ReviewPaperEvidenceTable(UUID taskId,
+                                        UUID documentId,
+                                        String documentTitle,
+                                        String reviewQuestion,
+                                        String paperSummary,
+                                        List<String> headers,
+                                        List<List<String>> rows,
+                                        List<String> sourceChunkIds,
+                                        int iterations,
+                                        double confidence,
+                                        List<String> warnings,
+                                        Instant createdAt,
+                                        String templateId,
+                                        String concentrationDocument,
+                                        List<String> selectedSeedChunkIds,
+                                        List<String> allSourceChunkIds) {
+            this(taskId, documentId, documentTitle, reviewQuestion, paperSummary, headers, rows,
+                    sourceChunkIds, iterations, confidence, warnings, createdAt, templateId,
+                    concentrationDocument, List.of(), List.of(), null, selectedSeedChunkIds, allSourceChunkIds);
+        }
+
+        public ReviewPaperEvidenceTable(UUID taskId,
+                                        UUID documentId,
+                                        String documentTitle,
+                                        String reviewQuestion,
+                                        String paperSummary,
+                                        List<String> headers,
+                                        List<List<String>> rows,
+                                        List<String> sourceChunkIds,
+                                        int iterations,
+                                        double confidence,
+                                        List<String> warnings,
+                                        Instant createdAt) {
+            this(taskId, documentId, documentTitle, reviewQuestion, paperSummary, headers, rows,
+                    sourceChunkIds, iterations, confidence, warnings, createdAt,
+                    "antimicrobial_compound", null, List.of(), List.of(), null,
+                    List.of(), sourceChunkIds == null ? List.of() : sourceChunkIds);
+        }
     }
 
     // ── Checkpoint requests ──

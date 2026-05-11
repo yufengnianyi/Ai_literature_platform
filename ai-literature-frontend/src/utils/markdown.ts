@@ -372,7 +372,67 @@ const parseCitationTokenBody = (
   };
 };
 
+const decodeHtmlEntities = (value: string): string =>
+  value
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#34;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&');
+
+const getHtmlAttribute = (html: string, name: string): string | undefined => {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${escapedName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+  const match = html.match(pattern);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  return value ? decodeHtmlEntities(value).trim() : undefined;
+};
+
+const existingCitationHtmlPattern =
+  /`{1,3}\s*(?:<sup\b[^>]*>[\s\S]*?<\/sup>|&lt;sup\b[\s\S]*?&lt;\/sup&gt;)\s*`{1,3}|<sup\b[^>]*>[\s\S]*?<\/sup>|&lt;sup\b[\s\S]*?&lt;\/sup&gt;/gi;
+
+const parseExistingCitationHtml = (
+  token: string,
+): { parsed: Omit<Citation, 'index' | 'referenceId'>; preferredIndex?: number } | null => {
+  const html = decodeHtmlEntities(token.trim().replace(/^`{1,3}\s*/, '').replace(/\s*`{1,3}$/, ''));
+  const className = getHtmlAttribute(html, 'class') ?? '';
+  if (!/\bcitation-marker\b/i.test(className)) {
+    return null;
+  }
+
+  const displayText = html.replace(/<[^>]*>/g, '').trim();
+  const dataCite = getHtmlAttribute(html, 'data-cite') ?? displayText;
+  const preferredIndex = Number.parseInt(dataCite, 10);
+  const safePreferredIndex =
+    Number.isSafeInteger(preferredIndex) && preferredIndex > 0 ? preferredIndex : undefined;
+
+  const title = getHtmlAttribute(html, 'title')?.trim();
+  const titleParts = title
+    ?.split(/\s*(?:·|路|\|)\s*/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const titleSource = titleParts?.[0];
+  const fallbackSourceSuffix = safePreferredIndex ?? displayText;
+  const source =
+    titleSource && !/^(?:\.{3}|…)$/.test(titleSource)
+      ? titleSource
+      : `Reference ${fallbackSourceSuffix || 'citation'}`;
+  const excerpt = titleParts && titleParts.length > 1 ? titleParts.slice(1).join(' · ') : undefined;
+
+  return {
+    parsed: {
+      source,
+      ...(excerpt ? { excerpt } : {}),
+    },
+    ...(safePreferredIndex ? { preferredIndex: safePreferredIndex } : {}),
+  };
+};
+
 const citationTokenPattern = /(\{source=[^{}\n]+\}|〔source=[^〔〕\n]+〕)/gu;
+const codeWrappedCitationTokenPattern = /`{1,3}\s*(\{source=[^{}\n]+\}|〔source=[^〔〕\n]+〕)\s*`{1,3}/gu;
 
 export const normalizeMarkdownSyntax = (text: string, options?: { final?: boolean }): string => {
   if (!text) {
@@ -394,11 +454,15 @@ export const prepareCitations = (
   const referenceScope = normalizeReferenceScope(options?.referenceScope);
   const sourceLookup = buildSourceLookup(options?.sources);
   const citationIndexMap = new Map<string, number>();
+  const usedIndexes = new Set<number>();
   const citations: Citation[] = [];
   let counter = 1;
 
-  const replacer = (token: string, htmlMode: boolean): string => {
-    const parsed = parseCitationTokenBody(token, sourceLookup);
+  const registerCitation = (
+    parsed: Omit<Citation, 'index' | 'referenceId'>,
+    htmlMode: boolean,
+    preferredIndex?: number,
+  ): string => {
     if (!parsed) {
       return '';
     }
@@ -413,8 +477,18 @@ export const prepareCitations = (
 
     let index = citationIndexMap.get(citationKey);
     if (!index) {
-      index = counter;
-      counter += 1;
+      if (preferredIndex && !usedIndexes.has(preferredIndex)) {
+        index = preferredIndex;
+        counter = Math.max(counter, index + 1);
+      } else {
+        while (usedIndexes.has(counter)) {
+          counter += 1;
+        }
+        index = counter;
+        counter += 1;
+      }
+
+      usedIndexes.add(index);
       citationIndexMap.set(citationKey, index);
       citations.push({
         index,
@@ -438,8 +512,31 @@ export const prepareCitations = (
       : `[${index}]`;
   };
 
-  const processedText = text.replace(citationTokenPattern, (token) => replacer(token, true));
-  const plaintextText = text.replace(citationTokenPattern, (token) => replacer(token, false));
+  const sourceTokenReplacer = (token: string, htmlMode: boolean): string => {
+    const parsed = parseCitationTokenBody(
+      token.trim().replace(/^`{1,3}\s*/, '').replace(/\s*`{1,3}$/, ''),
+      sourceLookup,
+    );
+    return parsed ? registerCitation(parsed, htmlMode) : '';
+  };
+
+  const existingHtmlReplacer = (token: string, htmlMode: boolean): string => {
+    const citation = parseExistingCitationHtml(token);
+    if (!citation) {
+      return token;
+    }
+
+    return registerCitation(citation.parsed, htmlMode, citation.preferredIndex);
+  };
+
+  const replaceCitationForms = (value: string, htmlMode: boolean): string =>
+    value
+      .replace(existingCitationHtmlPattern, (token) => existingHtmlReplacer(token, htmlMode))
+      .replace(codeWrappedCitationTokenPattern, (token) => sourceTokenReplacer(token, htmlMode))
+      .replace(citationTokenPattern, (token) => sourceTokenReplacer(token, htmlMode));
+
+  const processedText = replaceCitationForms(text, true);
+  const plaintextText = replaceCitationForms(text, false);
 
   return {
     processedText,

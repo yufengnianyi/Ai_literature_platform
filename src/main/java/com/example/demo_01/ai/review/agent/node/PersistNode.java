@@ -19,11 +19,14 @@ public class PersistNode implements NodeAction<PerPaperAgentState> {
     public Map<String, Object> apply(PerPaperAgentState state) {
         List<SynthesizedCompoundRecord> profiles = state.profiles();
         if (profiles == null || profiles.isEmpty()) {
-            log.info("No profiles to persist");
-            return Map.of();
+            log.info("No compound profiles to persist for task {}", state.taskId());
+        } else {
+            // DB insert is done in ReviewPipelineService after the graph returns (single source of truth).
+            log.info("Agent persist stage done for task {} ({} profiles)", state.taskId(), profiles.size());
         }
-        // DB insert is done in ReviewPipelineService after the graph returns (single source of truth).
-        log.info("Agent persist stage done for task {} ({} profiles)", state.taskId(), profiles.size());
+        state.paperEvidenceTable()
+                .ifPresent(table -> log.info("Agent persist stage includes paper evidence table for task {}, document {}",
+                        state.taskId(), table.documentId()));
         return Map.of();
     }
 }

@@ -1,8 +1,6 @@
 package com.example.demo_01.ai.controller;
 
-import com.example.demo_01.ai.AiCodeHelperService;
 import com.example.demo_01.ai.ChatStreamingService;
-import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
 import com.example.demo_01.ai.memory.UserConversationKey;
 import com.example.demo_01.conversation.ConversationService;
 import com.example.demo_01.exception.ErrorCode;
@@ -23,9 +21,6 @@ import reactor.core.publisher.Flux;
 public class AiController {
 
     @Resource
-    private AiCodeHelperService aiCodeHelperService;
-
-    @Resource
     private ChatStreamingService chatStreamingService;
 
     @Resource
@@ -39,7 +34,7 @@ public class AiController {
             HttpServletRequest httpServletRequest,
             @RequestParam(required = false) String conversationId,
             @RequestParam(name = "memory_id", required = false) Integer legacyMemoryId,
-            @RequestParam(name = "deepThinking", defaultValue = "false") boolean deepThinking,
+            @RequestParam(name = "enableThinking", defaultValue = "false") boolean enableThinking,
             @RequestParam String prompt) {
         User loginUser = userService.getLoginUser(httpServletRequest);
         String normalizedUserId = loginUser.getUserId();
@@ -47,31 +42,7 @@ public class AiController {
         String resolvedConversationId = resolveConversationId(conversationId, legacyMemoryId);
         conversationService.createConversationIfAbsent(normalizedUserId, resolvedConversationId);
         String memoryKey = UserConversationKey.compose(normalizedUserId, resolvedConversationId);
-        if (deepThinking) {
-            return chatStreamingService.stream(memoryKey, prompt, true);
-        }
-
-        MarkdownChunkBuffer chunkBuffer = new MarkdownChunkBuffer();
-
-        Flux<ServerSentEvent<String>> messageEvents = aiCodeHelperService.chatWithFlux(memoryKey, prompt)
-                .concatMapIterable(chunkBuffer::append)
-                .map(chunk -> ServerSentEvent.<String>builder()
-                        .event("message")
-                        .data(chunk)
-                        .build());
-
-        Flux<ServerSentEvent<String>> completionEvents = Flux.defer(() -> Flux.concat(
-                Flux.fromIterable(chunkBuffer.flushRemaining())
-                        .map(chunk -> ServerSentEvent.<String>builder()
-                                .event("message")
-                                .data(chunk)
-                                .build()),
-                Flux.just(ServerSentEvent.<String>builder()
-                        .event("complete")
-                        .build())
-        ));
-
-        return messageEvents.concatWith(completionEvents);
+        return chatStreamingService.stream(memoryKey, prompt, enableThinking);
     }
 
     private String resolveConversationId(String conversationId, Integer legacyMemoryId) {

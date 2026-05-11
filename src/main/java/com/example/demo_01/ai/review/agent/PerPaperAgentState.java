@@ -23,22 +23,32 @@ public class PerPaperAgentState extends AgentState {
     /** Full map from pipeline; keyed by document UUID */
     public static final String KNOWLEDGE_CONTEXTS = "knowledgeContexts";
     public static final String TASK_ID = "taskId";
+    public static final String REVIEW_QUESTION = "reviewQuestion";
+    public static final String EXTRACTED_EVIDENCE = "extractedEvidence";
+    public static final String PAPER_EVIDENCE_TABLE = "paperEvidenceTable";
 
     public static final Map<String, Channel<?>> SCHEMA = Map.ofEntries(
-            Map.entry(DOCUMENT_ID, Channels.base(() -> null)),
+            Map.entry(DOCUMENT_ID, nullable()),
             Map.entry(SEED_CHUNKS, Channels.appender(ArrayList::new)),
             Map.entry(COMPOUND_QUEUE, Channels.base(() -> new ArrayDeque<CompoundSpec>())),
-            Map.entry(CURRENT_COMPOUND, Channels.base(() -> null)),
+            Map.entry(CURRENT_COMPOUND, nullable()),
             Map.entry(CTX_BY_COMPOUND, Channels.base(() -> new HashMap<String, List<RetrievedChunk>>())),
-            Map.entry(CURRENT_PROFILE, Channels.base(() -> null)),
-            Map.entry(CURRENT_AUDIT, Channels.base(() -> null)),
+            Map.entry(CURRENT_PROFILE, nullable()),
+            Map.entry(CURRENT_AUDIT, nullable()),
             Map.entry(ITERATIONS, Channels.base(() -> new HashMap<String, Integer>())),
             Map.entry(PROFILES, Channels.base(() -> new ArrayList<SynthesizedCompoundRecord>())),
             Map.entry(LLM_CALLS, Channels.base(() -> 0)),
             Map.entry(BUDGET_EXHAUSTED, Channels.base(() -> false)),
             Map.entry(KNOWLEDGE_CONTEXTS, Channels.base(() -> new HashMap<UUID, DocumentKnowledgeContext>())),
-            Map.entry(TASK_ID, Channels.base(() -> null))
+            Map.entry(TASK_ID, nullable()),
+            Map.entry(REVIEW_QUESTION, nullable()),
+            Map.entry(EXTRACTED_EVIDENCE, Channels.base(() -> new ArrayList<ExtractedEvidence>())),
+            Map.entry(PAPER_EVIDENCE_TABLE, nullable())
     );
+
+    private static <T> Channel<T> nullable() {
+        return Channels.base((oldValue, newValue) -> newValue);
+    }
 
     public PerPaperAgentState(Map<String, Object> initData) {
         super(initData);
@@ -101,6 +111,19 @@ public class PerPaperAgentState extends AgentState {
 
     public UUID taskId() {
         return this.<UUID>value(TASK_ID).orElse(null);
+    }
+
+    public String reviewQuestion() {
+        return this.<String>value(REVIEW_QUESTION).orElse(null);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<ExtractedEvidence> extractedEvidence() {
+        return this.<List<ExtractedEvidence>>value(EXTRACTED_EVIDENCE).orElse(List.of());
+    }
+
+    public Optional<ReviewPaperEvidenceTable> paperEvidenceTable() {
+        return this.value(PAPER_EVIDENCE_TABLE);
     }
 
     public record CompoundSpec(
