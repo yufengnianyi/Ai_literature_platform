@@ -3,14 +3,29 @@ package com.example.demo_01.ai.review;
 import com.example.demo_01.ai.review.model.ReviewModels.ExtractedEvidence;
 import com.example.demo_01.ai.review.model.ReviewModels.FusedEvidenceGroup;
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewPaperEvidenceTable;
 import com.example.demo_01.ai.review.model.ReviewModels.TypedEntities;
 import com.example.demo_01.ai.review.service.ReportGeneratorService;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class ReportGeneratorServiceTest {
 
@@ -201,5 +216,97 @@ class ReportGeneratorServiceTest {
         assertFalse(report.contains("### " + canonicalSubQuestion));
         assertFalse(report.contains("Several antifungal compounds have been identified as effective against oomycetes."));
         assertTrue(report.contains("\u56f4\u7ed5\u201c" + displaySubQuestion + "\u201d"));
+    }
+
+    @Test
+    void paperCentricReportShouldUseMergedTableAsLlmContext() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        ChatModel chatModel = mock(ChatModel.class);
+        ReflectionTestUtils.setField(service, "reviewReportChatModel", chatModel);
+        when(chatModel.chat(any(SystemMessage.class), any(UserMessage.class)))
+                .thenReturn(ChatResponse.builder().aiMessage(AiMessage.from("LLM synthesized paper report")).build());
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Summarize anti-oomycete compounds.",
+                List.of(),
+                List.of("Phytophthora"),
+                List.of("antimicrobial compounds"),
+                "en",
+                "Summarize anti-oomycete compounds.",
+                List.of()
+        );
+        ReviewPaperEvidenceTable table = paperTable("Paper A", List.of(List.of(
+                "compound 34",
+                "ellipticine derivative",
+                "synthetic",
+                "25 uM",
+                "Phytophthora infestans",
+                "mycelial growth assay",
+                "not mentioned",
+                "not mentioned",
+                "Paper A",
+                "not mentioned"
+        )));
+
+        String report = service.generateReport(analysis, null, null, null, List.of(table));
+
+        assertEquals("LLM synthesized paper report", report);
+        ArgumentCaptor<UserMessage> userMessageCaptor = ArgumentCaptor.forClass(UserMessage.class);
+        verify(chatModel).chat(any(SystemMessage.class), userMessageCaptor.capture());
+        String prompt = userMessageCaptor.getValue().singleText();
+        assertTrue(prompt.contains("Merged Summary Table"));
+        assertTrue(prompt.contains("compound 34"));
+        assertTrue(prompt.contains("25 uM"));
+        assertTrue(prompt.contains("100k papers"));
+        assertFalse(prompt.contains("chunk text"));
+    }
+
+    @Test
+    void paperCentricReportShouldFallbackWhenLlmFails() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        ChatModel chatModel = mock(ChatModel.class);
+        ReflectionTestUtils.setField(service, "reviewReportChatModel", chatModel);
+        when(chatModel.chat(any(SystemMessage.class), any(UserMessage.class))).thenThrow(new RuntimeException("offline"));
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Summarize anti-oomycete compounds.",
+                List.of(),
+                List.of("Phytophthora"),
+                List.of("antimicrobial compounds"),
+                "en",
+                "Summarize anti-oomycete compounds.",
+                List.of()
+        );
+
+        String report = service.generateReport(analysis, null, null, null,
+                List.of(paperTable("Paper A", List.of(List.of("compound 34", "ellipticine derivative")))));
+
+        assertTrue(report.contains("Systematic Review Report"));
+        assertTrue(report.contains("Paper A"));
+        assertTrue(report.contains("Context Assessment for 100k Papers"));
+        assertTrue(report.contains("hierarchical map-reduce"));
+    }
+
+    private ReviewPaperEvidenceTable paperTable(String title, List<List<String>> rows) {
+        return new ReviewPaperEvidenceTable(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                title,
+                "Summarize anti-oomycete compounds.",
+                title + " reports anti-oomycete activity.",
+                List.of("\u5316\u5408\u7269\u540d\u79f0", "\u7ed3\u6784\u7c7b\u578b", "\u6765\u6e90",
+                        "\u6291\u83cc\u6d53\u5ea6", "\u4f5c\u7528\u75c5\u539f\u83cc", "\u8bd5\u9a8c\u65b9\u6cd5",
+                        "\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236",
+                        "\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e",
+                        "\u6765\u6e90\u6587\u732e", "\u4e13\u5229\u4fe1\u606f"),
+                rows,
+                List.of("chunk-1"),
+                1,
+                0.9,
+                List.of("not mentioned fields remain uncertain"),
+                Instant.now(),
+                "antimicrobial_compound",
+                "25 uM concentration summary",
+                List.of(),
+                List.of()
+        );
     }
 }

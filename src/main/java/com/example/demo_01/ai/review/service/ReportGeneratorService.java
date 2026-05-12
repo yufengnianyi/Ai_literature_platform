@@ -30,6 +30,19 @@ import java.util.stream.Collectors;
 public class ReportGeneratorService {
 
     private static final Pattern CHINESE = Pattern.compile("[\\u4e00-\\u9fff]");
+    private static final int PAPER_TABLE_CONTEXT_MAX_CHARS = 60000;
+    private static final List<String> ANTIMICROBIAL_COMPOUND_HEADERS = List.of(
+            "\u5316\u5408\u7269\u540d\u79f0",
+            "\u7ed3\u6784\u7c7b\u578b",
+            "\u6765\u6e90",
+            "\u6291\u83cc\u6d53\u5ea6",
+            "\u4f5c\u7528\u75c5\u539f\u83cc",
+            "\u8bd5\u9a8c\u65b9\u6cd5",
+            "\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236",
+            "\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e",
+            "\u6765\u6e90\u6587\u732e",
+            "\u4e13\u5229\u4fe1\u606f"
+    );
 
     @Resource(name = "reviewReportChatModel")
     private ChatModel reviewReportChatModel;
@@ -195,6 +208,45 @@ public class ReportGeneratorService {
                                       List<ReviewPaperEvidenceTable> tables,
                                       String userGuidance,
                                       boolean zh) {
+        String llmReport = paperCentricReportWithModel(question, tables, userGuidance, zh);
+        if (llmReport != null && !llmReport.isBlank()) {
+            return llmReport;
+        }
+        return deterministicPaperCentricReport(question, tables, userGuidance, zh);
+    }
+
+    private String paperCentricReportWithModel(String question,
+                                               List<ReviewPaperEvidenceTable> tables,
+                                               String userGuidance,
+                                               boolean zh) {
+        if (reviewReportChatModel == null) {
+            return null;
+        }
+        try {
+            String context = buildPaperTableReportContext(question, tables, userGuidance, zh);
+            ChatResponse response = reviewReportChatModel.chat(
+                    SystemMessage.from("""
+                            You are writing a scientific review report from already synthesized per-paper evidence tables.
+                            Use the supplied merged table as the strongest context. Do not invent compounds, concentrations, mechanisms, safety data, patents, or papers.
+                            If a field is not mentioned in the table context, explicitly treat it as not mentioned.
+                            Include a concise assessment that direct single-prompt synthesis over 100,000 papers would exceed context limits and should use retrieval filtering plus hierarchical map-reduce summaries.
+                            Return Markdown only.
+                            """),
+                    UserMessage.from(context)
+            );
+            AiMessage aiMessage = response == null ? null : response.aiMessage();
+            String report = aiMessage == null ? null : aiMessage.text();
+            return report == null || report.isBlank() ? null : report.trim();
+        } catch (Exception e) {
+            log.warn("Failed to generate paper-centric report with LLM, falling back to deterministic report: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private String deterministicPaperCentricReport(String question,
+                                                   List<ReviewPaperEvidenceTable> tables,
+                                                   String userGuidance,
+                                                   boolean zh) {
         StringBuilder report = new StringBuilder();
         report.append("# ").append(zh ? "\u6587\u732e\u7efc\u8ff0\u62a5\u544a" : "Systematic Review Report").append("\n\n");
         report.append("## ").append(zh ? "1. \u7814\u7a76\u4e3b\u9898\u6982\u8ff0" : "1. Research Topic Overview").append("\n\n");
@@ -220,7 +272,127 @@ public class ReportGeneratorService {
         report.append(zh
                 ? "\u4e0b\u8f7d\u7684 xlsx \u6587\u4ef6\u5c06\u6bcf\u7bc7\u6587\u732e\u7684\u5173\u952e\u8bc1\u636e\u884c\u6574\u5408\u5230\u7edf\u4e00\u8868\u683c\uff0c\u5e76\u4fdd\u7559\u6587\u732e\u6807\u9898\u3001\u8bc1\u636e\u8868\u6458\u8981\u3001\u7f6e\u4fe1\u5ea6\u3001\u8b66\u544a\u548c\u6e90 chunk ids\u3002"
                 : "The downloadable xlsx integrates key evidence rows across papers and preserves paper title, paper summary, confidence, warnings, and source chunk ids.");
+        report.append("\n\n");
+        report.append("## ").append(zh ? "4. 10w \u6587\u732e\u89c4\u6a21\u7684\u4e0a\u4e0b\u6587\u8bc4\u4f30" : "4. Context Assessment for 100k Papers").append("\n\n");
+        report.append(zh
+                ? "10w \u6587\u732e\u4e0d\u80fd\u76f4\u63a5\u5c06\u5168\u90e8\u8868\u683c\u585e\u5165\u5355\u6b21 LLM prompt\u3002\u6309\u6bcf\u7bc7 1-5 \u884c\u3001\u6bcf\u884c\u6570\u767e\u5b57\u7b26\u4f30\u7b97\uff0c\u603b\u4e0a\u4e0b\u6587\u4f1a\u8fbe\u5230\u5343\u4e07\u5230\u4e0a\u4ebf\u5b57\u7b26\u91cf\u7ea7\uff0c\u9700\u8981\u5148\u68c0\u7d22/\u805a\u7c7b\u7b5b\u9009\uff0c\u518d\u6309 batch \u505a\u6587\u732e\u6216\u4e3b\u9898\u6458\u8981\uff0c\u6700\u540e\u505a\u5206\u5c42 map-reduce \u7efc\u5408\u3002"
+                : "A 100k-paper corpus cannot be placed directly into one LLM prompt. At 1-5 rows per paper and hundreds of characters per row, the context would reach tens of millions to hundreds of millions of characters. It requires retrieval or clustering first, batch-level paper/topic summaries, and then hierarchical map-reduce synthesis.");
         return report.toString().trim();
+    }
+
+    private String buildPaperTableReportContext(String question,
+                                                List<ReviewPaperEvidenceTable> tables,
+                                                String userGuidance,
+                                                boolean zh) {
+        StringBuilder context = new StringBuilder();
+        context.append(zh ? "# \u62a5\u544a\u4efb\u52a1\n" : "# Report Task\n");
+        context.append(zh ? "\u7528\u6237\u95ee\u9898: " : "User question: ")
+                .append(safeDefault(question, "-")).append("\n");
+        context.append(zh ? "\u7eb3\u5165\u6587\u732e\u6570: " : "Included papers: ")
+                .append(tables == null ? 0 : tables.size()).append("\n");
+        if (userGuidance != null && !userGuidance.isBlank()) {
+            context.append(zh ? "\u8865\u5145\u8981\u6c42: " : "User guidance: ")
+                    .append(userGuidance).append("\n");
+        }
+        context.append("\n");
+        context.append(zh ? "# \u591a\u6587\u732e\u5408\u5e76\u603b\u7ed3\u8868\uff08\u9010\u6587\u732e\u4fdd\u7559\uff09\n" : "# Merged Summary Table (Per-Paper Rows Preserved)\n");
+        appendMergedPaperTableMarkdown(context, tables, PAPER_TABLE_CONTEXT_MAX_CHARS);
+        context.append("\n\n");
+        context.append(zh ? "# \u5355\u7bc7\u6587\u732e\u6458\u8981\u4e0e\u6d53\u5ea6\u4e13\u9879\u7ed3\u8bba\n" : "# Per-Paper Summaries and Concentration Findings\n");
+        appendPerPaperBriefs(context, tables, PAPER_TABLE_CONTEXT_MAX_CHARS);
+        context.append("\n\n");
+        context.append(zh ? "# \u8f93\u51fa\u8981\u6c42\n" : "# Output Requirements\n");
+        context.append(zh
+                ? """
+                请基于上面的合并表进行二次思考并输出中文 Markdown 报告。必须覆盖：
+                1. 总体结论；
+                2. 主要抑菌化合物与抑菌浓度模式；
+                3. 作用病原菌和试验方法分布；
+                4. 可能作用靶标/机制与细胞毒性/安全性证据；
+                5. 证据缺口、未提及字段和使用注意事项；
+                6. 10w 文献规模下为什么不能直接把全部表格放进单次上下文，以及应使用检索筛选 + 分层 map-reduce 的方案。
+                """
+                : """
+                Write an English Markdown report from the merged table. Cover:
+                1. Overall conclusion;
+                2. Main antimicrobial compounds and concentration patterns;
+                3. Target pathogen and assay method distribution;
+                4. Mechanism/target and cytotoxicity/safety evidence;
+                5. Evidence gaps, not-mentioned fields, and cautions;
+                6. Why 100k papers cannot be directly placed into one prompt and should use retrieval filtering plus hierarchical map-reduce.
+                """);
+        return context.toString();
+    }
+
+    private void appendMergedPaperTableMarkdown(StringBuilder out,
+                                                List<ReviewPaperEvidenceTable> tables,
+                                                int maxChars) {
+        List<String> headers = new ArrayList<>();
+        headers.add("\u6587\u732e");
+        headers.addAll(ANTIMICROBIAL_COMPOUND_HEADERS);
+        out.append("| ").append(headers.stream().map(this::cell).collect(Collectors.joining(" | "))).append(" |\n");
+        out.append("|").append(headers.stream().map(header -> "---").collect(Collectors.joining("|"))).append("|\n");
+        int omittedRows = 0;
+        for (ReviewPaperEvidenceTable table : tables == null ? List.<ReviewPaperEvidenceTable>of() : tables) {
+            String title = safeDefault(table.documentTitle(),
+                    table.documentId() == null ? "unknown" : table.documentId().toString());
+            List<List<String>> rows = table.rows() == null || table.rows().isEmpty()
+                    ? List.of(List.of())
+                    : table.rows();
+            for (List<String> sourceRow : rows) {
+                List<String> values = new ArrayList<>();
+                values.add(title);
+                for (int column = 0; column < ANTIMICROBIAL_COMPOUND_HEADERS.size(); column++) {
+                    String value = sourceRow != null && column < sourceRow.size() ? sourceRow.get(column) : null;
+                    values.add(safeDefault(value, "\u672a\u63d0\u53ca"));
+                }
+                String line = "| " + values.stream().map(this::cell).collect(Collectors.joining(" | ")) + " |\n";
+                if (out.length() + line.length() > maxChars) {
+                    omittedRows++;
+                    continue;
+                }
+                out.append(line);
+            }
+        }
+        if (omittedRows > 0) {
+            out.append("\n").append("Omitted merged-table rows due to report context budget: ").append(omittedRows).append(".\n");
+        }
+    }
+
+    private void appendPerPaperBriefs(StringBuilder out,
+                                      List<ReviewPaperEvidenceTable> tables,
+                                      int maxChars) {
+        int omittedPapers = 0;
+        for (ReviewPaperEvidenceTable table : tables == null ? List.<ReviewPaperEvidenceTable>of() : tables) {
+            String title = safeDefault(table.documentTitle(),
+                    table.documentId() == null ? "unknown" : table.documentId().toString());
+            String warnings = table.warnings() == null || table.warnings().isEmpty()
+                    ? "\u672a\u63d0\u53ca"
+                    : String.join("; ", table.warnings());
+            String brief = """
+                    ## %s
+                    Paper summary: %s
+                    Concentration summary: %s
+                    Confidence: %.3f
+                    Warnings: %s
+
+                    """.formatted(
+                    title,
+                    shortText(safeDefault(table.paperSummary(), "\u672a\u63d0\u53ca"), 1200),
+                    shortText(safeDefault(table.concentrationSummary(),
+                            safeDefault(table.concentrationDocument(), "\u672a\u63d0\u53ca")), 1200),
+                    table.confidence(),
+                    shortText(warnings, 800)
+            );
+            if (out.length() + brief.length() > maxChars) {
+                omittedPapers++;
+                continue;
+            }
+            out.append(brief);
+        }
+        if (omittedPapers > 0) {
+            out.append("Omitted per-paper briefs due to report context budget: ").append(omittedPapers).append(".\n");
+        }
     }
 
     private String paperEvidenceTableSynthesis(List<ReviewPaperEvidenceTable> tables, boolean zh) {

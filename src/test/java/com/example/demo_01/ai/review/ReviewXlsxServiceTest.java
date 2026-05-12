@@ -221,6 +221,77 @@ class ReviewXlsxServiceTest {
     }
 
     @Test
+    void paperEvidenceSummaryShouldMergeMultiplePaperRowsStructurally() throws Exception {
+        ReviewXlsxService service = new ReviewXlsxService();
+        ReviewTaskRecord task = task();
+        List<String> headers = List.of(
+                "\u5316\u5408\u7269\u540d\u79f0", "\u7ed3\u6784\u7c7b\u578b", "\u6765\u6e90",
+                "\u6291\u83cc\u6d53\u5ea6", "\u4f5c\u7528\u75c5\u539f\u83cc", "\u8bd5\u9a8c\u65b9\u6cd5",
+                "\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236", "\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e",
+                "\u6765\u6e90\u6587\u732e", "\u4e13\u5229\u4fe1\u606f");
+        ReviewPaperEvidenceTable first = new ReviewPaperEvidenceTable(
+                task.taskId(),
+                UUID.randomUUID(),
+                "Paper A",
+                "question",
+                "summary A",
+                headers,
+                List.of(
+                        List.of("compound A", "phenylpropanoid", "plant", "25 uM", "Phytophthora infestans",
+                                "mycelial growth assay", "\u672a\u63d0\u53ca", "\u672a\u63d0\u53ca", "Paper A", "\u672a\u63d0\u53ca"),
+                        List.of("compound B", "alkaloid", "synthetic", "1 mM", "Phytophthora infestans",
+                                "zoospore assay", "zoospore formation", "\u672a\u63d0\u53ca", "Paper A", "\u672a\u63d0\u53ca")),
+                List.of("chunk-a"),
+                1,
+                0.9,
+                List.of(),
+                Instant.now()
+        );
+        ReviewPaperEvidenceTable second = new ReviewPaperEvidenceTable(
+                task.taskId(),
+                UUID.randomUUID(),
+                "Paper B",
+                "question",
+                "summary B",
+                headers,
+                List.of(List.of("compound C", "terpenoid", "plant")),
+                List.of("chunk-b"),
+                1,
+                0.8,
+                List.of(),
+                Instant.now()
+        );
+
+        List<ReviewSummaryTable> previewTables = service.buildPaperEvidenceSummaryTables(task, List.of(first, second));
+        ReviewSummaryTable merged = previewTables.get(0);
+        assertEquals("Paper Evidence Summary", merged.title());
+        assertEquals(List.of("\u6587\u732e", "\u5316\u5408\u7269\u540d\u79f0", "\u7ed3\u6784\u7c7b\u578b", "\u6765\u6e90",
+                "\u6291\u83cc\u6d53\u5ea6", "\u4f5c\u7528\u75c5\u539f\u83cc", "\u8bd5\u9a8c\u65b9\u6cd5",
+                "\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236", "\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e",
+                "\u6765\u6e90\u6587\u732e", "\u4e13\u5229\u4fe1\u606f"), merged.headers());
+        assertEquals(3, merged.rows().size());
+        assertEquals("Paper A", merged.rows().get(0).get(0));
+        assertEquals("compound A", merged.rows().get(0).get(1));
+        assertEquals("25 uM", merged.rows().get(0).get(4));
+        assertEquals("Paper B", merged.rows().get(2).get(0));
+        assertEquals("compound C", merged.rows().get(2).get(1));
+        assertEquals("\u672a\u63d0\u53ca", merged.rows().get(2).get(4));
+        assertEquals("\u672a\u63d0\u53ca", merged.rows().get(2).get(10));
+
+        byte[] bytes = service.generatePaperEvidenceXlsx(task, List.of(first, second));
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            var sheet = workbook.getSheetAt(0);
+            assertEquals("Paper Evidence Summary", sheet.getSheetName());
+            assertEquals("\u6587\u732e", sheet.getRow(0).getCell(0).getStringCellValue());
+            assertEquals("\u5316\u5408\u7269\u540d\u79f0", sheet.getRow(0).getCell(1).getStringCellValue());
+            assertEquals("compound C", sheet.getRow(3).getCell(1).getStringCellValue());
+            assertEquals("\u672a\u63d0\u53ca", sheet.getRow(3).getCell(4).getStringCellValue());
+            assertNull(workbook.getSheet("Concentration Details"));
+            assertNotNull(workbook.getSheet("\u6291\u83cc\u6d53\u5ea6\u4e13\u95e8\u603b\u7ed3"));
+        }
+    }
+
+    @Test
     void generateXlsxShouldNotCopyOneActivityPayloadAcrossMultipleCompounds() throws Exception {
         ReviewXlsxService service = new ReviewXlsxService();
         ReviewTaskRecord task = task();

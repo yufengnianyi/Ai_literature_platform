@@ -39,6 +39,18 @@ public class ReviewXlsxService {
 
     private static final String CONCENTRATION_SUMMARY_SHEET = "\u6291\u83cc\u6d53\u5ea6\u4e13\u95e8\u603b\u7ed3";
     private static final String NOT_MENTIONED = "\u672a\u63d0\u53ca";
+    private static final List<String> ANTIMICROBIAL_COMPOUND_HEADERS = List.of(
+            "\u5316\u5408\u7269\u540d\u79f0",
+            "\u7ed3\u6784\u7c7b\u578b",
+            "\u6765\u6e90",
+            "\u6291\u83cc\u6d53\u5ea6",
+            "\u4f5c\u7528\u75c5\u539f\u83cc",
+            "\u8bd5\u9a8c\u65b9\u6cd5",
+            "\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236",
+            "\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e",
+            "\u6765\u6e90\u6587\u732e",
+            "\u4e13\u5229\u4fe1\u606f"
+    );
     private static final List<String> DEFAULT_CONCENTRATION_HEADERS = List.of(
             "\u5316\u5408\u7269/\u6807\u7b7e",
             "\u6291\u83cc\u6d53\u5ea6",
@@ -172,36 +184,27 @@ public class ReviewXlsxService {
                                                     CellStyle headerStyle,
                                                     List<ReviewPaperEvidenceTable> paperTables) {
         Sheet sheet = workbook.createSheet("Paper Evidence Summary");
-        String[] headers = {
-                "Paper",
-                "Paper Summary",
-                "Review Question",
-                "Evidence Row",
-                "Source Chunks",
-                "Confidence",
-                "Warnings"
-        };
-        createHeaderRow(sheet, headerStyle, headers);
+        List<String> headers = new ArrayList<>();
+        headers.add("\u6587\u732e");
+        headers.addAll(ANTIMICROBIAL_COMPOUND_HEADERS);
+        createHeaderRow(sheet, headerStyle, headers.toArray(String[]::new));
 
         int rowIdx = 1;
         for (ReviewPaperEvidenceTable table : paperTables == null ? List.<ReviewPaperEvidenceTable>of() : paperTables) {
             List<List<String>> rows = table.rows() == null || table.rows().isEmpty()
-                    ? List.of(List.of("No evidence row generated"))
+                    ? List.of(List.of())
                     : table.rows();
-            List<String> tableHeaders = table.headers() == null ? List.of() : table.headers();
             for (List<String> evidenceRow : rows) {
                 Row row = sheet.createRow(rowIdx++);
                 row.createCell(0).setCellValue(safeDefault(table.documentTitle(),
                         table.documentId() == null ? "unknown" : table.documentId().toString()));
-                row.createCell(1).setCellValue(safe(table.paperSummary()));
-                row.createCell(2).setCellValue(safe(table.reviewQuestion()));
-                row.createCell(3).setCellValue(formatEvidenceRow(tableHeaders, evidenceRow));
-                row.createCell(4).setCellValue(table.sourceChunkIds() == null ? "" : String.join("; ", table.sourceChunkIds()));
-                row.createCell(5).setCellValue(table.confidence());
-                row.createCell(6).setCellValue(table.warnings() == null ? "" : String.join("; ", table.warnings()));
+                for (int column = 0; column < ANTIMICROBIAL_COMPOUND_HEADERS.size(); column++) {
+                    String value = evidenceRow != null && column < evidenceRow.size() ? evidenceRow.get(column) : null;
+                    row.createCell(column + 1).setCellValue(safeDefault(value, NOT_MENTIONED));
+                }
             }
         }
-        autoSize(sheet, headers.length);
+        autoSize(sheet, headers.size());
     }
 
     private void createPerPaperEvidenceSheets(Workbook workbook,
@@ -279,22 +282,6 @@ public class ReviewXlsxService {
             return values.get(defaultIndex);
         }
         return NOT_MENTIONED;
-    }
-
-    private String formatEvidenceRow(List<String> headers, List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return "";
-        }
-        List<String> parts = new ArrayList<>();
-        for (int i = 0; i < values.size(); i++) {
-            String value = safe(values.get(i));
-            if (value.isBlank()) {
-                continue;
-            }
-            String header = headers != null && i < headers.size() ? safe(headers.get(i)) : "Column " + (i + 1);
-            parts.add(header + ": " + value);
-        }
-        return String.join("; ", parts);
     }
 
     private String safeSheetName(String value) {
