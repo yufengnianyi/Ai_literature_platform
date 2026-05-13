@@ -55,7 +55,7 @@ public class ReviewController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
         }
         ReviewTaskAcceptedResponse response = reviewPipelineService.submit(
-                user.getUserId(), request.question(), request.templateId());
+                user.getUserId(), request.question(), request.templateId(), request.loadSettings());
         return ResultUtils.success(response);
     }
 
@@ -79,7 +79,7 @@ public class ReviewController {
         if (request.question() == null || request.question().isBlank()) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "question is required");
         }
-        return ResultUtils.success(reviewScopePreviewService.buildInitialPreview(request.question()));
+        return ResultUtils.success(reviewScopePreviewService.buildInitialPreview(request.question(), request.loadSettings()));
     }
 
     @GetMapping("/tasks/{taskId}")

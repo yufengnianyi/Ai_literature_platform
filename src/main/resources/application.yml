@@ -83,6 +83,7 @@ app:
         document-expand-chunk-limit: 12
         seed-dense-max-results: 30
         seed-dense-min-score: 0.3
+        auto-select-min-seed-score: 0.60
         seed-bm25-max-results: 40
         fused-max-results: 50
         max-candidates: 300

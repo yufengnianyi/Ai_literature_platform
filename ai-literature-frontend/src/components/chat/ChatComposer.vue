@@ -1,12 +1,6 @@
 <template>
   <div class="chat-input-area">
     <div class="input-wrapper" :class="{ 'input-wrapper-disabled': disabled }">
-      <a-tooltip title="添加">
-        <a-button class="tool-btn" shape="circle" :disabled="disabled">
-          <template #icon><PlusOutlined /></template>
-        </a-button>
-      </a-tooltip>
-
       <a-textarea
         v-model:value="inputText"
         placeholder="有问题，尽管问"
@@ -47,7 +41,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { message } from 'ant-design-vue';
-import { PlusOutlined, SendOutlined } from '@ant-design/icons-vue';
+import { SendOutlined } from '@ant-design/icons-vue';
 
 const props = defineProps<{
   disabled?: boolean
@@ -126,13 +120,6 @@ const handlePressEnter = (e: KeyboardEvent) => {
 
 .input-wrapper-disabled {
   opacity: 0.72;
-}
-
-.tool-btn {
-  flex: 0 0 auto;
-  border-color: transparent;
-  background: transparent;
-  color: #4b5563;
 }
 
 .custom-textarea {

@@ -84,10 +84,16 @@ public class ReviewPipelineService {
     }
 
     public ReviewTaskAcceptedResponse submit(String userId, String question, String templateId) {
+        return submit(userId, question, templateId, null);
+    }
+
+    public ReviewTaskAcceptedResponse submit(String userId, String question, String templateId,
+                                             ReviewLoadSettings loadSettings) {
         UUID taskId = UUID.randomUUID();
         String resolvedTemplate = normalizeTemplateId(templateId);
         reviewRepository.insertTask(taskId, userId, question, resolvedTemplate);
-        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, question, resolvedTemplate));
+        ReviewLoadSettings resolvedLoadSettings = normalizeLoadSettings(loadSettings);
+        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, question, resolvedTemplate, resolvedLoadSettings));
         return new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.QUEUED);
     }
 
@@ -100,7 +106,7 @@ public class ReviewPipelineService {
         }
 
         reviewRepository.resetTaskForRetry(taskId);
-        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, task.question(), normalizeTemplateId(task.templateId())));
+        reviewTaskExecutor.execute(() -> executeCandidateDiscovery(taskId, task.question(), normalizeTemplateId(task.templateId()), null));
         return new ReviewTaskAcceptedResponse(taskId, ReviewTaskStatus.QUEUED);
     }
 
@@ -175,9 +181,11 @@ public class ReviewPipelineService {
                 .subscribe();
     }
 
-    private void executeCandidateDiscovery(UUID taskId, String question, String templateId) {
+    private void executeCandidateDiscovery(UUID taskId, String question, String templateId,
+                                           ReviewLoadSettings loadSettings) {
         try {
-            runCandidateDiscoveryStages(taskId, question, templateId);
+            runCandidateDiscoveryStages(taskId, question, templateId, loadSettings);
+            reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.AWAITING_USER, ReviewStage.RERANKING);
         } catch (Exception e) {
             failTask(taskId, "PIPELINE_ERROR", e);
         }
@@ -196,27 +204,17 @@ public class ReviewPipelineService {
     }
 
     private PipelineContext runAutoReportStages(UUID taskId, String question, String templateId) {
-        PipelineContext ctx = runCandidateDiscoveryStages(taskId, question, templateId);
-        List<ReviewDocumentCandidate> candidates = reviewRepository.findDocumentCandidates(taskId);
-        UUID firstDocumentId = candidates.stream()
-                .filter(ReviewDocumentCandidate::selected)
-                .map(ReviewDocumentCandidate::documentId)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElseGet(() -> candidates.stream()
-                        .map(ReviewDocumentCandidate::documentId)
-                        .filter(Objects::nonNull)
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException("No document candidate is available.")));
-        reviewRepository.updateDocumentSelection(taskId, List.of(firstDocumentId));
-        runSelectedDocumentAnalysis(taskId, ctx, List.of(firstDocumentId));
+        PipelineContext ctx = runCandidateDiscoveryStages(taskId, question, templateId, null);
+        runSelectedDocumentAnalysis(taskId, ctx, ctx.autoSelectedDocumentIds);
         return ctx;
     }
 
-    private PipelineContext runCandidateDiscoveryStages(UUID taskId, String question, String templateId) {
+    private PipelineContext runCandidateDiscoveryStages(UUID taskId, String question, String templateId,
+                                                       ReviewLoadSettings loadSettings) {
         PipelineContext ctx = new PipelineContext();
         ctx.pipelineStart = Instant.now();
         ctx.templateId = normalizeTemplateId(templateId);
+        ctx.loadSettings = normalizeLoadSettings(loadSettings);
 
         updateStage(taskId, ReviewStage.QUERY_ANALYSIS);
         QueryAnalysis analysis = queryAnalyzerService.analyze(question);
@@ -256,26 +254,39 @@ public class ReviewPipelineService {
         List<SelectedDocument> selectedDocuments = rankDocuments(seedChunks);
         ctx.documentPromotionMs = Duration.between(promotionStart, Instant.now()).toMillis();
         ctx.rerankMs = 0L;
-        SelectedDocument defaultSelected = selectedDocuments.get(0);
-        ctx.selectedSeedChunks = defaultSelected.seedChunks();
-        reviewRepository.updateSelectedDocument(taskId, defaultSelected.documentId(), defaultSelected.documentTitle());
+        double autoSelectThreshold = ctx.loadSettings.minScore();
+        int maxDocuments = ctx.loadSettings.maxDocuments() == null
+                ? Integer.MAX_VALUE
+                : ctx.loadSettings.maxDocuments();
+        List<UUID> autoSelectedDocumentIds = selectedDocuments.stream()
+                .filter(selected -> selected.seedMaxScore() >= autoSelectThreshold)
+                .map(SelectedDocument::documentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(maxDocuments)
+                .toList();
+        ctx.autoSelectedDocumentIds = autoSelectedDocumentIds;
+        ctx.selectedSeedChunks = selectedDocuments.stream()
+                .filter(selected -> autoSelectedDocumentIds.contains(selected.documentId()))
+                .flatMap(selected -> selected.seedChunks().stream())
+                .toList();
         reviewRepository.insertDocumentCandidates(taskId, selectedDocuments.stream()
-                .map(selected -> toDocumentCandidate(taskId, selected, selected.documentId().equals(defaultSelected.documentId())))
+                .map(selected -> toDocumentCandidate(
+                        taskId, selected, autoSelectedDocumentIds.contains(selected.documentId()), autoSelectThreshold))
                 .toList());
-
         updateStage(taskId, ReviewStage.RERANKING);
         for (RetrievedChunk c : seedChunks) {
-            boolean included = defaultSelected.documentId().equals(c.documentId());
+            boolean included = autoSelectedDocumentIds.contains(c.documentId());
             reviewRepository.updateCandidateReranking(taskId, c.chunkId(),
                     c.score(), included ? Relevance.HIGH : Relevance.LOW,
-                    included ? "Default selected as the highest-scoring paper; user may select more papers."
-                            : "Available for user selection in the multi-paper review step.",
+                    included ? autoSelectionReason(autoSelectThreshold)
+                            : "Available as an unselected candidate; seed chunk retrieval score did not exceed the automatic selection threshold.",
                     included);
         }
 
         reviewRepository.updateTaskCounts(taskId, seedChunks.size(), selectedDocuments.size(), 0);
-        reviewRepository.updateTaskStatus(taskId, ReviewTaskStatus.AWAITING_USER, ReviewStage.RERANKING);
-        log.info("Task {}: Prepared {} document candidates for user selection", taskId, selectedDocuments.size());
+        log.info("Task {}: Auto-selected {} of {} document candidates with seedMaxScore >= {}, maxDocuments={}",
+                taskId, autoSelectedDocumentIds.size(), selectedDocuments.size(), autoSelectThreshold, maxDocuments);
     }
 
     private void runSelectedDocumentAnalysis(UUID taskId,
@@ -394,7 +405,9 @@ public class ReviewPipelineService {
         List<SynthesizedCompoundRecord> synthesizedRecords;
         List<ReviewPaperEvidenceTable> paperEvidenceTables;
         String templateId;
+        ReviewLoadSettings loadSettings;
         List<RetrievedChunk> selectedSeedChunks;
+        List<UUID> autoSelectedDocumentIds = List.of();
     }
 
     private PipelineContext contextFromTask(ReviewTaskRecord task) {
@@ -465,7 +478,8 @@ public class ReviewPipelineService {
                 .toList();
     }
 
-    private ReviewDocumentCandidate toDocumentCandidate(UUID taskId, SelectedDocument selected, boolean defaultSelected) {
+    private ReviewDocumentCandidate toDocumentCandidate(UUID taskId, SelectedDocument selected, boolean defaultSelected,
+                                                        double autoSelectThreshold) {
         List<String> seedIds = selected.seedChunks().stream()
                 .map(RetrievedChunk::chunkId)
                 .filter(Objects::nonNull)
@@ -485,8 +499,8 @@ public class ReviewPipelineService {
                 selected.finalScore(),
                 defaultSelected ? Relevance.HIGH : Relevance.MEDIUM,
                 defaultSelected
-                        ? "Default selected as the highest-scoring paper; user may select more papers."
-                        : "Candidate paper available for multi-paper review selection.",
+                        ? autoSelectionReason(autoSelectThreshold)
+                        : "Candidate paper available but below the automatic selection threshold.",
                 null,
                 List.of(),
                 List.of(),
@@ -522,6 +536,29 @@ public class ReviewPipelineService {
             total += value == null ? 0L : value;
         }
         return total;
+    }
+
+    private String autoSelectionReason(double threshold) {
+        return "Selected automatically because seed chunk retrieval score met or exceeded threshold "
+                + formatScore(threshold) + ".";
+    }
+
+    private ReviewLoadSettings normalizeLoadSettings(ReviewLoadSettings loadSettings) {
+        double minScore = reviewProperties.getRetrieval().getAutoSelectMinSeedScore();
+        Integer maxDocuments = null;
+        if (loadSettings != null) {
+            if (loadSettings.minScore() != null) {
+                minScore = Math.max(0.0, Math.min(1.0, loadSettings.minScore()));
+            }
+            if (loadSettings.maxDocuments() != null) {
+                maxDocuments = Math.max(1, Math.min(100, loadSettings.maxDocuments()));
+            }
+        }
+        return new ReviewLoadSettings(minScore, maxDocuments);
+    }
+
+    private String formatScore(double value) {
+        return String.format(java.util.Locale.ROOT, "%.2f", value);
     }
 
     private ReviewCandidate toSeedCandidate(UUID taskId, RetrievedChunk chunk) {

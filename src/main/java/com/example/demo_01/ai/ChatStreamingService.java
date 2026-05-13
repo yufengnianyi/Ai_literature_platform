@@ -1,10 +1,11 @@
 package com.example.demo_01.ai;
 
 import com.example.demo_01.ai.memory.PersistentChatMemoryStore;
+import com.example.demo_01.ai.model.DashScopeChatRequestFactory;
+import com.example.demo_01.ai.model.DashScopeModelProperties;
 import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.langchain4j.community.model.dashscope.QwenChatRequestParameters;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -19,7 +20,6 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 import jakarta.annotation.Resource;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -46,8 +46,11 @@ public class ChatStreamingService {
     @Resource
     private ObjectMapper objectMapper;
 
-    @Value("${langchain4j.community.dashscope.streaming-chat-model.thinking-budget:81920}")
-    private Integer defaultThinkingBudget;
+    @Resource
+    private DashScopeModelProperties modelProperties;
+
+    @Resource
+    private DashScopeChatRequestFactory chatRequestFactory;
 
     public Flux<ServerSentEvent<String>> stream(String memoryKey, String prompt, boolean enableThinking) {
         return Flux.create(sink -> {
@@ -66,16 +69,10 @@ public class ChatStreamingService {
             StringBuilder answer = new StringBuilder();
             StringBuilder thinking = new StringBuilder();
 
-            QwenChatRequestParameters.Builder parameters = QwenChatRequestParameters.builder()
-                    .enableThinking(enableThinking);
-            if (enableThinking && defaultThinkingBudget != null && defaultThinkingBudget > 0) {
-                parameters.thinkingBudget(defaultThinkingBudget);
-            }
-
-            ChatRequest request = ChatRequest.builder()
-                    .messages(requestMessages)
-                    .parameters(parameters.build())
-                    .build();
+            ChatRequest request = chatRequestFactory.request(
+                    enableThinking,
+                    modelProperties.getStreamingChatModel().getThinkingBudget(),
+                    requestMessages);
 
             streamingChatModel.chat(request, new StreamingChatResponseHandler() {
                 @Override

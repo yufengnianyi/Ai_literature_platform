@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 public class ReviewScopePreviewService {
 
     private static final int INITIAL_DOCUMENT_LIMIT = 8;
+    private static final List<Double> SCORE_THRESHOLDS = List.of(
+            0.95, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.50, 0.00);
 
     @Resource
     private QueryAnalyzerService queryAnalyzerService;
@@ -35,8 +37,12 @@ public class ReviewScopePreviewService {
     private DocumentKnowledgeRepository documentKnowledgeRepository;
 
     public ReviewScopePreview buildInitialPreview(String question) {
+        return buildInitialPreview(question, null);
+    }
+
+    public ReviewScopePreview buildInitialPreview(String question, ReviewLoadSettings loadSettings) {
         QueryAnalysis analysis = queryAnalyzerService.analyze(question);
-        List<ReviewDocumentCandidate> documents = findInitialDocuments(analysis);
+        List<ReviewDocumentCandidate> documents = findInitialDocuments(analysis, resolveInitialDocumentLimit(loadSettings));
         return buildPreview(analysis, documents, List.of());
     }
 
@@ -59,18 +65,30 @@ public class ReviewScopePreviewService {
         List<QuestionOption> questions = buildQuestions(analysis);
         List<EntityOption> entities = buildEntities(analysis, questions);
         List<DocumentOption> documentOptions = buildDocuments(documents, candidates, questions, entities);
-        return new ReviewScopePreview(analysis, questions, entities, documentOptions);
+        return new ReviewScopePreview(analysis, questions, entities, documentOptions,
+                buildScoreThresholdCounts(documentOptions));
     }
 
-    private List<ReviewDocumentCandidate> findInitialDocuments(QueryAnalysis analysis) {
+    private List<ReviewScoreThresholdCount> buildScoreThresholdCounts(List<DocumentOption> documents) {
+        List<DocumentOption> safeDocuments = documents == null ? List.of() : documents;
+        return SCORE_THRESHOLDS.stream()
+                .map(threshold -> new ReviewScoreThresholdCount(
+                        threshold,
+                        (int) safeDocuments.stream()
+                                .filter(document -> document.score() != null && document.score() >= threshold)
+                                .count()))
+                .toList();
+    }
+
+    private List<ReviewDocumentCandidate> findInitialDocuments(QueryAnalysis analysis, int documentLimit) {
         List<String> queries = queryExpansionService.expand(analysis);
         Set<UUID> ids = new LinkedHashSet<>();
         for (String query : queries) {
-            if (ids.size() >= INITIAL_DOCUMENT_LIMIT) {
+            if (ids.size() >= documentLimit) {
                 break;
             }
             try {
-                ids.addAll(reviewRepository.searchDocumentsByFts(query, INITIAL_DOCUMENT_LIMIT));
+                ids.addAll(reviewRepository.searchDocumentsByFts(query, documentLimit));
             } catch (Exception ignored) {
                 // Initial preview should be best-effort. Retrieval segment performs full search later.
             }
@@ -80,9 +98,16 @@ public class ReviewScopePreviewService {
         }
         Map<UUID, DocumentSynopsisRecord> synopses = reviewRepository.findDocumentSynopsisByIds(ids);
         return ids.stream()
-                .limit(INITIAL_DOCUMENT_LIMIT)
+                .limit(documentLimit)
                 .map(id -> toDocumentCandidate(id, synopses.get(id)))
                 .toList();
+    }
+
+    private int resolveInitialDocumentLimit(ReviewLoadSettings loadSettings) {
+        if (loadSettings == null || loadSettings.maxDocuments() == null || loadSettings.maxDocuments() < 1) {
+            return INITIAL_DOCUMENT_LIMIT;
+        }
+        return Math.min(100, loadSettings.maxDocuments());
     }
 
     private ReviewDocumentCandidate toDocumentCandidate(UUID documentId, DocumentSynopsisRecord record) {

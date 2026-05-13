@@ -61,10 +61,15 @@ public class ReviewRepository {
     }
 
     public void updateDocumentSelection(UUID taskId, List<UUID> selectedDocumentIds) {
+        updateDocumentSelection(taskId, selectedDocumentIds, "Selected by user for multi-paper review.");
+    }
+
+    public void updateDocumentSelection(UUID taskId, List<UUID> selectedDocumentIds, String screeningReason) {
         List<UUID> safeIds = selectedDocumentIds == null ? List.of() : selectedDocumentIds.stream()
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
+        String reason = firstNonBlank(screeningReason, "Selected by user for multi-paper review.");
         jdbcTemplate.update("""
                 UPDATE review_document_candidate
                 SET selected = FALSE
@@ -85,7 +90,7 @@ public class ReviewRepository {
                     UPDATE review_candidate
                     SET included = TRUE, relevance = COALESCE(relevance, ?), screening_reason = ?
                     WHERE task_id = ? AND document_id = ?
-                    """, Relevance.HIGH.name(), "Selected by user for multi-paper review.", taskId, documentId);
+                    """, Relevance.HIGH.name(), reason, taskId, documentId);
         }
 
         UUID firstDocumentId = safeIds.isEmpty() ? null : safeIds.get(0);

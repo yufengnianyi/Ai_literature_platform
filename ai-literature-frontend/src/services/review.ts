@@ -5,6 +5,12 @@ import { redirectToLogin } from '@/request';
 export interface ReviewTaskSubmitRequest {
   question: string;
   templateId?: 'antimicrobial_compound' | string;
+  loadSettings?: ReviewLoadSettings;
+}
+
+export interface ReviewLoadSettings {
+  minScore?: number;
+  maxDocuments?: number;
 }
 
 export interface ReviewTaskAcceptedResponse {
@@ -73,6 +79,12 @@ export interface ReviewScopePreview {
   questions: QuestionOption[];
   entities: EntityOption[];
   documents: DocumentOption[];
+  scoreThresholdCounts: ReviewScoreThresholdCount[];
+}
+
+export interface ReviewScoreThresholdCount {
+  threshold: number;
+  documentCount: number;
 }
 
 export interface ReviewGenerateRequest {
@@ -217,13 +229,17 @@ export const reviewService = {
     return data as QueryAnalysis;
   },
 
-  async previewScope(question: string): Promise<ReviewScopePreview> {
-    const { data } = await myAxios.post('/review/preview', { question });
+  async previewScope(question: string, loadSettings?: ReviewLoadSettings): Promise<ReviewScopePreview> {
+    const { data } = await myAxios.post('/review/preview', { question, loadSettings });
     return data as ReviewScopePreview;
   },
 
-  async submitTask(question: string, templateId = 'antimicrobial_compound'): Promise<ReviewTaskAcceptedResponse> {
-    const { data } = await myAxios.post('/review/tasks', { question, templateId });
+  async submitTask(
+    question: string,
+    templateId = 'antimicrobial_compound',
+    loadSettings?: ReviewLoadSettings,
+  ): Promise<ReviewTaskAcceptedResponse> {
+    const { data } = await myAxios.post('/review/tasks', { question, templateId, loadSettings });
     return data as ReviewTaskAcceptedResponse;
   },
 

@@ -5,7 +5,7 @@
         <div>
           <div class="eyebrow">Multi-paper review</div>
           <h2>Review 文献解读</h2>
-          <p>先检索命中文献，由你选择多篇文献后逐篇回溯全部 chunks，生成报告、模板表格和 xlsx。</p>
+          <p>先检索并为候选文献赋分，由你按阈值选择文献后逐篇回溯全部 chunks，生成报告、模板表格和 xlsx。</p>
         </div>
         <a-tag color="blue">antimicrobial_compound</a-tag>
       </header>
@@ -27,10 +27,20 @@
             {{ field }}
           </div>
         </div>
+        <div class="review-load-settings">
+          <div class="setting-field">
+            <span>Minimum score</span>
+            <a-input-number v-model:value="minimumScore" :min="0" :max="1" :step="0.05" size="small" />
+          </div>
+          <div class="setting-field">
+            <span>Papers to load</span>
+            <a-input-number v-model:value="maxDocuments" :min="1" :max="100" :step="1" size="small" />
+          </div>
+        </div>
         <div class="action-bar">
           <a-button type="primary" size="large" :disabled="!question.trim()" :loading="isSubmitting" @click="handleDirectSubmit">
             <ThunderboltOutlined />
-            检索文献
+            检索并选择文献
           </a-button>
           <a-button size="large" :disabled="!question.trim()" :loading="isSubmitting" @click="handleAsyncSubmit">
             后台提交
@@ -43,6 +53,7 @@
         :preview="scopePreview"
         :original-question="question"
         :language-code="activeLanguage"
+        :initial-min-score="minimumScore"
         mode="candidate"
         @confirm-candidates="handleConfirmDocuments"
         @cancel="handleBackToInput"
@@ -52,7 +63,7 @@
         <a-spin />
         <div>
           <h3>{{ stageLabel }}</h3>
-          <p>正在按已选择文献逐篇回溯全文 chunks，并生成多篇解读。</p>
+          <p>正在按已确认的文献逐篇回溯全文 chunks，并生成多篇解读。</p>
         </div>
         <a-button danger @click="handleCancel">取消</a-button>
       </div>
@@ -176,6 +187,8 @@ const taskHistory = ref<ReviewTaskRecord[]>([]);
 const loadingHistory = ref(false);
 const isSubmitting = ref(false);
 const scopePreview = ref<ReviewScopePreview | null>(null);
+const minimumScore = ref(0.6);
+const maxDocuments = ref(8);
 let streamHandle: ReviewStreamHandle | null = null;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -214,6 +227,11 @@ const resetResult = () => {
   errorMessage.value = '';
 };
 
+const reviewLoadSettings = () => ({
+  minScore: minimumScore.value,
+  maxDocuments: maxDocuments.value,
+});
+
 const loadSummaryTables = async (taskId: string) => {
   try {
     summaryTables.value = await reviewService.getSummaryTables(taskId);
@@ -239,7 +257,7 @@ const handleDirectSubmit = async () => {
   scopePreview.value = null;
   isSubmitting.value = true;
   try {
-    const result = await reviewService.submitTask(question.value, TEMPLATE_ID);
+    const result = await reviewService.submitTask(question.value, TEMPLATE_ID, reviewLoadSettings());
     currentTaskId.value = result.taskId;
     pollTask(result.taskId);
   } catch (error) {
@@ -255,7 +273,7 @@ const handleAsyncSubmit = async () => {
   isSubmitting.value = true;
   errorMessage.value = '';
   try {
-    const result = await reviewService.submitTask(question.value, TEMPLATE_ID);
+    const result = await reviewService.submitTask(question.value, TEMPLATE_ID, reviewLoadSettings());
     message.success(`已提交任务: ${result.taskId}`);
     currentTaskId.value = result.taskId;
     await loadTaskHistory();
@@ -477,6 +495,30 @@ onMounted(() => {
   background: #f3f4f6;
   color: #374151;
   font-size: 12px;
+}
+
+.review-load-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.setting-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.setting-field :deep(.ant-input-number) {
+  width: 92px;
 }
 
 .action-bar,

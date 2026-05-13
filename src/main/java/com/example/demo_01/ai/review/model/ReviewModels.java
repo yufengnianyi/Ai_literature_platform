@@ -142,7 +142,14 @@ public final class ReviewModels {
             QueryAnalysis analysis,
             List<QuestionOption> questions,
             List<EntityOption> entities,
-            List<DocumentOption> documents
+            List<DocumentOption> documents,
+            List<ReviewScoreThresholdCount> scoreThresholdCounts
+    ) {
+    }
+
+    public record ReviewScoreThresholdCount(
+            double threshold,
+            int documentCount
     ) {
     }
 
@@ -351,13 +358,21 @@ public final class ReviewModels {
     ) {
     }
 
-    public record ReviewTaskSubmitRequest(String question, String templateId, List<UUID> selectedDocumentIds) {
+    public record ReviewLoadSettings(Double minScore, Integer maxDocuments) {
+    }
+
+    public record ReviewTaskSubmitRequest(
+            String question,
+            String templateId,
+            List<UUID> selectedDocumentIds,
+            ReviewLoadSettings loadSettings
+    ) {
         public ReviewTaskSubmitRequest(String question) {
-            this(question, null, List.of());
+            this(question, null, List.of(), null);
         }
 
         public ReviewTaskSubmitRequest(String question, String templateId) {
-            this(question, templateId, List.of());
+            this(question, templateId, List.of(), null);
         }
     }
 

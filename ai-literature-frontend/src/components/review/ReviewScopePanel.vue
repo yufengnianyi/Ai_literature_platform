@@ -71,6 +71,23 @@
           <FileSearchOutlined />
           <span>{{ labels.literature }}</span>
         </div>
+        <div v-if="mode === 'candidate'" class="score-threshold-panel">
+          <div class="threshold-control">
+            <span>{{ labels.minimumScore }}</span>
+            <a-input-number v-model:value="minimumScore" :min="0" :max="1" :step="0.05" size="small" />
+            <a-button size="small" @click="selectThresholdDocuments">{{ labels.selectByScore }}</a-button>
+          </div>
+          <div class="threshold-summary">
+            <a-tag color="blue">{{ labels.matchingPapers }} {{ thresholdDocumentCount }}</a-tag>
+            <a-tag
+              v-for="item in thresholdCounts"
+              :key="item.threshold"
+              class="threshold-tag"
+            >
+              >= {{ item.threshold.toFixed(2) }}: {{ item.documentCount }}
+            </a-tag>
+          </div>
+        </div>
         <div class="document-toolbar">
           <a-select v-model:value="sortBy" size="small" style="width: 150px">
             <a-select-option value="score">{{ labels.score }}</a-select-option>
@@ -178,6 +195,7 @@ const props = defineProps<{
   originalQuestion: string;
   mode: 'analysis' | 'candidate';
   languageCode?: string;
+  initialMinScore?: number;
 }>();
 
 const emit = defineEmits<{
@@ -192,6 +210,7 @@ const selectedDocumentIds = ref(new Set<string>());
 const customQuestions = ref<string[]>([]);
 const customQuestion = ref('');
 const sortBy = ref<'score' | 'relevance' | 'title'>('score');
+const minimumScore = ref(0.6);
 
 const isChinese = computed(() =>
   detectReviewLanguage(props.languageCode ?? props.preview.analysis.languageCode, props.originalQuestion) === 'zh',
@@ -210,6 +229,9 @@ const labels = computed(() => isChinese.value ? {
   relatedEntities: '相关实体',
   literature: '文献与创新点',
   score: '评分',
+  minimumScore: '最低评分',
+  matchingPapers: '达标文献',
+  selectByScore: '选择达标文献',
   relevance: '相关性',
   title: '标题',
   selectVisible: '选择当前可见',
@@ -240,6 +262,9 @@ const labels = computed(() => isChinese.value ? {
   relatedEntities: 'Related Entities',
   literature: 'Literature and Novelty',
   score: 'Score',
+  minimumScore: 'Minimum score',
+  matchingPapers: 'Matching papers',
+  selectByScore: 'Select by score',
   relevance: 'Relevance',
   title: 'Title',
   selectVisible: 'Select visible',
@@ -271,6 +296,7 @@ const resetSelections = () => {
   selectedQuestionIds.value = new Set(props.preview.questions.filter(q => q.selected).map(q => q.id));
   selectedEntityIds.value = new Set(props.preview.entities.filter(e => e.selected).map(e => e.id));
   selectedDocumentIds.value = new Set(props.preview.documents.filter(d => d.selected).map(d => d.id));
+  minimumScore.value = props.initialMinScore ?? 0.6;
   customQuestions.value = [];
   customQuestion.value = '';
 };
@@ -317,6 +343,14 @@ const filteredDocuments = computed(() => {
   });
 });
 
+const thresholdCounts = computed(() => props.preview.scoreThresholdCounts ?? []);
+
+const scoreValue = (score: number | null | undefined) => score ?? -1;
+
+const thresholdDocumentCount = computed(() =>
+  props.preview.documents.filter(document => scoreValue(document.score) >= minimumScore.value).length
+);
+
 const setChecked = (source: Set<string>, id: string, checked: boolean) => {
   const next = new Set(source);
   if (checked) next.add(id);
@@ -335,6 +369,20 @@ const toggleEntity = (id: string, checked: boolean) => {
 const toggleDocument = (id: string, checked: boolean) => {
   selectedDocumentIds.value = setChecked(selectedDocumentIds.value, id, checked);
 };
+
+const selectThresholdDocuments = () => {
+  selectedDocumentIds.value = new Set(
+    props.preview.documents
+      .filter(document => document.documentId && scoreValue(document.score) >= minimumScore.value)
+      .map(document => document.id)
+  );
+};
+
+watch(minimumScore, () => {
+  if (props.mode === 'candidate') {
+    selectThresholdDocuments();
+  }
+});
 
 const addCustomQuestion = () => {
   const value = customQuestion.value.trim();
@@ -557,6 +605,38 @@ const categoryLabel = (category: string) => {
   display: flex;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.score-threshold-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.threshold-control,
+.threshold-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.threshold-control {
+  color: #475569;
+  font-size: 13px;
+}
+
+.threshold-control :deep(.ant-input-number) {
+  width: 92px;
+}
+
+.threshold-tag {
+  margin-inline-end: 0;
 }
 
 .document-list {

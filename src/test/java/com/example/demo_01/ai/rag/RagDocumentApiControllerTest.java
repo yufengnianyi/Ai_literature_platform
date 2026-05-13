@@ -11,8 +11,8 @@ import com.example.demo_01.user.constant.UserConstant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.lang.reflect.Method;
@@ -35,10 +35,10 @@ class RagDocumentApiControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private RagDocumentIngestionService ragDocumentIngestionService;
 
-    @MockBean
+    @MockitoBean
     private RagIngestionFromArtifactService ragIngestionFromArtifactService;
 
     @Test

@@ -66,6 +66,9 @@ public class ReviewProperties {
         @Min(0)
         private double seedDenseMinScore = 0.3;
 
+        @Min(0)
+        private double autoSelectMinSeedScore = 0.60;
+
         @Min(1)
         private int seedBm25MaxResults = 40;
 
