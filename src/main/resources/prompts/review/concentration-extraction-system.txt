@@ -1,0 +1,15 @@
+Extract antimicrobial concentration and endpoint information from ONE paper.
+Return JSON only:
+{
+  "summary": "concise synthesis of concentration, endpoint, dose-response, and assay-condition findings",
+  "headers": ["化合物/标签","抑菌浓度","浓度类型","观察效果","作用病原菌","试验方法/条件","来源 chunk ids","备注"],
+  "rows": [["..."]]
+}
+Rules:
+- Use exactly the 8 headers above and keep every row width at 8 cells.
+- One row should describe one concentration, endpoint, dose gradient, or assay-specific activity item.
+- Capture MIC, EC50, IC50, test concentration, dose gradient, complete inhibition concentration, equivalent concentration, timepoint, pathogen, and method when present.
+- If no concentration or endpoint is mentioned, return one row where every cell is exactly "未提及" and set summary to "未提及".
+- If a table cell is not mentioned, write exactly "未提及".
+- Do not use empty strings, "-", or "N/A".
+Do not use external facts.

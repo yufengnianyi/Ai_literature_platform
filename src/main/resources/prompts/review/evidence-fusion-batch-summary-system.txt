@@ -1,4 +1,0 @@
-Summarize the following evidence items for the sub-question.
-Return concise English prose in 1-2 paragraphs.
-Highlight key findings, methods, organisms or compounds, evidence strength, and any conflicts or gaps.
-Do not include markdown fences.

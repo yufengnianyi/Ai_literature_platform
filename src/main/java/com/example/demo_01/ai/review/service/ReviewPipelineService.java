@@ -3,7 +3,6 @@ package com.example.demo_01.ai.review.service;
 import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.repository.ReviewRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
@@ -17,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -41,40 +39,10 @@ public class ReviewPipelineService {
     private HighRecallRetrievalService highRecallRetrievalService;
 
     @Resource
-    private DocumentPromotionService documentPromotionService;
-
-    @Resource
-    private ReviewRerankerService reviewRerankerService;
-
-    @Resource
-    private DocumentKnowledgeEnrichmentService documentKnowledgeEnrichmentService;
-
-    @Resource
-    private EvidenceExtractionService evidenceExtractionService;
-
-    @Resource
-    private EvidenceFusionService evidenceFusionService;
-
-    @Resource
     private ReportGeneratorService reportGeneratorService;
 
     @Resource
     private PaperEvidenceTableSynthesisService paperEvidenceTableSynthesisService;
-
-    @Resource
-    private QuantitativeAnchorRetriever quantitativeAnchorRetriever;
-
-    @Resource
-    private CompoundEvidenceSynthesizer compoundEvidenceSynthesizer;
-
-    @Resource
-    private CompoundProfileAuditor compoundProfileAuditor;
-
-    @Resource
-    private ObjectMapper objectMapper;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private org.bsc.langgraph4j.CompiledGraph<com.example.demo_01.ai.review.agent.PerPaperAgentState> perPaperGraph;
 
     @Resource(name = "reviewTaskExecutor")
     private TaskExecutor reviewTaskExecutor;
@@ -266,10 +234,6 @@ public class ReviewPipelineService {
                 .limit(maxDocuments)
                 .toList();
         ctx.autoSelectedDocumentIds = autoSelectedDocumentIds;
-        ctx.selectedSeedChunks = selectedDocuments.stream()
-                .filter(selected -> autoSelectedDocumentIds.contains(selected.documentId()))
-                .flatMap(selected -> selected.seedChunks().stream())
-                .toList();
         reviewRepository.insertDocumentCandidates(taskId, selectedDocuments.stream()
                 .map(selected -> toDocumentCandidate(
                         taskId, selected, autoSelectedDocumentIds.contains(selected.documentId()), autoSelectThreshold))
@@ -406,7 +370,6 @@ public class ReviewPipelineService {
         List<ReviewPaperEvidenceTable> paperEvidenceTables;
         String templateId;
         ReviewLoadSettings loadSettings;
-        List<RetrievedChunk> selectedSeedChunks;
         List<UUID> autoSelectedDocumentIds = List.of();
     }
 

@@ -1,7 +1,0 @@
-Main question: %s
-
-Sub-questions:
-%s
-Literature chunks:
-
-%s

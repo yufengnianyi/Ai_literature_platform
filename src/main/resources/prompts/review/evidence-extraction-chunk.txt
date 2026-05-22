@@ -1,3 +1,0 @@
---- Chunk %d [id=%s, doc_id=%s, source=%s] ---
-%s%s
-

@@ -1,4 +1,0 @@
-Sub-question: %s
-
-Evidence items:
-%s

@@ -1,5 +1,7 @@
 package com.example.demo_01.ai.review.service;
 
+import com.example.demo_01.ai.prompt.PromptCatalog;
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -55,66 +57,6 @@ public class PaperEvidenceTableSynthesisService {
             "Source chunks"
     );
 
-    private static final String SYSTEM_PROMPT = """
-            You are a rigorous scientific literature reviewer.
-            Analyze ONE paper against the user's review question using ALL supplied chunks from that paper.
-            Your job is to reduce interpretation drift: do not overgeneralize beyond the paper.
-            Return JSON only:
-            {
-              "paperSummary": "best concise synthesis of this paper for the review question",
-              "headers": ["Review question","Paper finding","Evidence / data","Method / context","Interpretation boundary","Source chunks"],
-              "rows": [["..."]],
-              "confidence": 0.0,
-              "warnings": ["missing method details"]
-            }
-            Rules:
-            - Every row must be grounded in source chunk ids.
-            - Prefer explicit quantitative values, methods, species, targets, and limitations.
-            - If the paper does not answer part of the review question, write that limitation directly.
-            - Preserve local compound labels and unresolved identities instead of guessing names.
-            - Do not cite facts that are not present in the chunks.
-            """;
-
-    private static final String ANTIMICROBIAL_SYSTEM_PROMPT = """
-            You are a rigorous scientific literature reviewer.
-            Analyze ONE paper against the antimicrobial-compound template.
-            Return JSON only:
-            {
-              "paperSummary": "concise paper-level synthesis for the user's question",
-              "headers": ["\u5316\u5408\u7269\u540d\u79f0","\u7ed3\u6784\u7c7b\u578b","\u6765\u6e90","\u6291\u83cc\u6d53\u5ea6","\u4f5c\u7528\u75c5\u539f\u83cc","\u8bd5\u9a8c\u65b9\u6cd5","\u53ef\u80fd\u7684\u4f5c\u7528\u9776\u6807/\u673a\u5236","\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u6570\u636e","\u6765\u6e90\u6587\u732e","\u4e13\u5229\u4fe1\u606f"],
-              "rows": [["..."]],
-              "confidence": 0.0,
-              "warnings": ["..."]
-            }
-            Rules:
-            - Use exactly the 10 headers above and keep every row width at 10 cells.
-            - One row should describe one compound or one local compound label from this paper.
-            - If a field is not mentioned in this paper, write exactly "\u672a\u63d0\u53ca".
-            - Do not use empty strings, "-", "N/A", or external facts.
-            - The "\u6291\u83cc\u6d53\u5ea6" cell must use the supplied structured concentration summary as strong context.
-            - Preserve multiple concentrations, endpoints, dose gradients, and assay conditions in the concentration cell when they exist.
-            - Other cells should continue to synthesize directly from all paper chunks.
-            - Include source literature from this paper title/citation only; patent information is "\u672a\u63d0\u53ca" unless explicit patent text appears.
-            """;
-
-    private static final String CONCENTRATION_PROMPT = """
-            Extract antimicrobial concentration and endpoint information from ONE paper.
-            Return JSON only:
-            {
-              "summary": "concise synthesis of concentration, endpoint, dose-response, and assay-condition findings",
-              "headers": ["\u5316\u5408\u7269/\u6807\u7b7e","\u6291\u83cc\u6d53\u5ea6","\u6d53\u5ea6\u7c7b\u578b","\u89c2\u5bdf\u6548\u679c","\u4f5c\u7528\u75c5\u539f\u83cc","\u8bd5\u9a8c\u65b9\u6cd5/\u6761\u4ef6","\u6765\u6e90 chunk ids","\u5907\u6ce8"],
-              "rows": [["..."]]
-            }
-            Rules:
-            - Use exactly the 8 headers above and keep every row width at 8 cells.
-            - One row should describe one concentration, endpoint, dose gradient, or assay-specific activity item.
-            - Capture MIC, EC50, IC50, test concentration, dose gradient, complete inhibition concentration, equivalent concentration, timepoint, pathogen, and method when present.
-            - If no concentration or endpoint is mentioned, return one row where every cell is exactly "\u672a\u63d0\u53ca" and set summary to "\u672a\u63d0\u53ca".
-            - If a table cell is not mentioned, write exactly "\u672a\u63d0\u53ca".
-            - Do not use empty strings, "-", or "N/A".
-            Do not use external facts.
-            """;
-
     @Resource
     private ReviewReasoningChatClient reasoningChatClient;
 
@@ -157,7 +99,7 @@ public class PaperEvidenceTableSynthesisService {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(null));
-        int maxIterations = Math.max(1, reviewProperties.getAgent().getMaxPaperTableIterations());
+        int maxIterations = Math.max(1, reviewProperties.getReport().getMaxPaperTableIterations());
         ReviewPaperEvidenceTable best = null;
         String previous = "";
         String resolvedTemplate = firstNonBlank(templateId, ANTIMICROBIAL_TEMPLATE_ID);
@@ -244,7 +186,9 @@ public class PaperEvidenceTableSynthesisService {
         );
 
         ChatResponse response = reasoningChatClient.chatCore(
-                SystemMessage.from(isAntimicrobialTemplate(templateId) ? ANTIMICROBIAL_SYSTEM_PROMPT : SYSTEM_PROMPT),
+                SystemMessage.from(PromptResources.load(isAntimicrobialTemplate(templateId)
+                        ? PromptCatalog.REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_ANTIMICROBIAL_SYSTEM
+                        : PromptCatalog.REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_SYSTEM)),
                 UserMessage.from(userMessage));
         AiMessage ai = response.aiMessage();
         String raw = ai == null ? null : ai.text();
@@ -400,7 +344,7 @@ public class PaperEvidenceTableSynthesisService {
                 documentId, renderChunks(chunks));
         try {
             ChatResponse response = reasoningChatClient.chatCore(
-                    SystemMessage.from(CONCENTRATION_PROMPT),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_CONCENTRATION_EXTRACTION_SYSTEM)),
                     UserMessage.from(userMessage));
             AiMessage ai = response.aiMessage();
             String raw = ai == null ? null : ai.text();

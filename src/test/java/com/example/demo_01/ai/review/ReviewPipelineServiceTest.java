@@ -4,10 +4,10 @@ import com.example.demo_01.ai.review.config.ReviewProperties;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import com.example.demo_01.ai.review.repository.ReviewRepository;
 import com.example.demo_01.ai.review.service.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
@@ -147,8 +147,10 @@ class ReviewPipelineServiceTest {
         ReviewTaskRecord task = task(taskId, "user-1", question, analysis);
         RetrievedChunk seedChunk = new RetrievedChunk(
                 "chunk-1", documentId, "Paper A", "seed text", "Section 1", 0.91, "BM25");
-        RetrievedChunk fullChunk = new RetrievedChunk(
-                "chunk-2", documentId, "Paper A", "full text", "Section 2", 0.0, "DOC_ALL");
+        RetrievedChunk firstFullChunk = new RetrievedChunk(
+                "chunk-000", documentId, "Paper A", "intro text", "Section 1", 0.0, "DOC_ALL");
+        RetrievedChunk secondFullChunk = new RetrievedChunk(
+                "chunk-001", documentId, "Paper A", "methods text", "Section 2", 0.0, "DOC_ALL");
         ReviewDocumentCandidate documentCandidate = new ReviewDocumentCandidate(
                 null, taskId, documentId, "Paper A", 1, List.of("chunk-1"),
                 0.91, 0.91, 0.0, 0.0, 0.93, 0.93, Relevance.HIGH,
@@ -159,11 +161,11 @@ class ReviewPipelineServiceTest {
                 "Section 1", "SEED", null, null, null, 0.91, Relevance.HIGH,
                 "selected", true, "seed text"
         );
-        List<RetrievedChunk> allPaperChunks = List.of(seedChunk, fullChunk);
+        List<RetrievedChunk> allPaperChunks = List.of(firstFullChunk, secondFullChunk);
         ReviewPaperEvidenceTable paperTable = new ReviewPaperEvidenceTable(
                 UUID.randomUUID(), documentId, "Paper A", question, "paper summary",
                 List.of("Finding", "Evidence"), List.of(List.of("finding", "evidence")),
-                List.of("chunk-1", "chunk-2"), 2, 0.8, List.of(), null);
+                List.of("chunk-000", "chunk-001"), 2, 0.8, List.of(), null);
 
         when(reviewRepository.findTask(taskId)).thenReturn(Optional.of(task));
         when(reviewRepository.findDocumentCandidates(taskId)).thenReturn(List.of(documentCandidate));
@@ -181,6 +183,13 @@ class ReviewPipelineServiceTest {
         assertEquals(ReviewTaskStatus.QUEUED, accepted.status());
         verify(reviewRepository).updateDocumentSelection(taskId, List.of(documentId));
         verify(reviewRepository).findAllChunksByDocumentId(documentId);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<RetrievedChunk>> allChunksCaptor = ArgumentCaptor.forClass(List.class);
+        verify(paperEvidenceTableSynthesisService).synthesizeBestTable(
+                eq(taskId), eq(analysis), eq(question), eq(documentId), eq("Paper A"),
+                allChunksCaptor.capture(), eq(List.of()), isNull(), eq("antimicrobial_compound"), eq(List.of(seedChunk)));
+        assertEquals(List.of("chunk-000", "chunk-001"),
+                allChunksCaptor.getValue().stream().map(RetrievedChunk::chunkId).toList());
         verify(reviewRepository).upsertPaperEvidenceTable(paperTable);
         verify(reportGeneratorService).generateReport(eq(analysis), isNull(), isNull(), isNull(), eq(List.of(paperTable)));
         verify(reviewRepository).completeTask(taskId);
@@ -192,11 +201,6 @@ class ReviewPipelineServiceTest {
         QueryAnalyzerService queryAnalyzerService = mock(QueryAnalyzerService.class);
         QueryExpansionService queryExpansionService = mock(QueryExpansionService.class);
         HighRecallRetrievalService highRecallRetrievalService = mock(HighRecallRetrievalService.class);
-        DocumentPromotionService documentPromotionService = mock(DocumentPromotionService.class);
-        ReviewRerankerService reviewRerankerService = mock(ReviewRerankerService.class);
-        DocumentKnowledgeEnrichmentService documentKnowledgeEnrichmentService = mock(DocumentKnowledgeEnrichmentService.class);
-        EvidenceExtractionService evidenceExtractionService = mock(EvidenceExtractionService.class);
-        EvidenceFusionService evidenceFusionService = mock(EvidenceFusionService.class);
         ReportGeneratorService reportGeneratorService = mock(ReportGeneratorService.class);
         PaperEvidenceTableSynthesisService paperEvidenceTableSynthesisService = mock(PaperEvidenceTableSynthesisService.class);
 
@@ -204,15 +208,9 @@ class ReviewPipelineServiceTest {
         ReflectionTestUtils.setField(service, "queryAnalyzerService", queryAnalyzerService);
         ReflectionTestUtils.setField(service, "queryExpansionService", queryExpansionService);
         ReflectionTestUtils.setField(service, "highRecallRetrievalService", highRecallRetrievalService);
-        ReflectionTestUtils.setField(service, "documentPromotionService", documentPromotionService);
-        ReflectionTestUtils.setField(service, "reviewRerankerService", reviewRerankerService);
-        ReflectionTestUtils.setField(service, "documentKnowledgeEnrichmentService", documentKnowledgeEnrichmentService);
-        ReflectionTestUtils.setField(service, "evidenceExtractionService", evidenceExtractionService);
-        ReflectionTestUtils.setField(service, "evidenceFusionService", evidenceFusionService);
         ReflectionTestUtils.setField(service, "reportGeneratorService", reportGeneratorService);
         ReflectionTestUtils.setField(service, "paperEvidenceTableSynthesisService", paperEvidenceTableSynthesisService);
         ReflectionTestUtils.setField(service, "reviewProperties", new ReviewProperties());
-        ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(service, "reviewTaskExecutor", (TaskExecutor) Runnable::run);
         when(reviewRepository.findTask(any(UUID.class))).thenReturn(Optional.empty());
         return service;

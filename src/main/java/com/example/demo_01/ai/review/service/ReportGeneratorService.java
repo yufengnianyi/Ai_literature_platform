@@ -1,6 +1,8 @@
 package com.example.demo_01.ai.review.service;
 
 import com.example.demo_01.ai.markdown.MarkdownChunkBuffer;
+import com.example.demo_01.ai.prompt.PromptCatalog;
+import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.service.CompoundEvidenceAggregator.CompoundActivityRow;
 import com.example.demo_01.ai.review.model.ReviewModels.*;
 import dev.langchain4j.data.message.AiMessage;
@@ -31,6 +33,8 @@ public class ReportGeneratorService {
 
     private static final Pattern CHINESE = Pattern.compile("[\\u4e00-\\u9fff]");
     private static final int PAPER_TABLE_CONTEXT_MAX_CHARS = 60000;
+    private static final int PAPER_TABLE_BATCH_CONTEXT_MAX_CHARS = 45000;
+    private static final int BATCH_SUMMARY_MAX_CHARS = 3000;
     private static final List<String> ANTIMICROBIAL_COMPOUND_HEADERS = List.of(
             "\u5316\u5408\u7269\u540d\u79f0",
             "\u7ed3\u6784\u7c7b\u578b",
@@ -170,10 +174,6 @@ public class ReportGeneratorService {
         report.append(heading(section++, zh, "研究主题的概述", "Research Topic Overview"));
         report.append(topicOverview(question, safeEvidence, userGuidance, zh)).append("\n\n");
 
-        if (!safePaperTables.isEmpty()) {
-            report.append(heading(section++, zh, "逐篇文献证据表聚合", "Per-Paper Evidence Table Synthesis"));
-            report.append(paperEvidenceTableSynthesis(safePaperTables, zh)).append("\n\n");
-        }
 
         List<CompoundActivityRow> compoundRows;
         if (synthesizedRecords != null && !synthesizedRecords.isEmpty()) {
@@ -223,24 +223,167 @@ public class ReportGeneratorService {
             return null;
         }
         try {
-            String context = buildPaperTableReportContext(question, tables, userGuidance, zh);
-            ChatResponse response = reviewReportChatModel.chat(
-                    SystemMessage.from("""
-                            You are writing a scientific review report from already synthesized per-paper evidence tables.
-                            Use the supplied merged table as the strongest context. Do not invent compounds, concentrations, mechanisms, safety data, patents, or papers.
-                            If a field is not mentioned in the table context, explicitly treat it as not mentioned.
-                            Include a concise assessment that direct single-prompt synthesis over 100,000 papers would exceed context limits and should use retrieval filtering plus hierarchical map-reduce summaries.
-                            Return Markdown only.
-                            """),
-                    UserMessage.from(context)
-            );
-            AiMessage aiMessage = response == null ? null : response.aiMessage();
-            String report = aiMessage == null ? null : aiMessage.text();
-            return report == null || report.isBlank() ? null : report.trim();
+            String context = buildFullPaperTableReportContext(question, tables, userGuidance, zh);
+            if (context.length() > PAPER_TABLE_CONTEXT_MAX_CHARS) {
+                return paperCentricReportWithBatches(question, tables, userGuidance, zh);
+            }
+            return callReportModel(PromptCatalog.REVIEW_REPORT_PAPER_CENTRIC_SYSTEM, context);
         } catch (Exception e) {
             log.warn("Failed to generate paper-centric report with LLM, falling back to deterministic report: {}", e.getMessage());
             return null;
         }
+    }
+
+    private String paperCentricReportWithBatches(String question,
+                                                 List<ReviewPaperEvidenceTable> tables,
+                                                 String userGuidance,
+                                                 boolean zh) {
+        List<PaperReportBatch> batches = splitPaperTablesForReport(tables, zh);
+        if (batches.isEmpty()) {
+            return null;
+        }
+        List<BatchSummary> summaries = new ArrayList<>();
+        for (PaperReportBatch batch : batches) {
+            String summary = summarizePaperTableBatch(question, batch, userGuidance, zh);
+            if (summary == null || summary.isBlank()) {
+                return null;
+            }
+            summaries.add(new BatchSummary(batch.index(), batch.paperCount(), summary.trim()));
+        }
+        String finalContext = buildBatchFinalReportContext(question, tables, userGuidance, summaries, zh,
+                BATCH_SUMMARY_MAX_CHARS);
+        if (finalContext.length() > PAPER_TABLE_CONTEXT_MAX_CHARS && !summaries.isEmpty()) {
+            int summaryBudget = Math.max(800,
+                    (PAPER_TABLE_CONTEXT_MAX_CHARS - 8000) / Math.max(1, summaries.size()));
+            finalContext = buildBatchFinalReportContext(question, tables, userGuidance, summaries, zh, summaryBudget);
+        }
+        return callReportModel(PromptCatalog.REVIEW_REPORT_PAPER_CENTRIC_SYSTEM, finalContext);
+    }
+
+    private String summarizePaperTableBatch(String question,
+                                            PaperReportBatch batch,
+                                            String userGuidance,
+                                            boolean zh) {
+        StringBuilder context = new StringBuilder();
+        context.append(zh ? "# 批次摘要任务\n" : "# Batch Summary Task\n");
+        context.append(zh ? "用户问题: " : "User question: ")
+                .append(safeDefault(question, "-")).append("\n");
+        context.append(zh ? "批次: " : "Batch: ")
+                .append(batch.index()).append(" / ")
+                .append(zh ? "文献范围 " : "paper range ")
+                .append(batch.startIndex()).append("-").append(batch.endIndex())
+                .append(", ").append(batch.paperCount())
+                .append(zh ? " 篇文献\n" : " papers\n");
+        if (userGuidance != null && !userGuidance.isBlank()) {
+            context.append(zh ? "补充要求: " : "User guidance: ")
+                    .append(userGuidance).append("\n");
+        }
+        context.append("\n").append(batch.context()).append("\n\n");
+        context.append(zh ? "# 输出要求\n" : "# Output Requirements\n");
+        context.append(zh
+                ? "请输出紧凑中文 Markdown 批次摘要，保留批次内规律、关键差异、证据缺口和代表性 citation token。不要说明上下文切分或技术实现。\n"
+                : "Write a compact English Markdown batch summary preserving batch patterns, notable differences, evidence gaps, and representative citation tokens. Do not mention context splitting or implementation details.\n");
+        return callReportModel(PromptCatalog.REVIEW_REPORT_PAPER_BATCH_SUMMARY_SYSTEM, context.toString());
+    }
+
+    private String callReportModel(String systemPromptResource, String context) {
+        ChatResponse response = reviewReportChatModel.chat(
+                SystemMessage.from(PromptResources.load(systemPromptResource)),
+                UserMessage.from(context)
+        );
+        AiMessage aiMessage = response == null ? null : response.aiMessage();
+        String report = aiMessage == null ? null : aiMessage.text();
+        return report == null || report.isBlank() ? null : report.trim();
+    }
+
+    private List<PaperReportBatch> splitPaperTablesForReport(List<ReviewPaperEvidenceTable> tables,
+                                                             boolean zh) {
+        List<ReviewPaperEvidenceTable> safeTables = tables == null ? List.of() : tables.stream()
+                .filter(Objects::nonNull)
+                .toList();
+        List<PaperReportBatch> batches = new ArrayList<>();
+        List<ReviewPaperEvidenceTable> current = new ArrayList<>();
+        int currentStart = 1;
+        int batchIndex = 1;
+        for (int i = 0; i < safeTables.size(); i++) {
+            ReviewPaperEvidenceTable table = safeTables.get(i);
+            List<ReviewPaperEvidenceTable> candidate = new ArrayList<>(current);
+            candidate.add(table);
+            String candidateContext = buildPaperTableEvidenceContext(candidate, zh, Integer.MAX_VALUE);
+            if (!current.isEmpty() && candidateContext.length() > PAPER_TABLE_BATCH_CONTEXT_MAX_CHARS) {
+                String currentContext = buildPaperTableEvidenceContext(current, zh, Integer.MAX_VALUE);
+                batches.add(new PaperReportBatch(batchIndex++, currentStart, i, List.copyOf(current), currentContext));
+                current = new ArrayList<>();
+                currentStart = i + 1;
+            }
+            current.add(table);
+        }
+        if (!current.isEmpty()) {
+            String context = buildPaperTableEvidenceContext(current, zh, Integer.MAX_VALUE);
+            batches.add(new PaperReportBatch(batchIndex, currentStart, safeTables.size(), List.copyOf(current), context));
+        }
+        return batches;
+    }
+
+    private String buildBatchFinalReportContext(String question,
+                                                List<ReviewPaperEvidenceTable> tables,
+                                                String userGuidance,
+                                                List<BatchSummary> summaries,
+                                                boolean zh,
+                                                int summaryMaxChars) {
+        StringBuilder context = new StringBuilder();
+        context.append(zh ? "# 报告任务\n" : "# Report Task\n");
+        context.append(zh ? "用户问题: " : "User question: ")
+                .append(safeDefault(question, "-")).append("\n");
+        context.append(zh ? "纳入文献数: " : "Included papers: ")
+                .append(tables == null ? 0 : tables.size()).append("\n");
+        context.append(zh ? "中间摘要数: " : "Intermediate summaries: ")
+                .append(summaries == null ? 0 : summaries.size()).append("\n");
+        if (userGuidance != null && !userGuidance.isBlank()) {
+            context.append(zh ? "补充要求: " : "User guidance: ")
+                    .append(userGuidance).append("\n");
+        }
+        context.append("\n");
+        context.append(zh ? "# 批次摘要（覆盖全部已选文献）\n" : "# Batch Summaries (All Selected Papers Covered)\n");
+        for (BatchSummary summary : summaries == null ? List.<BatchSummary>of() : summaries) {
+            context.append("\n## ")
+                    .append(zh ? "摘要 " : "Summary ")
+                    .append(summary.index())
+                    .append(" (")
+                    .append(summary.paperCount())
+                    .append(zh ? " 篇文献" : " papers")
+                    .append(")\n");
+            context.append(shortText(summary.text(), summaryMaxChars)).append("\n");
+        }
+        context.append("\n");
+        context.append(zh ? "# 输出要求\n" : "# Output Requirements\n");
+        context.append(zh
+                ? """
+                请基于上面的所有批次摘要输出详细的中文 Markdown 综述报告。不要说明分批、上下文限制或技术实现。
+                报告必须综合所有摘要，覆盖总体结论、主要规律、化合物类别、来源、抑菌浓度/活性模式、病原菌、试验方法、机制/靶标、细胞毒性/安全性、专利信息、跨文献共性/差异、证据缺口和参考依据。
+                每个关键结论、证据表行或承载证据的段落末尾必须使用已有引用格式: {source=<文献标题>; chunk=<chunk_id>; quote=<证据摘要>}。
+                引用值只能来自上面批次摘要中的 citation token。不得编造未出现的论文、化合物、浓度、机制、安全性或专利信息。
+                """
+                : """
+                Write a detailed English Markdown review report from all batch summaries above. Do not mention batching, context limits, or implementation details.
+                Synthesize every summary and cover overall conclusions, main patterns, compound classes, sources, antimicrobial concentration/activity patterns, pathogens, assays, mechanism/target, cytotoxicity/safety, patent evidence, cross-paper commonalities/differences, evidence gaps, and reference basis.
+                Every key conclusion, evidence table row, or evidence-bearing paragraph must end with this citation token format: {source=<paper title>; chunk=<chunk_id>; quote=<short evidence summary>}.
+                Use citation values only from the batch summaries. Do not invent papers, compounds, concentrations, mechanisms, safety data, or patent information.
+                """);
+        return context.toString();
+    }
+
+    private record PaperReportBatch(int index,
+                                    int startIndex,
+                                    int endIndex,
+                                    List<ReviewPaperEvidenceTable> tables,
+                                    String context) {
+        int paperCount() {
+            return tables == null ? 0 : tables.size();
+        }
+    }
+
+    private record BatchSummary(int index, int paperCount, String text) {
     }
 
     private String deterministicPaperCentricReport(String question,
@@ -253,14 +396,14 @@ public class ReportGeneratorService {
         if (zh) {
             report.append("\u672c\u62a5\u544a\u56f4\u7ed5: ").append(safeDefault(question, "-")).append("\u3002");
             report.append("\u7cfb\u7edf\u5df2\u6839\u636e\u9501\u5b9a\u7684\u76f8\u5173\u7247\u6bb5\u56de\u6eaf\u5230 ")
-                    .append(tables.size()).append(" \u7bc7\u6587\u732e\uff0c\u5e76\u5bf9\u6bcf\u7bc7\u6587\u732e\u7684\u5168\u90e8\u53ef\u7528 chunks \u8fdb\u884c\u8bc1\u636e\u8868\u7efc\u5408\u3002");
+                    .append(tables.size()).append(" \u7bc7\u6587\u732e\uff0c\u5e76\u5bf9\u6bcf\u7bc7\u6587\u732e\u7684\u5168\u90e8\u53ef\u7528 chunks \u8fdb\u884c\u8bc1\u636e\u8868\u7efc\u5408\u3002\u4e0b\u5217\u5173\u952e\u7ed3\u8bba\u4ee5\u9010\u7bc7 source token \u8ffd\u6eaf\u5230\u539f\u59cb\u6587\u732e\u7247\u6bb5\u3002");
             if (userGuidance != null && !userGuidance.isBlank()) {
                 report.append("\u8865\u5145\u8981\u6c42: ").append(userGuidance).append("\u3002");
             }
         } else {
             report.append("This report addresses: ").append(safeDefault(question, "-")).append(". ");
             report.append("The system traced locked relevant chunks back to ")
-                    .append(tables.size()).append(" papers and analyzed all available chunks for each paper. ");
+                    .append(tables.size()).append(" papers and analyzed all available chunks for each paper. Key claims below are traceable through source tokens. ");
             if (userGuidance != null && !userGuidance.isBlank()) {
                 report.append("User guidance: ").append(userGuidance).append(". ");
             }
@@ -268,15 +411,16 @@ public class ReportGeneratorService {
         report.append("\n\n");
         report.append("## ").append(zh ? "2. \u9010\u7bc7\u6587\u732e\u8bc1\u636e\u603b\u7ed3" : "2. Per-Paper Evidence Summaries").append("\n\n");
         report.append(paperEvidenceTableSynthesis(tables, zh)).append("\n\n");
-        report.append("## ").append(zh ? "3. \u8868\u683c\u4e0b\u8f7d\u8bf4\u660e" : "3. Table Export").append("\n\n");
+        report.append("## ").append(zh ? "3. \u8de8\u6587\u732e\u89c4\u5f8b\u603b\u7ed3" : "3. Cross-Paper Pattern Synthesis").append("\n\n");
+        report.append(crossPaperPatternSynthesis(tables, zh)).append("\n\n");
+        report.append("## ").append(zh ? "4. \u8bc1\u636e\u7f3a\u53e3\u548c\u4f7f\u7528\u6ce8\u610f\u4e8b\u9879" : "4. Evidence Gaps and Usage Cautions").append("\n\n");
+        report.append(paperCentricEvidenceGaps(tables, zh)).append("\n\n");
+        report.append("## ").append(zh ? "5. \u8868\u683c\u4e0b\u8f7d\u4e0e\u53c2\u8003\u4f9d\u636e" : "5. Table Export and References").append("\n\n");
         report.append(zh
-                ? "\u4e0b\u8f7d\u7684 xlsx \u6587\u4ef6\u5c06\u6bcf\u7bc7\u6587\u732e\u7684\u5173\u952e\u8bc1\u636e\u884c\u6574\u5408\u5230\u7edf\u4e00\u8868\u683c\uff0c\u5e76\u4fdd\u7559\u6587\u732e\u6807\u9898\u3001\u8bc1\u636e\u8868\u6458\u8981\u3001\u7f6e\u4fe1\u5ea6\u3001\u8b66\u544a\u548c\u6e90 chunk ids\u3002"
-                : "The downloadable xlsx integrates key evidence rows across papers and preserves paper title, paper summary, confidence, warnings, and source chunk ids.");
+                ? "\u4e0b\u8f7d\u7684 xlsx \u6587\u4ef6\u5c06\u6bcf\u7bc7\u6587\u732e\u7684\u5173\u952e\u8bc1\u636e\u884c\u6574\u5408\u5230\u7edf\u4e00\u8868\u683c\uff0c\u5e76\u4fdd\u7559\u6587\u732e\u6807\u9898\u3001\u8bc1\u636e\u8868\u6458\u8981\u3001\u7f6e\u4fe1\u5ea6\u3001\u8b66\u544a\u548c\u6e90 chunk ids\u3002\u6b63\u6587\u4e2d\u7684 source token \u662f\u524d\u7aef\u6e32\u67d3\u5f15\u7528\u89d2\u6807\u7684\u4e3b\u8981\u4f9d\u636e\u3002"
+                : "The downloadable xlsx integrates key evidence rows across papers and preserves paper title, paper summary, confidence, warnings, and source chunk ids. Source tokens in the report body are the primary citation markers for front-end rendering.");
         report.append("\n\n");
-        report.append("## ").append(zh ? "4. 10w \u6587\u732e\u89c4\u6a21\u7684\u4e0a\u4e0b\u6587\u8bc4\u4f30" : "4. Context Assessment for 100k Papers").append("\n\n");
-        report.append(zh
-                ? "10w \u6587\u732e\u4e0d\u80fd\u76f4\u63a5\u5c06\u5168\u90e8\u8868\u683c\u585e\u5165\u5355\u6b21 LLM prompt\u3002\u6309\u6bcf\u7bc7 1-5 \u884c\u3001\u6bcf\u884c\u6570\u767e\u5b57\u7b26\u4f30\u7b97\uff0c\u603b\u4e0a\u4e0b\u6587\u4f1a\u8fbe\u5230\u5343\u4e07\u5230\u4e0a\u4ebf\u5b57\u7b26\u91cf\u7ea7\uff0c\u9700\u8981\u5148\u68c0\u7d22/\u805a\u7c7b\u7b5b\u9009\uff0c\u518d\u6309 batch \u505a\u6587\u732e\u6216\u4e3b\u9898\u6458\u8981\uff0c\u6700\u540e\u505a\u5206\u5c42 map-reduce \u7efc\u5408\u3002"
-                : "A 100k-paper corpus cannot be placed directly into one LLM prompt. At 1-5 rows per paper and hundreds of characters per row, the context would reach tens of millions to hundreds of millions of characters. It requires retrieval or clustering first, batch-level paper/topic summaries, and then hierarchical map-reduce synthesis.");
+        report.append(paperTableReferences(tables, zh));
         return report.toString().trim();
     }
 
@@ -284,6 +428,21 @@ public class ReportGeneratorService {
                                                 List<ReviewPaperEvidenceTable> tables,
                                                 String userGuidance,
                                                 boolean zh) {
+        return buildPaperTableReportContext(question, tables, userGuidance, zh, PAPER_TABLE_CONTEXT_MAX_CHARS);
+    }
+
+    private String buildFullPaperTableReportContext(String question,
+                                                    List<ReviewPaperEvidenceTable> tables,
+                                                    String userGuidance,
+                                                    boolean zh) {
+        return buildPaperTableReportContext(question, tables, userGuidance, zh, Integer.MAX_VALUE);
+    }
+
+    private String buildPaperTableReportContext(String question,
+                                                List<ReviewPaperEvidenceTable> tables,
+                                                String userGuidance,
+                                                boolean zh,
+                                                int maxChars) {
         StringBuilder context = new StringBuilder();
         context.append(zh ? "# \u62a5\u544a\u4efb\u52a1\n" : "# Report Task\n");
         context.append(zh ? "\u7528\u6237\u95ee\u9898: " : "User question: ")
@@ -295,33 +454,62 @@ public class ReportGeneratorService {
                     .append(userGuidance).append("\n");
         }
         context.append("\n");
+        appendPaperTableEvidenceContext(context, tables, zh, maxChars);
+        context.append("\n\n");
+        appendPaperReportOutputRequirements(context, zh);
+        return context.toString();
+    }
+
+    private String buildPaperTableEvidenceContext(List<ReviewPaperEvidenceTable> tables,
+                                                  boolean zh,
+                                                  int maxChars) {
+        StringBuilder context = new StringBuilder();
+        appendPaperTableEvidenceContext(context, tables, zh, maxChars);
+        return context.toString();
+    }
+
+    private void appendPaperTableEvidenceContext(StringBuilder context,
+                                                 List<ReviewPaperEvidenceTable> tables,
+                                                 boolean zh,
+                                                 int maxChars) {
         context.append(zh ? "# \u591a\u6587\u732e\u5408\u5e76\u603b\u7ed3\u8868\uff08\u9010\u6587\u732e\u4fdd\u7559\uff09\n" : "# Merged Summary Table (Per-Paper Rows Preserved)\n");
-        appendMergedPaperTableMarkdown(context, tables, PAPER_TABLE_CONTEXT_MAX_CHARS);
+        appendMergedPaperTableMarkdown(context, tables, maxChars);
         context.append("\n\n");
         context.append(zh ? "# \u5355\u7bc7\u6587\u732e\u6458\u8981\u4e0e\u6d53\u5ea6\u4e13\u9879\u7ed3\u8bba\n" : "# Per-Paper Summaries and Concentration Findings\n");
-        appendPerPaperBriefs(context, tables, PAPER_TABLE_CONTEXT_MAX_CHARS);
-        context.append("\n\n");
+        appendPerPaperBriefs(context, tables, maxChars);
+    }
+
+    private void appendPaperReportOutputRequirements(StringBuilder context, boolean zh) {
         context.append(zh ? "# \u8f93\u51fa\u8981\u6c42\n" : "# Output Requirements\n");
-        context.append(zh
-                ? """
-                请基于上面的合并表进行二次思考并输出中文 Markdown 报告。必须覆盖：
-                1. 总体结论；
-                2. 主要抑菌化合物与抑菌浓度模式；
-                3. 作用病原菌和试验方法分布；
-                4. 可能作用靶标/机制与细胞毒性/安全性证据；
-                5. 证据缺口、未提及字段和使用注意事项；
-                6. 10w 文献规模下为什么不能直接把全部表格放进单次上下文，以及应使用检索筛选 + 分层 map-reduce 的方案。
-                """
-                : """
-                Write an English Markdown report from the merged table. Cover:
-                1. Overall conclusion;
-                2. Main antimicrobial compounds and concentration patterns;
-                3. Target pathogen and assay method distribution;
-                4. Mechanism/target and cytotoxicity/safety evidence;
-                5. Evidence gaps, not-mentioned fields, and cautions;
-                6. Why 100k papers cannot be directly placed into one prompt and should use retrieval filtering plus hierarchical map-reduce.
-                """);
-        return context.toString();
+        if (zh) {
+            context.append("""
+                    \u8bf7\u57fa\u4e8e\u4e0a\u9762\u7684\u5408\u5e76\u8868\u548c\u9010\u7bc7\u6458\u8981\u8f93\u51fa\u8be6\u7ec6\u7684\u4e2d\u6587 Markdown \u7efc\u8ff0\u62a5\u544a\u3002\u4e0d\u8981\u5199\u5927\u89c4\u6a21\u6587\u732e\u5904\u7406\u6216 LLM \u4e0a\u4e0b\u6587\u6280\u672f\u8bf4\u660e\u3002
+                    \u62a5\u544a\u9700\u4ece\u7efc\u8ff0\u5f52\u7eb3\u89d2\u5ea6\u8be6\u7ec6\u5c55\u5f00\uff0c\u81f3\u5c11\u8986\u76d6:
+                    1. \u603b\u4f53\u7ed3\u8bba\u548c\u4e3b\u8981\u89c4\u5f8b;
+                    2. \u5316\u5408\u7269\u7c7b\u522b\u3001\u6765\u6e90\u4e0e\u6291\u83cc\u6d53\u5ea6/\u6d3b\u6027\u6a21\u5f0f;
+                    3. \u4f5c\u7528\u75c5\u539f\u83cc\u3001\u8bd5\u9a8c\u65b9\u6cd5\u548c\u53ef\u6bd4\u6027\u5206\u5e03;
+                    4. \u53ef\u80fd\u673a\u5236\u3001\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u548c\u4e13\u5229\u4fe1\u606f;
+                    5. \u8de8\u6587\u732e\u5171\u6027\u3001\u5dee\u5f02\u548c\u89c4\u5f8b\u603b\u7ed3;
+                    6. \u8bc1\u636e\u7f3a\u53e3\u3001\u672a\u63d0\u53ca\u5b57\u6bb5\u548c\u4f7f\u7528\u6ce8\u610f\u4e8b\u9879;
+                    7. \u53c2\u8003\u4f9d\u636e\u3002
+                    \u6bcf\u4e2a\u5173\u952e\u7ed3\u8bba\u3001\u8bc1\u636e\u8868\u884c\u6216\u627f\u8f7d\u8bc1\u636e\u7684\u6bb5\u843d\u672b\u5c3e\u5fc5\u987b\u4f7f\u7528\u73b0\u6709\u5f15\u7528\u683c\u5f0f: {source=<\u6587\u732e\u6807\u9898>; chunk=<chunk_id>; quote=<\u8bc1\u636e\u6458\u8981>}\u3002
+                    \u5f15\u7528\u503c\u4ec5\u80fd\u6765\u81ea\u4e0a\u4e0b\u6587\u4e2d\u7684 Citation/source chunk/title/summary \u5b57\u6bb5\uff0c\u4fdd\u7559\u62c9\u4e01\u540d\u3001\u5316\u5408\u7269\u540d\u548c\u6d53\u5ea6\u5355\u4f4d\uff0c\u7981\u6b62\u8f93\u51fa\u4e71\u7801\u5f15\u7528\u5b57\u6bb5\u3002
+                    """);
+        } else {
+            context.append("""
+                    Write a detailed English Markdown review report from the merged table and per-paper briefs. Do not include large-corpus processing or LLM context-window technical notes.
+                    Cover:
+                    1. Overall conclusion and main patterns;
+                    2. Compound classes, source types, and antimicrobial concentration/activity patterns;
+                    3. Target pathogen, assay method, and comparability distribution;
+                    4. Mechanism/target, cytotoxicity/safety, and patent evidence;
+                    5. Cross-paper commonalities, differences, and recurring rules;
+                    6. Evidence gaps, not-mentioned fields, and usage cautions;
+                    7. Reference basis.
+                    Every key conclusion, evidence table row, or evidence-bearing paragraph must end with this citation token format: {source=<paper title>; chunk=<chunk_id>; quote=<short evidence summary>}.
+                    Use citation values only from the supplied Citation/source chunk/title/summary fields. Preserve Latin names, compound names, concentrations, and units without garbled characters.
+                    """);
+        }
     }
 
     private void appendMergedPaperTableMarkdown(StringBuilder out,
@@ -330,6 +518,7 @@ public class ReportGeneratorService {
         List<String> headers = new ArrayList<>();
         headers.add("\u6587\u732e");
         headers.addAll(ANTIMICROBIAL_COMPOUND_HEADERS);
+        headers.add("Citation");
         out.append("| ").append(headers.stream().map(this::cell).collect(Collectors.joining(" | "))).append(" |\n");
         out.append("|").append(headers.stream().map(header -> "---").collect(Collectors.joining("|"))).append("|\n");
         int omittedRows = 0;
@@ -346,6 +535,7 @@ public class ReportGeneratorService {
                     String value = sourceRow != null && column < sourceRow.size() ? sourceRow.get(column) : null;
                     values.add(safeDefault(value, "\u672a\u63d0\u53ca"));
                 }
+                values.add(sourceCitation(table));
                 String line = "| " + values.stream().map(this::cell).collect(Collectors.joining(" | ")) + " |\n";
                 if (out.length() + line.length() > maxChars) {
                     omittedRows++;
@@ -375,6 +565,7 @@ public class ReportGeneratorService {
                     Concentration summary: %s
                     Confidence: %.3f
                     Warnings: %s
+                    Citation: %s
 
                     """.formatted(
                     title,
@@ -382,7 +573,8 @@ public class ReportGeneratorService {
                     shortText(safeDefault(table.concentrationSummary(),
                             safeDefault(table.concentrationDocument(), "\u672a\u63d0\u53ca")), 1200),
                     table.confidence(),
-                    shortText(warnings, 800)
+                    shortText(warnings, 800),
+                    sourceCitation(table)
             );
             if (out.length() + brief.length() > maxChars) {
                 omittedPapers++;
@@ -398,8 +590,8 @@ public class ReportGeneratorService {
     private String paperEvidenceTableSynthesis(List<ReviewPaperEvidenceTable> tables, boolean zh) {
         StringBuilder out = new StringBuilder();
         if (zh) {
-            out.append("本节以每篇文献的最佳证据表为主要依据进行聚合，共纳入 ")
-                    .append(tables.size()).append(" 篇文献。");
+            out.append("\u672c\u8282\u4ee5\u6bcf\u7bc7\u6587\u732e\u7684\u6700\u4f73\u8bc1\u636e\u8868\u4e3a\u4e3b\u8981\u4f9d\u636e\u8fdb\u884c\u7efc\u5408\uff0c\u5171\u7eb3\u5165 ")
+                    .append(tables.size()).append(" \u7bc7\u6587\u732e\u3002");
         } else {
             out.append("This section aggregates the best evidence table from each matched paper. It includes ")
                     .append(tables.size()).append(" papers.");
@@ -408,26 +600,115 @@ public class ReportGeneratorService {
         for (ReviewPaperEvidenceTable table : tables) {
             String title = safeDefault(table.documentTitle(),
                     table.documentId() == null ? "unknown" : table.documentId().toString());
+            String citation = sourceCitation(table);
             out.append("### ").append(title).append("\n\n");
-            out.append(safeDefault(table.paperSummary(), "-")).append("\n\n");
+            out.append(safeDefault(table.paperSummary(), "-")).append(" ").append(citation).append("\n\n");
             List<String> headers = table.headers() == null || table.headers().isEmpty()
                     ? List.of("Finding", "Evidence", "Source")
                     : table.headers();
-            out.append("| ").append(headers.stream().map(this::cell).collect(Collectors.joining(" | "))).append(" |\n");
-            out.append("|").append(headers.stream().map(header -> "---").collect(Collectors.joining("|"))).append("|\n");
+            List<String> displayHeaders = new ArrayList<>(headers);
+            displayHeaders.add(zh ? "\u5f15\u7528" : "Citation");
+            out.append("| ").append(displayHeaders.stream().map(this::cell).collect(Collectors.joining(" | "))).append(" |\n");
+            out.append("|").append(displayHeaders.stream().map(header -> "---").collect(Collectors.joining("|"))).append("|\n");
             List<List<String>> rows = table.rows() == null ? List.of() : table.rows();
             for (List<String> row : rows) {
+                List<String> cells = new ArrayList<>(row == null ? List.of() : row);
+                while (cells.size() < headers.size()) {
+                    cells.add("-");
+                }
+                cells.add(citation);
                 out.append("| ")
-                        .append(row.stream().map(this::cell).collect(Collectors.joining(" | ")))
+                        .append(cells.stream().map(this::cell).collect(Collectors.joining(" | ")))
                         .append(" |\n");
             }
             if (table.warnings() != null && !table.warnings().isEmpty()) {
                 out.append("\n")
-                        .append(zh ? "证据表警告: " : "Table warnings: ")
+                        .append(zh ? "\u8bc1\u636e\u8868\u8b66\u544a: " : "Table warnings: ")
                         .append(String.join("; ", table.warnings()))
+                        .append(" ").append(citation)
                         .append("\n");
             }
             out.append("\n");
+        }
+        return out.toString().trim();
+    }
+
+    private String crossPaperPatternSynthesis(List<ReviewPaperEvidenceTable> tables, boolean zh) {
+        Map<String, Long> structures = limitMap(countPaperTableColumn(tables, 1), 5);
+        Map<String, Long> sources = limitMap(countPaperTableColumn(tables, 2), 5);
+        Map<String, Long> pathogens = limitMap(countPaperTableColumn(tables, 4), 5);
+        Map<String, Long> assays = limitMap(countPaperTableColumn(tables, 5), 5);
+        List<String> examples = representativeEvidenceRows(tables, zh, 5);
+        StringBuilder out = new StringBuilder();
+        if (zh) {
+            out.append("\u4ece\u5df2\u9009\u6587\u732e\u770b\uff0c\u8bc1\u636e\u66f4\u9002\u5408\u6309\u201c\u5316\u5408\u7269\u7c7b\u522b-\u6765\u6e90-\u6d53\u5ea6/\u6d3b\u6027-\u75c5\u539f\u83cc-\u65b9\u6cd5\u201d\u8fdb\u884c\u6a2a\u5411\u6bd4\u8f83\uff0c\u800c\u4e0d\u5b9c\u4ec5\u6309\u5355\u7bc7\u7ed3\u8bba\u6392\u5217\u3002")
+                    .append(firstPaperTableCitation(tables)).append("\n\n");
+            out.append("- \u7ed3\u6784\u7c7b\u578b\u5206\u5e03: ").append(formatCounts(structures)).append("\n");
+            out.append("- \u5316\u5408\u7269\u6765\u6e90\u5206\u5e03: ").append(formatCounts(sources)).append("\n");
+            out.append("- \u4f5c\u7528\u75c5\u539f\u83cc\u5206\u5e03: ").append(formatCounts(pathogens)).append("\n");
+            out.append("- \u8bd5\u9a8c\u65b9\u6cd5\u5206\u5e03: ").append(formatCounts(assays)).append("\n\n");
+            out.append("\u5178\u578b\u8bc1\u636e\u884c\u663e\u793a\uff0c\u6d53\u5ea6\u7ed3\u679c\u5fc5\u987b\u4e0e\u5bf9\u5e94\u7684\u75c5\u539f\u83cc\u3001\u65b9\u6cd5\u548c\u5355\u4f4d\u4e00\u8d77\u89e3\u8bfb\uff1b\u4e0d\u540c\u65b9\u6cd5\u6216\u4e0d\u540c\u5355\u4f4d\u4e0b\u7684\u6570\u503c\u4e0d\u5e94\u76f4\u63a5\u6392\u5e8f\u4e3a\u5f3a\u5f31\u3002");
+        } else {
+            out.append("Across the selected papers, the evidence is best compared by compound class, source, concentration/activity, pathogen, and assay method rather than by isolated paper-level claims. ")
+                    .append(firstPaperTableCitation(tables)).append("\n\n");
+            out.append("- Structure type distribution: ").append(formatCounts(structures)).append("\n");
+            out.append("- Compound source distribution: ").append(formatCounts(sources)).append("\n");
+            out.append("- Target pathogen distribution: ").append(formatCounts(pathogens)).append("\n");
+            out.append("- Assay method distribution: ").append(formatCounts(assays)).append("\n\n");
+            out.append("Representative rows show that concentration results must be interpreted together with the pathogen, method, and units; values from different methods or units should not be directly ranked as stronger or weaker activity.");
+        }
+        if (!examples.isEmpty()) {
+            out.append("\n\n");
+            for (String example : examples) {
+                out.append("- ").append(example).append("\n");
+            }
+        }
+        return out.toString().trim();
+    }
+
+    private String paperCentricEvidenceGaps(List<ReviewPaperEvidenceTable> tables, boolean zh) {
+        long missingMechanism = countMissingPaperTableColumn(tables, 6);
+        long missingSafety = countMissingPaperTableColumn(tables, 7);
+        long missingPatent = countMissingPaperTableColumn(tables, 9);
+        long warningCount = tables == null ? 0 : tables.stream()
+                .filter(table -> table.warnings() != null && !table.warnings().isEmpty())
+                .count();
+        StringBuilder out = new StringBuilder();
+        if (zh) {
+            out.append("\u4e3b\u8981\u8bc1\u636e\u7f3a\u53e3\u96c6\u4e2d\u5728\u673a\u5236\u3001\u5b89\u5168\u6027\u548c\u4e13\u5229\u4fe1\u606f\u7684\u4e0d\u5b8c\u6574\u62a5\u9053: ")
+                    .append(firstPaperTableCitation(tables)).append("\n\n");
+            out.append("- \u672a\u63d0\u53ca\u6216\u7f3a\u4e4f\u53ef\u7528\u673a\u5236/\u9776\u6807\u4fe1\u606f\u7684\u8bc1\u636e\u884c: ").append(missingMechanism).append("\n");
+            out.append("- \u672a\u63d0\u53ca\u6216\u7f3a\u4e4f\u7ec6\u80de\u6bd2\u6027/\u5b89\u5168\u6027\u4fe1\u606f\u7684\u8bc1\u636e\u884c: ").append(missingSafety).append("\n");
+            out.append("- \u672a\u63d0\u53ca\u6216\u7f3a\u4e4f\u4e13\u5229\u4fe1\u606f\u7684\u8bc1\u636e\u884c: ").append(missingPatent).append("\n");
+            out.append("- \u542b\u8bc1\u636e\u8868\u8b66\u544a\u7684\u6587\u732e\u6570: ").append(warningCount).append("\n\n");
+            out.append("\u56e0\u6b64\uff0c\u62a5\u544a\u4e2d\u5173\u4e8e\u6d3b\u6027\u6f5c\u529b\u7684\u7ed3\u8bba\u5e94\u4e0e\u5177\u4f53\u6d53\u5ea6\u3001\u5b9e\u9a8c\u4f53\u7cfb\u548c\u539f\u6587\u6458\u8981\u540c\u65f6\u9605\u8bfb\uff0c\u673a\u5236\u6216\u5b89\u5168\u6027\u672a\u88ab\u8bc1\u660e\u65f6\u4e0d\u5e94\u88ab\u8868\u8ff0\u4e3a\u786e\u5b9a\u56e0\u679c\u3002");
+        } else {
+            out.append("The main gaps are concentrated in incomplete mechanism, safety, and patent reporting: ")
+                    .append(firstPaperTableCitation(tables)).append("\n\n");
+            out.append("- Evidence rows without usable mechanism/target information: ").append(missingMechanism).append("\n");
+            out.append("- Evidence rows without usable cytotoxicity/safety information: ").append(missingSafety).append("\n");
+            out.append("- Evidence rows without usable patent information: ").append(missingPatent).append("\n");
+            out.append("- Papers with evidence table warnings: ").append(warningCount).append("\n\n");
+            out.append("Activity claims should therefore be read alongside the exact concentration, assay system, and source summary. Mechanistic or safety conclusions should not be framed as causal when the source table marks them as not mentioned or incomplete.");
+        }
+        return out.toString().trim();
+    }
+
+    private String paperTableReferences(List<ReviewPaperEvidenceTable> tables, boolean zh) {
+        StringBuilder out = new StringBuilder();
+        List<ReviewPaperEvidenceTable> safeTables = tables == null ? List.of() : tables;
+        for (int i = 0; i < safeTables.size(); i++) {
+            ReviewPaperEvidenceTable table = safeTables.get(i);
+            out.append(i + 1)
+                    .append(". ")
+                    .append(safeDefault(table.documentTitle(),
+                            table.documentId() == null ? "unknown" : table.documentId().toString()))
+                    .append(" ")
+                    .append(sourceCitation(table))
+                    .append("\n");
+        }
+        if (out.length() == 0) {
+            return zh ? "\u6682\u65e0\u53ef\u5f15\u7528\u6587\u732e\u3002" : "No citable papers are available.";
         }
         return out.toString().trim();
     }
@@ -967,12 +1248,7 @@ public class ReportGeneratorService {
         }
         try {
             ChatResponse response = reviewReportChatModel.chat(
-                    SystemMessage.from("""
-                            You are localizing a scientific review section for an end-user Chinese report.
-                            Rewrite the canonical English synthesis into fluent Simplified Chinese.
-                            Preserve scientific names, Latin species names, gene symbols, compound names, units, and uncertainty.
-                            Return plain text only.
-                            """),
+                    SystemMessage.from(PromptResources.load(PromptCatalog.REVIEW_REPORT_LOCALIZE_SUMMARY_SYSTEM)),
                     UserMessage.from("""
                             Section question:
                             %s
@@ -1021,6 +1297,130 @@ public class ReportGeneratorService {
 
     private String citation(ExtractedEvidence item) {
         return "{source=" + safeDefault(item.documentTitle(), "unknown") + "; chunk=" + item.chunkId() + "}";
+    }
+
+    private String firstPaperTableCitation(List<ReviewPaperEvidenceTable> tables) {
+        if (tables == null || tables.isEmpty()) {
+            return "";
+        }
+        return sourceCitation(tables.get(0));
+    }
+
+    private String sourceCitation(ReviewPaperEvidenceTable table) {
+        String source = citationField(safeDefault(table == null ? null : table.documentTitle(),
+                table == null || table.documentId() == null ? "unknown" : table.documentId().toString()));
+        String chunk = citationField(primaryChunkId(table));
+        String quote = citationField(shortText(firstNonBlank(
+                table == null ? null : table.concentrationSummary(),
+                table == null ? null : table.concentrationDocument(),
+                table == null ? null : table.paperSummary(),
+                firstRepresentativeRowSummary(table),
+                "Evidence summarized from this paper"), 120));
+        return "{source=" + source + "; chunk=" + chunk + "; quote=" + quote + "}";
+    }
+
+    private String primaryChunkId(ReviewPaperEvidenceTable table) {
+        if (table != null && table.sourceChunkIds() != null) {
+            return table.sourceChunkIds().stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .findFirst()
+                    .orElse("paper-table");
+        }
+        return "paper-table";
+    }
+
+    private String citationField(String value) {
+        return safeDefault(value, "unknown")
+                .replace("{", "")
+                .replace("}", "")
+                .replace(";", ",")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .trim();
+    }
+
+    private String firstRepresentativeRowSummary(ReviewPaperEvidenceTable table) {
+        if (table == null || table.rows() == null) {
+            return "";
+        }
+        for (List<String> row : table.rows()) {
+            String compound = rowValue(row, 0);
+            String concentration = rowValue(row, 3);
+            String pathogen = rowValue(row, 4);
+            String method = rowValue(row, 5);
+            List<String> parts = new ArrayList<>();
+            parts.add(compound);
+            parts.add(concentration);
+            parts.add(pathogen);
+            parts.add(method);
+            String summary = parts.stream()
+                    .filter(this::mentioned)
+                    .collect(Collectors.joining("; "));
+            if (!summary.isBlank()) {
+                return summary;
+            }
+        }
+        return "";
+    }
+
+    private Map<String, Long> countPaperTableColumn(List<ReviewPaperEvidenceTable> tables, int column) {
+        return paperTableRows(tables).stream()
+                .map(row -> rowValue(row, column))
+                .filter(this::mentioned)
+                .collect(Collectors.groupingBy(value -> value, LinkedHashMap::new, Collectors.counting()));
+    }
+
+    private long countMissingPaperTableColumn(List<ReviewPaperEvidenceTable> tables, int column) {
+        return paperTableRows(tables).stream()
+                .map(row -> rowValue(row, column))
+                .filter(value -> !mentioned(value))
+                .count();
+    }
+
+    private List<List<String>> paperTableRows(List<ReviewPaperEvidenceTable> tables) {
+        if (tables == null) {
+            return List.of();
+        }
+        return tables.stream()
+                .filter(Objects::nonNull)
+                .flatMap(table -> table.rows() == null ? List.<List<String>>of().stream() : table.rows().stream())
+                .toList();
+    }
+
+    private List<String> representativeEvidenceRows(List<ReviewPaperEvidenceTable> tables, boolean zh, int limit) {
+        if (tables == null || tables.isEmpty()) {
+            return List.of();
+        }
+        List<String> examples = new ArrayList<>();
+        for (ReviewPaperEvidenceTable table : tables) {
+            List<List<String>> rows = table.rows() == null ? List.of() : table.rows();
+            for (List<String> row : rows) {
+                String compound = safeDefault(rowValue(row, 0), "-");
+                String concentration = safeDefault(rowValue(row, 3), "-");
+                String pathogen = safeDefault(rowValue(row, 4), "-");
+                String assay = safeDefault(rowValue(row, 5), "-");
+                if (!mentioned(compound) && !mentioned(concentration) && !mentioned(pathogen) && !mentioned(assay)) {
+                    continue;
+                }
+                if (zh) {
+                    examples.add("\u4ee3\u8868\u884c: " + compound + " | " + concentration + " | "
+                            + pathogen + " | " + assay + " " + sourceCitation(table));
+                } else {
+                    examples.add("Representative row: " + compound + " | " + concentration + " | "
+                            + pathogen + " | " + assay + " " + sourceCitation(table));
+                }
+                if (examples.size() >= limit) {
+                    return examples;
+                }
+            }
+        }
+        return examples;
+    }
+
+    private String rowValue(List<String> row, int column) {
+        return row != null && column >= 0 && column < row.size() ? row.get(column) : null;
     }
 
     private String shortText(String text, int maxChars) {

@@ -4,6 +4,9 @@ spring:
   profiles:
     default: local
   flyway:
+    ignore-migration-patterns:
+      - "*:future"
+      - "*:missing"
     placeholders:
       embeddingDimension: ${app.ai.rag.embedding-dimension:1024}
       vectorTable: ${app.ai.rag.vector-table:embedding_store}
@@ -78,35 +81,20 @@ app:
       async-threads: 2
       retrieval:
         seed-fts-max-results: 60
-        document-shortlist-top: 24
-        document-expand-top: 8
-        document-expand-chunk-limit: 12
         seed-dense-max-results: 30
         seed-dense-min-score: 0.3
         auto-select-min-seed-score: 0.60
         seed-bm25-max-results: 40
         fused-max-results: 50
         max-candidates: 300
-      rerank:
-        top-k: 80
-        batch-size: 5
-        min-relevance: MEDIUM
-      extraction:
-        batch-size: 3
       report:
         max-tokens: 8000
+        max-paper-table-iterations: 3
       reasoning:
         core-deep-thinking: true
         core-thinking-budget: 8192
         standard-deep-thinking: false
         standard-thinking-budget: 0
-      agent:
-        enabled: true
-        max-iterations-per-compound: 2
-        max-llm-calls-per-paper: 12
-        max-concurrent-papers: 2
-        retriever-k-per-directive: 6
-        max-paper-table-iterations: 3
     kg:
       enabled: true
       async-threads: 2

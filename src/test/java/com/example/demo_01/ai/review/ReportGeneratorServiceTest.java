@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -251,12 +252,19 @@ class ReportGeneratorServiceTest {
 
         assertEquals("LLM synthesized paper report", report);
         ArgumentCaptor<UserMessage> userMessageCaptor = ArgumentCaptor.forClass(UserMessage.class);
-        verify(chatModel).chat(any(SystemMessage.class), userMessageCaptor.capture());
+        ArgumentCaptor<SystemMessage> systemMessageCaptor = ArgumentCaptor.forClass(SystemMessage.class);
+        verify(chatModel).chat(systemMessageCaptor.capture(), userMessageCaptor.capture());
+        String systemPrompt = systemMessageCaptor.getValue().text();
         String prompt = userMessageCaptor.getValue().singleText();
         assertTrue(prompt.contains("Merged Summary Table"));
         assertTrue(prompt.contains("compound 34"));
         assertTrue(prompt.contains("25 uM"));
-        assertTrue(prompt.contains("100k papers"));
+        assertTrue(prompt.contains("{source=<paper title>; chunk=<chunk_id>; quote=<short evidence summary>}"));
+        assertTrue(prompt.contains("{source=Paper A; chunk=chunk-1; quote=25 uM concentration summary}"));
+        assertFalse(systemPrompt.contains("100,000 papers"));
+        assertFalse(systemPrompt.contains("hierarchical map-reduce"));
+        assertFalse(prompt.contains("100k papers"));
+        assertFalse(prompt.contains("map-reduce"));
         assertFalse(prompt.contains("chunk text"));
     }
 
@@ -281,8 +289,118 @@ class ReportGeneratorServiceTest {
 
         assertTrue(report.contains("Systematic Review Report"));
         assertTrue(report.contains("Paper A"));
-        assertTrue(report.contains("Context Assessment for 100k Papers"));
-        assertTrue(report.contains("hierarchical map-reduce"));
+        assertTrue(report.contains("Cross-Paper Pattern Synthesis"));
+        assertTrue(report.contains("Evidence Gaps and Usage Cautions"));
+        assertTrue(report.contains("{source=Paper A; chunk=chunk-1; quote=25 uM concentration summary}"));
+        assertFalse(report.contains("Context Assessment for 100k Papers"));
+        assertFalse(report.contains("hierarchical map-reduce"));
+        assertFalse(report.contains("100k"));
+    }
+
+    @Test
+    void paperCentricChineseFallbackShouldUseCleanHeadingsAndSourceTokens() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        QueryAnalysis analysis = new QueryAnalysis(
+                "\u603b\u7ed3\u6291\u83cc\u5316\u5408\u7269\u3002",
+                List.of(),
+                List.of("\u75ab\u9709\u83cc"),
+                List.of("\u6291\u83cc\u5316\u5408\u7269"),
+                "zh",
+                "\u603b\u7ed3\u6291\u83cc\u5316\u5408\u7269\u3002",
+                List.of()
+        );
+
+        String report = service.generateReport(analysis, null, null, null,
+                List.of(paperTable("Paper A", List.of(List.of(
+                        "compound 34",
+                        "ellipticine derivative",
+                        "synthetic",
+                        "25 uM",
+                        "Phytophthora infestans",
+                        "mycelial growth assay",
+                        "not mentioned",
+                        "not mentioned",
+                        "Paper A",
+                        "not mentioned"
+                )))));
+
+        assertTrue(report.contains("\u6587\u732e\u7efc\u8ff0\u62a5\u544a"));
+        assertTrue(report.contains("\u9010\u7bc7\u6587\u732e\u8bc1\u636e\u603b\u7ed3"));
+        assertTrue(report.contains("\u8de8\u6587\u732e\u89c4\u5f8b\u603b\u7ed3"));
+        assertTrue(report.contains("\u8bc1\u636e\u7f3a\u53e3\u548c\u4f7f\u7528\u6ce8\u610f\u4e8b\u9879"));
+        assertTrue(report.contains("{source=Paper A; chunk=chunk-1; quote=25 uM concentration summary}"));
+        assertFalse(report.contains("\u93c2"));
+        assertFalse(report.contains("\u9435"));
+        assertFalse(report.contains("\u6d93"));
+        assertFalse(report.contains("10w"));
+        assertFalse(report.contains("map-reduce"));
+    }
+
+    @Test
+    void oversizedPaperCentricReportShouldSummarizeBatchesBeforeFinalReport() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        ChatModel chatModel = mock(ChatModel.class);
+        ReflectionTestUtils.setField(service, "reviewReportChatModel", chatModel);
+        when(chatModel.chat(any(SystemMessage.class), any(UserMessage.class)))
+                .thenReturn(
+                        ChatResponse.builder().aiMessage(AiMessage.from("Batch summary A {source=Paper A; chunk=chunk-1; quote=25 uM concentration summary}")).build(),
+                        ChatResponse.builder().aiMessage(AiMessage.from("Batch summary B {source=Paper B; chunk=chunk-1; quote=25 uM concentration summary}")).build(),
+                        ChatResponse.builder().aiMessage(AiMessage.from("Final combined report")).build()
+                );
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Summarize anti-oomycete compounds.",
+                List.of(),
+                List.of("Phytophthora"),
+                List.of("antimicrobial compounds"),
+                "en",
+                "Summarize anti-oomycete compounds.",
+                List.of()
+        );
+        ReviewPaperEvidenceTable paperA = paperTable("Paper A", List.of(largePaperRow("compound A")));
+        ReviewPaperEvidenceTable paperB = paperTable("Paper B", List.of(largePaperRow("compound B")));
+
+        String report = service.generateReport(analysis, null, null, null, List.of(paperA, paperB));
+
+        assertEquals("Final combined report", report);
+        ArgumentCaptor<UserMessage> userMessageCaptor = ArgumentCaptor.forClass(UserMessage.class);
+        ArgumentCaptor<SystemMessage> systemMessageCaptor = ArgumentCaptor.forClass(SystemMessage.class);
+        verify(chatModel, times(3)).chat(systemMessageCaptor.capture(), userMessageCaptor.capture());
+        List<String> prompts = userMessageCaptor.getAllValues().stream()
+                .map(UserMessage::singleText)
+                .toList();
+        assertTrue(systemMessageCaptor.getAllValues().get(0).text().contains("one batch"));
+        assertTrue(prompts.get(0).contains("Paper A"));
+        assertTrue(prompts.get(1).contains("Paper B"));
+        assertTrue(prompts.get(2).contains("Batch Summaries (All Selected Papers Covered)"));
+        assertTrue(prompts.get(2).contains("Batch summary A"));
+        assertTrue(prompts.get(2).contains("Batch summary B"));
+        assertFalse(prompts.get(2).contains("Omitted merged-table rows due to report context budget"));
+    }
+
+    @Test
+    void oversizedPaperCentricReportShouldFallbackWhenBatchSummaryFails() {
+        ReportGeneratorService service = new ReportGeneratorService();
+        ChatModel chatModel = mock(ChatModel.class);
+        ReflectionTestUtils.setField(service, "reviewReportChatModel", chatModel);
+        when(chatModel.chat(any(SystemMessage.class), any(UserMessage.class))).thenThrow(new RuntimeException("offline"));
+        QueryAnalysis analysis = new QueryAnalysis(
+                "Summarize anti-oomycete compounds.",
+                List.of(),
+                List.of("Phytophthora"),
+                List.of("antimicrobial compounds"),
+                "en",
+                "Summarize anti-oomycete compounds.",
+                List.of()
+        );
+        ReviewPaperEvidenceTable paperA = paperTable("Paper A", List.of(largePaperRow("compound A")));
+        ReviewPaperEvidenceTable paperB = paperTable("Paper B", List.of(largePaperRow("compound B")));
+
+        String report = service.generateReport(analysis, null, null, null, List.of(paperA, paperB));
+
+        assertTrue(report.contains("Systematic Review Report"));
+        assertTrue(report.contains("Paper A"));
+        assertTrue(report.contains("Paper B"));
+        assertTrue(report.contains("{source=Paper A; chunk=chunk-1; quote=25 uM concentration summary}"));
     }
 
     private ReviewPaperEvidenceTable paperTable(String title, List<List<String>> rows) {
@@ -307,6 +425,22 @@ class ReportGeneratorServiceTest {
                 "25 uM concentration summary",
                 List.of(),
                 List.of()
+        );
+    }
+
+    private List<String> largePaperRow(String compoundName) {
+        String largeEvidence = "25 uM " + "activity evidence ".repeat(3500);
+        return List.of(
+                compoundName,
+                "ellipticine derivative",
+                "synthetic",
+                largeEvidence,
+                "Phytophthora infestans",
+                "mycelial growth assay",
+                "not mentioned",
+                "not mentioned",
+                compoundName + " source paper",
+                "not mentioned"
         );
     }
 }

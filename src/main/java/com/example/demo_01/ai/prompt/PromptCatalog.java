@@ -17,35 +17,19 @@ public final class PromptCatalog {
     public static final String KG_CHUNK_RELATION_EXTRACTION_SYSTEM = "prompts/kg/chunk-relation-extraction-system.txt";
     public static final String KG_CHUNK_RELATION_EXTRACTION_USER = "prompts/kg/chunk-relation-extraction-user.txt";
 
-    public static final String REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_SYSTEM =
-            "prompts/review/document-knowledge-enrichment-system.txt";
-    public static final String REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_USER =
-            "prompts/review/document-knowledge-enrichment-user.txt";
-    public static final String REVIEW_DOCUMENT_KNOWLEDGE_ENRICHMENT_CHUNK =
-            "prompts/review/document-knowledge-enrichment-chunk.txt";
-    public static final String REVIEW_DOCUMENT_PROMOTION_SYSTEM = "prompts/review/document-promotion-system.txt";
-    public static final String REVIEW_DOCUMENT_PROMOTION_USER = "prompts/review/document-promotion-user.txt";
-    public static final String REVIEW_DOCUMENT_PROMOTION_DOCUMENT = "prompts/review/document-promotion-document.txt";
-    public static final String REVIEW_EVIDENCE_EXTRACTION_SYSTEM = "prompts/review/evidence-extraction-system.txt";
-    public static final String REVIEW_EVIDENCE_EXTRACTION_USER = "prompts/review/evidence-extraction-user.txt";
-    public static final String REVIEW_EVIDENCE_EXTRACTION_CHUNK = "prompts/review/evidence-extraction-chunk.txt";
-    public static final String REVIEW_EVIDENCE_FUSION_SYSTEM = "prompts/review/evidence-fusion-system.txt";
-    public static final String REVIEW_EVIDENCE_FUSION_SINGLE_USER =
-            "prompts/review/evidence-fusion-single-user.txt";
-    public static final String REVIEW_EVIDENCE_FUSION_SUMMARY_USER =
-            "prompts/review/evidence-fusion-summary-user.txt";
-    public static final String REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_SYSTEM =
-            "prompts/review/evidence-fusion-batch-summary-system.txt";
-    public static final String REVIEW_EVIDENCE_FUSION_BATCH_SUMMARY_USER =
-            "prompts/review/evidence-fusion-batch-summary-user.txt";
     public static final String REVIEW_QUERY_ANALYZER_SYSTEM = "prompts/review/query-analyzer-system.txt";
-    public static final String REVIEW_RERANKER_SYSTEM = "prompts/review/reranker-system.txt";
-    public static final String REVIEW_RERANKER_USER = "prompts/review/reranker-user.txt";
-    public static final String REVIEW_RERANKER_CHUNK = "prompts/review/reranker-chunk.txt";
-    public static final String REVIEW_COMPOUND_SYNTHESIS_SYSTEM =
-            "prompts/review/compound-synthesis-system.txt";
-    public static final String REVIEW_COMPOUND_SYNTHESIS_USER =
-            "prompts/review/compound-synthesis-user.txt";
+    public static final String REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_SYSTEM =
+            "prompts/review/paper-evidence-table-synthesis-system.txt";
+    public static final String REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_ANTIMICROBIAL_SYSTEM =
+            "prompts/review/paper-evidence-table-synthesis-antimicrobial-system.txt";
+    public static final String REVIEW_CONCENTRATION_EXTRACTION_SYSTEM =
+            "prompts/review/concentration-extraction-system.txt";
+    public static final String REVIEW_REPORT_PAPER_CENTRIC_SYSTEM =
+            "prompts/review/report-paper-centric-system.txt";
+    public static final String REVIEW_REPORT_PAPER_BATCH_SUMMARY_SYSTEM =
+            "prompts/review/report-paper-batch-summary-system.txt";
+    public static final String REVIEW_REPORT_LOCALIZE_SUMMARY_SYSTEM =
+            "prompts/review/report-localize-summary-system.txt";
 
     private PromptCatalog() {
     }
