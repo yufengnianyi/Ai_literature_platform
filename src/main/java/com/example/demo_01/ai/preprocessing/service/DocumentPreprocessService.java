@@ -40,8 +40,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -76,6 +78,8 @@ public class DocumentPreprocessService {
 
     @Resource
     private FailedLiteratureCsvRecorder failedLiteratureCsvRecorder;
+
+    private final Map<String, Object> dedupeLocks = new ConcurrentHashMap<>();
 
     public PreprocessAcceptedResponse upload(MultipartFile file) {
         validateUpload(file);
@@ -126,75 +130,82 @@ public class DocumentPreprocessService {
 
             currentStage = PreprocessStage.DEDUPLICATION;
             updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
-            DuplicateMatch duplicateMatch = findDuplicate(documentId, upload.pdfSha256(), headerMetadata.doiNormalized());
-            if (duplicateMatch != null) {
-                String canonicalKey = duplicateMatch.document().canonicalKey();
-                documentRepository.markDuplicate(documentId, duplicateMatch.document().documentId(), headerMetadata, upload.pdfSha256(), canonicalKey);
-                documentRepository.updatePreprocessState(documentId, jobId, PreprocessStatus.DUPLICATE_SKIPPED);
-                metrics.totalMs = Duration.between(totalStart, Instant.now()).toMillis();
-                updateJob(jobId, PreprocessStatus.DUPLICATE_SKIPPED, PreprocessStage.COMPLETED, duplicateMatch.reason(), null, null, metrics, Instant.now());
-                return toOutcome(documentId, jobId, PreprocessStatus.DUPLICATE_SKIPPED, duplicateMatch.reason(), canonicalKey, headerMetadata, metrics);
-            }
-
             String canonicalKey = headerMetadata.doiNormalized() != null && !headerMetadata.doiNormalized().isBlank()
                     ? "doi:" + headerMetadata.doiNormalized()
                     : "pdf_sha256:" + upload.pdfSha256();
-            documentRepository.markProcessing(documentId, enrichTitle(headerMetadata, upload.originalFilename()), upload.pdfSha256(), canonicalKey);
+            Object dedupeLock = dedupeLocks.computeIfAbsent(canonicalKey, key -> new Object());
+            synchronized (dedupeLock) {
+                try {
+                    DuplicateMatch duplicateMatch = findDuplicate(documentId, upload.pdfSha256(), headerMetadata.doiNormalized());
+                    if (duplicateMatch != null) {
+                        String duplicateCanonicalKey = duplicateMatch.document().canonicalKey();
+                        documentRepository.markDuplicate(documentId, duplicateMatch.document().documentId(), headerMetadata, upload.pdfSha256(), duplicateCanonicalKey);
+                        documentRepository.updatePreprocessState(documentId, jobId, PreprocessStatus.DUPLICATE_SKIPPED);
+                        metrics.totalMs = Duration.between(totalStart, Instant.now()).toMillis();
+                        updateJob(jobId, PreprocessStatus.DUPLICATE_SKIPPED, PreprocessStage.COMPLETED, duplicateMatch.reason(), null, null, metrics, Instant.now());
+                        return toOutcome(documentId, jobId, PreprocessStatus.DUPLICATE_SKIPPED, duplicateMatch.reason(), duplicateCanonicalKey, headerMetadata, metrics);
+                    }
 
-            currentStage = PreprocessStage.FULLTEXT_EXTRACTION;
-            updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
-            Instant fulltextStart = Instant.now();
-            String fulltextTei = grobidClient.processFulltextDocument(upload.pdfPath());
-            metrics.fulltextMs = Duration.between(fulltextStart, Instant.now()).toMillis();
-            Path fulltextTeiPath = upload.storageDir().resolve("document.tei.xml");
-            writeArtifact(fulltextTeiPath, fulltextTei);
+                    documentRepository.markProcessing(documentId, enrichTitle(headerMetadata, upload.originalFilename()), upload.pdfSha256(), canonicalKey);
 
-            currentStage = PreprocessStage.TEI_PARSING;
-            updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
-            Instant parseStart = Instant.now();
-            ParsedTeiDocument parsed;
-            try {
-                parsed = teiDocumentParser.parse(fulltextTei);
-            } catch (Exception parseError) {
-                failedLiteratureCsvRecorder.append(documentId, "FULLTEXT_PARSE", parseError);
-                failureRecorded = true;
-                throw parseError;
+                    currentStage = PreprocessStage.FULLTEXT_EXTRACTION;
+                    updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
+                    Instant fulltextStart = Instant.now();
+                    String fulltextTei = grobidClient.processFulltextDocument(upload.pdfPath());
+                    metrics.fulltextMs = Duration.between(fulltextStart, Instant.now()).toMillis();
+                    Path fulltextTeiPath = upload.storageDir().resolve("document.tei.xml");
+                    writeArtifact(fulltextTeiPath, fulltextTei);
+
+                    currentStage = PreprocessStage.TEI_PARSING;
+                    updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
+                    Instant parseStart = Instant.now();
+                    ParsedTeiDocument parsed;
+                    try {
+                        parsed = teiDocumentParser.parse(fulltextTei);
+                    } catch (Exception parseError) {
+                        failedLiteratureCsvRecorder.append(documentId, "FULLTEXT_PARSE", parseError);
+                        failureRecorded = true;
+                        throw parseError;
+                    }
+                    metrics.teiParseMs = Duration.between(parseStart, Instant.now()).toMillis();
+                    RagDocumentMetadata finalMetadata = enrichTitle(headerMetadata.merge(parsed.metadata()), upload.originalFilename());
+
+                    currentStage = PreprocessStage.CHUNKING;
+                    updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
+                    List<RagChunk> chunks = teiChunker.chunk(documentId, canonicalKey, new ParsedTeiDocument(finalMetadata, parsed.chunkUnits()), upload.pdfPath(), fulltextTeiPath);
+                    metrics.chunkCount = chunks.size();
+
+                    currentStage = PreprocessStage.ARTIFACT_WRITING;
+                    updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
+                    Instant artifactStart = Instant.now();
+                    Path jsonlPath = upload.storageDir().resolve("document.jsonl");
+                    jsonlArtifactWriter.write(jsonlPath, chunks);
+                    PreprocessArtifact artifact = new PreprocessArtifact(
+                            documentId,
+                            upload.storageDir().toAbsolutePath().toString(),
+                            upload.pdfPath().toAbsolutePath().toString(),
+                            headerTeiPath.toAbsolutePath().toString(),
+                            fulltextTeiPath.toAbsolutePath().toString(),
+                            jsonlPath.toAbsolutePath().toString(),
+                            upload.pdfSha256(),
+                            canonicalKey,
+                            finalMetadata,
+                            chunks.size(),
+                            properties.getChunking().getStrategyVersion(),
+                            properties.getVersion()
+                    );
+                    manifestWriter.write(upload.storageDir().resolve("artifact-manifest.json"), artifact);
+                    metrics.jsonlMs = Duration.between(artifactStart, Instant.now()).toMillis();
+
+                    documentRepository.markCompleted(documentId, finalMetadata, upload.pdfSha256(), canonicalKey);
+                    documentRepository.updatePreprocessState(documentId, jobId, PreprocessStatus.COMPLETED);
+                    metrics.totalMs = Duration.between(totalStart, Instant.now()).toMillis();
+                    updateJob(jobId, PreprocessStatus.COMPLETED, PreprocessStage.COMPLETED, null, null, null, metrics, Instant.now());
+                    return toOutcome(documentId, jobId, PreprocessStatus.COMPLETED, null, canonicalKey, finalMetadata, metrics);
+                } finally {
+                    dedupeLocks.remove(canonicalKey, dedupeLock);
+                }
             }
-            metrics.teiParseMs = Duration.between(parseStart, Instant.now()).toMillis();
-            RagDocumentMetadata finalMetadata = enrichTitle(headerMetadata.merge(parsed.metadata()), upload.originalFilename());
-
-            currentStage = PreprocessStage.CHUNKING;
-            updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
-            List<RagChunk> chunks = teiChunker.chunk(documentId, canonicalKey, new ParsedTeiDocument(finalMetadata, parsed.chunkUnits()), upload.pdfPath(), fulltextTeiPath);
-            metrics.chunkCount = chunks.size();
-
-            currentStage = PreprocessStage.ARTIFACT_WRITING;
-            updateJob(jobId, PreprocessStatus.RUNNING, currentStage, null, null, null, metrics, null);
-            Instant artifactStart = Instant.now();
-            Path jsonlPath = upload.storageDir().resolve("document.jsonl");
-            jsonlArtifactWriter.write(jsonlPath, chunks);
-            PreprocessArtifact artifact = new PreprocessArtifact(
-                    documentId,
-                    upload.storageDir().toAbsolutePath().toString(),
-                    upload.pdfPath().toAbsolutePath().toString(),
-                    headerTeiPath.toAbsolutePath().toString(),
-                    fulltextTeiPath.toAbsolutePath().toString(),
-                    jsonlPath.toAbsolutePath().toString(),
-                    upload.pdfSha256(),
-                    canonicalKey,
-                    finalMetadata,
-                    chunks.size(),
-                    properties.getChunking().getStrategyVersion(),
-                    properties.getVersion()
-            );
-            manifestWriter.write(upload.storageDir().resolve("artifact-manifest.json"), artifact);
-            metrics.jsonlMs = Duration.between(artifactStart, Instant.now()).toMillis();
-
-            documentRepository.markCompleted(documentId, finalMetadata, upload.pdfSha256(), canonicalKey);
-            documentRepository.updatePreprocessState(documentId, jobId, PreprocessStatus.COMPLETED);
-            metrics.totalMs = Duration.between(totalStart, Instant.now()).toMillis();
-            updateJob(jobId, PreprocessStatus.COMPLETED, PreprocessStage.COMPLETED, null, null, null, metrics, Instant.now());
-            return toOutcome(documentId, jobId, PreprocessStatus.COMPLETED, null, canonicalKey, finalMetadata, metrics);
         } catch (DataIntegrityViolationException ex) {
             if (!failureRecorded) {
                 failedLiteratureCsvRecorder.append(documentId, currentStage.name(), ex);

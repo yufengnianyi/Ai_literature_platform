@@ -1,4 +1,7 @@
-FROM node:22-alpine AS build
+ARG WEB_BUILD_IMAGE=node:24-alpine
+ARG WEB_RUNTIME_IMAGE=nginx:1.27-alpine
+
+FROM ${WEB_BUILD_IMAGE} AS build
 
 WORKDIR /app
 
@@ -16,7 +19,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM ${WEB_RUNTIME_IMAGE}
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -44,4 +44,15 @@ public class RagProcessingConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("ragBatchWorkerExecutor")
+    public TaskExecutor ragBatchWorkerExecutor(AiPersistenceProperties properties) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("rag-batch-worker-");
+        executor.setCorePoolSize(properties.getRag().getBatchConcurrency());
+        executor.setMaxPoolSize(properties.getRag().getBatchConcurrency());
+        executor.setQueueCapacity(0);
+        executor.initialize();
+        return executor;
+    }
 }

@@ -27,6 +27,14 @@ export interface RagBatchAcceptedResponse {
   totalFiles: number;
 }
 
+export interface RagDocumentStats {
+  totalDocuments: number;
+  canonicalCompletedDocuments: number;
+  processingDocuments: number;
+  duplicateDocuments: number;
+  failedDocuments: number;
+}
+
 export interface RagDocumentRecord {
   documentId: string;
   duplicateOfDocumentId?: string | null;
@@ -72,9 +80,24 @@ export const paperImportService = {
     return data as RagUploadAcceptedResponse;
   },
 
+  async uploadDocuments(files: File[]): Promise<RagBatchAcceptedResponse> {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('files', file));
+    const { data } = await myAxios.post('/rag/documents/batch', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    });
+    return data as RagBatchAcceptedResponse;
+  },
+
   async getDocument(documentId: string): Promise<RagDocumentRecord> {
     const { data } = await myAxios.get(`/rag/documents/${documentId}`);
     return data as RagDocumentRecord;
+  },
+
+  async getDocumentStats(): Promise<RagDocumentStats> {
+    const { data } = await myAxios.get('/rag/documents/stats');
+    return data as RagDocumentStats;
   },
 
   async ingestFolder(folderPath: string): Promise<RagBatchAcceptedResponse> {

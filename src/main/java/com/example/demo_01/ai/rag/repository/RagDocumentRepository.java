@@ -50,6 +50,23 @@ public class RagDocumentRepository {
         return rows.stream().findFirst();
     }
 
+    public RagDocumentStatsResponse getStats() {
+        return jdbcTemplate.queryForObject("""
+                select count(*) as total_documents,
+                       coalesce(sum(case when status = 'COMPLETED' and duplicate_of_document_id is null then 1 else 0 end), 0) as canonical_completed_documents,
+                       coalesce(sum(case when status in ('QUEUED', 'PROCESSING') then 1 else 0 end), 0) as processing_documents,
+                       coalesce(sum(case when status = 'DUPLICATE_SKIPPED' then 1 else 0 end), 0) as duplicate_documents,
+                       coalesce(sum(case when status = 'FAILED' then 1 else 0 end), 0) as failed_documents
+                from rag_document
+                """, (rs, rowNum) -> new RagDocumentStatsResponse(
+                rs.getLong("total_documents"),
+                rs.getLong("canonical_completed_documents"),
+                rs.getLong("processing_documents"),
+                rs.getLong("duplicate_documents"),
+                rs.getLong("failed_documents")
+        ));
+    }
+
     public Optional<RagDocumentRecord> findCanonicalByDoi(String doiNormalized) {
         if (doiNormalized == null || doiNormalized.isBlank()) {
             return Optional.empty();

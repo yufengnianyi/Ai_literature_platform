@@ -4,6 +4,7 @@ import com.example.demo_01.annotation.AuthCheck;
 import com.example.demo_01.ai.rag.api.RagDocumentController;
 import com.example.demo_01.ai.rag.api.RagJobController;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
+import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
 import com.example.demo_01.ai.rag.service.RagIngestionFromArtifactService;
 import com.example.demo_01.exception.GlobalExceptionHandler;
@@ -39,12 +40,17 @@ class RagDocumentApiControllerTest {
     private RagDocumentIngestionService ragDocumentIngestionService;
 
     @MockitoBean
+    private RagBatchIngestionService ragBatchIngestionService;
+
+    @MockitoBean
     private RagIngestionFromArtifactService ragIngestionFromArtifactService;
 
     @Test
     void documentImportEndpointsShouldRequireAdminRole() throws Exception {
         assertAdminOnly(RagDocumentController.class.getMethod("upload", org.springframework.web.multipart.MultipartFile.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("uploadBatch", org.springframework.web.multipart.MultipartFile[].class));
         assertAdminOnly(RagDocumentController.class.getMethod("ingest", UUID.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("getStats"));
         assertAdminOnly(RagDocumentController.class.getMethod("getDocument", UUID.class));
         assertAdminOnly(RagJobController.class.getMethod("getJob", UUID.class));
     }
@@ -68,6 +74,23 @@ class RagDocumentApiControllerTest {
     }
 
     @Test
+    void uploadBatchShouldReturnAcceptedBatchPayload() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        when(ragBatchIngestionService.uploadFiles(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new RagBatchAcceptedResponse(batchId, RagBatchStatus.QUEUED, 2));
+
+        MockMultipartFile first = new MockMultipartFile("files", "a.pdf", "application/pdf", "pdf-a".getBytes());
+        MockMultipartFile second = new MockMultipartFile("files", "b.pdf", "application/pdf", "pdf-b".getBytes());
+
+        mockMvc.perform(multipart("/rag/documents/batch").file(first).file(second))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.batchId").value(batchId.toString()))
+                .andExpect(jsonPath("$.data.status").value("QUEUED"))
+                .andExpect(jsonPath("$.data.totalFiles").value(2));
+    }
+
+    @Test
     void ingestShouldReturnAcceptedPayload() throws Exception {
         UUID jobId = UUID.randomUUID();
         UUID documentId = UUID.randomUUID();
@@ -80,6 +103,21 @@ class RagDocumentApiControllerTest {
                 .andExpect(jsonPath("$.data.jobId").value(jobId.toString()))
                 .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
                 .andExpect(jsonPath("$.data.stage").value("EMBEDDING"));
+    }
+
+    @Test
+    void getStatsShouldReturnDocumentCounts() throws Exception {
+        when(ragDocumentIngestionService.getStats())
+                .thenReturn(new RagDocumentStatsResponse(12, 8, 2, 1, 1));
+
+        mockMvc.perform(get("/rag/documents/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.totalDocuments").value(12))
+                .andExpect(jsonPath("$.data.canonicalCompletedDocuments").value(8))
+                .andExpect(jsonPath("$.data.processingDocuments").value(2))
+                .andExpect(jsonPath("$.data.duplicateDocuments").value(1))
+                .andExpect(jsonPath("$.data.failedDocuments").value(1));
     }
 
     @Test

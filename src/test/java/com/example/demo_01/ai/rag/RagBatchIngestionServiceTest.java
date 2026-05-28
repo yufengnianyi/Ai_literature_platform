@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.rag;
 
+import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.repository.RagIngestionBatchRepository;
 import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
@@ -35,6 +36,9 @@ class RagBatchIngestionServiceTest {
     private TaskExecutor taskExecutor;
 
     @Mock
+    private TaskExecutor batchWorkerExecutor;
+
+    @Mock
     private RagIngestionBatchRepository batchRepository;
 
     @Mock
@@ -46,13 +50,23 @@ class RagBatchIngestionServiceTest {
     void setUp() {
         service = new RagBatchIngestionService();
         ReflectionTestUtils.setField(service, "taskExecutor", taskExecutor);
+        ReflectionTestUtils.setField(service, "batchWorkerExecutor", batchWorkerExecutor);
         ReflectionTestUtils.setField(service, "batchRepository", batchRepository);
         ReflectionTestUtils.setField(service, "ragDocumentIngestionService", ragDocumentIngestionService);
+        AiPersistenceProperties properties = new AiPersistenceProperties();
+        properties.getRag().setBatchConcurrency(2);
+        properties.getRag().setStorageRoot(tempDir.toString());
+        ReflectionTestUtils.setField(service, "properties", properties);
         doAnswer(invocation -> {
             Runnable runnable = invocation.getArgument(0);
             runnable.run();
             return null;
         }).when(taskExecutor).execute(any(Runnable.class));
+        doAnswer(invocation -> {
+            Runnable runnable = invocation.getArgument(0);
+            runnable.run();
+            return null;
+        }).when(batchWorkerExecutor).execute(any(Runnable.class));
     }
 
     @Test
@@ -84,5 +98,27 @@ class RagBatchIngestionServiceTest {
         assertEquals(3, metrics.chunkCount);
         assertEquals(100L, metrics.estimatedTokensTotal);
         assertEquals(90L, metrics.providerTokensTotal);
+    }
+
+    @Test
+    void ingestFolderShouldKeepProcessingWhenOneFileFails() throws Exception {
+        Path first = Files.writeString(tempDir.resolve("a.pdf"), "pdf-a");
+        Path second = Files.writeString(tempDir.resolve("b.pdf"), "pdf-b");
+        when(ragDocumentIngestionService.ingestStoredPdf(eq(first), eq("a.pdf"), any(UUID.class)))
+                .thenThrow(new IllegalStateException("boom"));
+        when(ragDocumentIngestionService.ingestStoredPdf(eq(second), eq("b.pdf"), any(UUID.class)))
+                .thenReturn(new RagDocumentIngestionOutcome(UUID.randomUUID(), UUID.randomUUID(), RagJobStatus.COMPLETED, null,
+                        2, 80L, 70L, 10L, 20L, 30L, 5L, 4L, 50L, 6L, 125L));
+
+        RagBatchAcceptedResponse response = service.ingestFolder(tempDir.toString());
+
+        ArgumentCaptor<RagBatchMetrics> metricsCaptor = ArgumentCaptor.forClass(RagBatchMetrics.class);
+        verify(batchRepository).update(eq(response.batchId()), eq(RagBatchStatus.PARTIAL_FAILED), metricsCaptor.capture(), any());
+
+        RagBatchMetrics metrics = metricsCaptor.getValue();
+        assertEquals(2, metrics.processedFiles);
+        assertEquals(1, metrics.completedFiles);
+        assertEquals(1, metrics.failedFiles);
+        assertEquals(2, metrics.chunkCount);
     }
 }

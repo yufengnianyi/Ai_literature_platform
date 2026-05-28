@@ -5,6 +5,7 @@ import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessSta
 import com.example.demo_01.ai.preprocessing.service.DocumentPreprocessService;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentIngestionOutcome;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentStatsResponse;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagIngestionJobRecord;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagJobStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagUploadAcceptedResponse;
@@ -83,6 +84,10 @@ public class RagDocumentIngestionService {
     public RagDocumentRecord getDocument(UUID documentId) {
         return documentRepository.findById(documentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "Document not found: " + documentId));
+    }
+
+    public RagDocumentStatsResponse getStats() {
+        return documentRepository.getStats();
     }
 
     public RagIngestionJobRecord getJob(UUID jobId) {

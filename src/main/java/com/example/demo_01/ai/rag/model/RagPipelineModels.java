@@ -239,6 +239,15 @@ public final class RagPipelineModels {
     ) {
     }
 
+    public record RagDocumentStatsResponse(
+            long totalDocuments,
+            long canonicalCompletedDocuments,
+            long processingDocuments,
+            long duplicateDocuments,
+            long failedDocuments
+    ) {
+    }
+
     public record RagDocumentIngestionOutcome(
             UUID documentId,
             UUID jobId,

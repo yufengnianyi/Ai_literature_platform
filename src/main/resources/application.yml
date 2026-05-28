@@ -10,6 +10,10 @@ spring:
     placeholders:
       embeddingDimension: ${app.ai.rag.embedding-dimension:1024}
       vectorTable: ${app.ai.rag.vector-table:embedding_store}
+  servlet:
+    multipart:
+      max-file-size: ${APP_UPLOAD_MAX_FILE_SIZE:100MB}
+      max-request-size: ${APP_UPLOAD_MAX_REQUEST_SIZE:300MB}
 
 mybatis-flex:
   global-config:
@@ -69,6 +73,7 @@ app:
     rag:
       embedding-dimension: 1024
       vector-table: embedding_store
+      batch-concurrency: 2
       retrieval:
         dense-max-results: 5
         dense-min-score: 0.6

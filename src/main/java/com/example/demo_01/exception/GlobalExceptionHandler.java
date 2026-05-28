@@ -4,9 +4,11 @@ import com.example.demo_01.common.BaseResponse;
 import com.example.demo_01.common.ResultUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
@@ -29,6 +31,13 @@ public class GlobalExceptionHandler {
         log.warn("ResponseStatusException: status={}, message={}", e.getStatusCode(), message);
         return ResponseEntity.status(e.getStatusCode())
                 .body(ResultUtils.error(errorCode, message));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<BaseResponse<Void>> maxUploadSizeExceededExceptionHandler(MaxUploadSizeExceededException e) {
+        log.warn("Upload rejected because multipart request exceeded the configured limit: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ResultUtils.error(ErrorCode.PARAMS_ERROR, "Uploaded files exceed the configured size limit"));
     }
 
     @ExceptionHandler(Exception.class)

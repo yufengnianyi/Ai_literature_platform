@@ -29,9 +29,13 @@ services:
       - neo4j-data:/data
 
   backend:
+    image: ${BACKEND_IMAGE:-ai_literature-backend:latest}
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BACKEND_BUILD_IMAGE: ${BACKEND_BUILD_IMAGE:-maven:3.9.12-eclipse-temurin-21-alpine}
+        BACKEND_RUNTIME_IMAGE: ${BACKEND_RUNTIME_IMAGE:-eclipse-temurin:21-jre-alpine}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -59,10 +63,13 @@ services:
       APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
 
   web:
+    image: ${WEB_IMAGE:-ai_literature-web:latest}
     build:
       context: ./ai-literature-frontend
       dockerfile: Dockerfile
       args:
+        WEB_BUILD_IMAGE: ${WEB_BUILD_IMAGE:-node:24-alpine}
+        WEB_RUNTIME_IMAGE: ${WEB_RUNTIME_IMAGE:-nginx:1.27-alpine}
         VITE_APP_BASE_PATH: ${VITE_APP_BASE_PATH:-/viteApp/}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/viteApp/api}
     restart: unless-stopped

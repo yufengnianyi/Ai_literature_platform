@@ -45,6 +45,9 @@ public class AiPersistenceProperties {
         @Min(1)
         private int asyncThreads = 2;
 
+        @Min(1)
+        private int batchConcurrency = 2;
+
         @Valid
         private Grobid grobid = new Grobid();
 

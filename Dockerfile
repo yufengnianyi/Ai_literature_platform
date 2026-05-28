@@ -1,4 +1,7 @@
-FROM maven:3.9.9-eclipse-temurin-21-alpine AS build
+ARG BACKEND_BUILD_IMAGE=maven:3.9.12-eclipse-temurin-21-alpine
+ARG BACKEND_RUNTIME_IMAGE=eclipse-temurin:21-jre-alpine
+
+FROM ${BACKEND_BUILD_IMAGE} AS build
 
 WORKDIR /workspace
 
@@ -12,7 +15,7 @@ COPY src src
 
 RUN ./mvnw -q -DskipTests package
 
-FROM eclipse-temurin:21-jre-alpine
+FROM ${BACKEND_RUNTIME_IMAGE}
 
 RUN apk add --no-cache wget
 

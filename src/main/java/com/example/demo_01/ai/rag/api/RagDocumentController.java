@@ -1,8 +1,11 @@
 package com.example.demo_01.ai.rag.api;
 
 import com.example.demo_01.annotation.AuthCheck;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagBatchAcceptedResponse;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentStatsResponse;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagUploadAcceptedResponse;
+import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
 import com.example.demo_01.ai.rag.service.RagIngestionFromArtifactService;
 import com.example.demo_01.common.BaseResponse;
@@ -28,6 +31,9 @@ public class RagDocumentController {
     private RagDocumentIngestionService ragDocumentIngestionService;
 
     @Resource
+    private RagBatchIngestionService ragBatchIngestionService;
+
+    @Resource
     private RagIngestionFromArtifactService ragIngestionFromArtifactService;
 
     @PostMapping(consumes = "multipart/form-data")
@@ -36,10 +42,22 @@ public class RagDocumentController {
         return ResponseEntity.accepted().body(ResultUtils.success(ragDocumentIngestionService.upload(file)));
     }
 
+    @PostMapping(value = "/batch", consumes = "multipart/form-data")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public ResponseEntity<BaseResponse<RagBatchAcceptedResponse>> uploadBatch(@RequestPart("files") MultipartFile[] files) {
+        return ResponseEntity.accepted().body(ResultUtils.success(ragBatchIngestionService.uploadFiles(files)));
+    }
+
     @PostMapping("/{documentId}/ingest")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public ResponseEntity<BaseResponse<RagUploadAcceptedResponse>> ingest(@PathVariable UUID documentId) {
         return ResponseEntity.accepted().body(ResultUtils.success(ragIngestionFromArtifactService.enqueueDocument(documentId, null)));
+    }
+
+    @GetMapping("/stats")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<RagDocumentStatsResponse> getStats() {
+        return ResultUtils.success(ragDocumentIngestionService.getStats());
     }
 
     @GetMapping("/{documentId}")
