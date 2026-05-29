@@ -53,7 +53,8 @@ class ReviewPipelineServiceTest {
 
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
-        when(highRecallRetrievalService.retrieveSeedChunks(List.of(canonicalQuestion))).thenReturn(List.of(seedChunk));
+        when(highRecallRetrievalService.retrieveSeedChunks(eq(List.of(canonicalQuestion)), any(ReviewLoadSettings.class)))
+                .thenReturn(List.of(seedChunk));
 
         ReviewTaskAcceptedResponse accepted = service.submit("user-1", rawPrompt);
 
@@ -87,7 +88,8 @@ class ReviewPipelineServiceTest {
 
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(canonicalQuestion));
-        when(highRecallRetrievalService.retrieveSeedChunks(List.of(canonicalQuestion))).thenReturn(List.of(thresholdChunk));
+        when(highRecallRetrievalService.retrieveSeedChunks(eq(List.of(canonicalQuestion)), any(ReviewLoadSettings.class)))
+                .thenReturn(List.of(thresholdChunk));
 
         ReviewTaskAcceptedResponse accepted = service.submit("user-1", rawPrompt);
 
@@ -118,11 +120,23 @@ class ReviewPipelineServiceTest {
 
         when(queryAnalyzerService.analyze(rawPrompt)).thenReturn(analysis);
         when(queryExpansionService.expand(analysis)).thenReturn(List.of(rawPrompt));
-        when(highRecallRetrievalService.retrieveSeedChunks(List.of(rawPrompt))).thenReturn(List.of(firstSeed, secondSeed));
+        when(highRecallRetrievalService.retrieveSeedChunks(eq(List.of(rawPrompt)), any(ReviewLoadSettings.class)))
+                .thenReturn(List.of(firstSeed, secondSeed));
 
         ReviewTaskAcceptedResponse accepted = service.submit(
-                "user-1", rawPrompt, "antimicrobial_compound", new ReviewLoadSettings(0.85, 1));
+                "user-1", rawPrompt, "antimicrobial_compound",
+                new ReviewLoadSettings(0.85, 1, 12, 7, 0.42, 9, 111));
 
+        ArgumentCaptor<ReviewLoadSettings> settingsCaptor = ArgumentCaptor.forClass(ReviewLoadSettings.class);
+        verify(highRecallRetrievalService).retrieveSeedChunks(eq(List.of(rawPrompt)), settingsCaptor.capture());
+        ReviewLoadSettings settings = settingsCaptor.getValue();
+        assertEquals(0.85, settings.minScore(), 0.0001);
+        assertEquals(1, settings.maxDocuments());
+        assertEquals(12, settings.seedFtsMaxResults());
+        assertEquals(7, settings.seedDenseMaxResults());
+        assertEquals(0.42, settings.seedDenseMinScore(), 0.0001);
+        assertEquals(9, settings.seedBm25MaxResults());
+        assertEquals(111, settings.maxCandidates());
         verify(reviewRepository).insertDocumentCandidates(eq(accepted.taskId()), argThat(documents ->
                 documents.size() == 2
                         && documents.stream().filter(ReviewDocumentCandidate::selected).count() == 1

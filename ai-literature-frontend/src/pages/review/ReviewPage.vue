@@ -18,23 +18,32 @@
           show-count
           placeholder="请帮我总结当前疫霉菌领域的抑菌化合物"
         />
-        <div class="template-grid">
-          <div
-            v-for="field in templateFields"
-            :key="field"
-            class="template-chip"
-          >
-            {{ field }}
-          </div>
-        </div>
         <div class="review-load-settings">
-          <div class="setting-field">
-            <span>Minimum score</span>
-            <a-input-number v-model:value="minimumScore" :min="0" :max="1" :step="0.05" size="small" />
+          <div class="settings-title">
+            <SettingOutlined />
+            <span>候选 chunks 参数</span>
           </div>
-          <div class="setting-field">
-            <span>Papers to load</span>
-            <a-input-number v-model:value="maxDocuments" :min="1" :max="100" :step="1" size="small" />
+          <div class="settings-grid">
+            <div class="setting-field">
+              <span>FTS</span>
+              <a-input-number v-model:value="candidateChunkSettings.seedFtsMaxResults" :min="1" :step="5" size="small" />
+            </div>
+            <div class="setting-field">
+              <span>向量</span>
+              <a-input-number v-model:value="candidateChunkSettings.seedDenseMaxResults" :min="1" :step="5" size="small" />
+            </div>
+            <div class="setting-field">
+              <span>BM25</span>
+              <a-input-number v-model:value="candidateChunkSettings.seedBm25MaxResults" :min="1" :step="5" size="small" />
+            </div>
+            <div class="setting-field">
+              <span>候选上限</span>
+              <a-input-number v-model:value="candidateChunkSettings.maxCandidates" :min="1" :step="10" size="small" />
+            </div>
+            <div class="setting-field">
+              <span>向量阈值</span>
+              <a-input-number v-model:value="candidateChunkSettings.seedDenseMinScore" :min="0" :max="1" :step="0.05" size="small" />
+            </div>
           </div>
         </div>
         <div class="action-bar">
@@ -53,7 +62,6 @@
         :preview="scopePreview"
         :original-question="question"
         :language-code="activeLanguage"
-        :initial-min-score="minimumScore"
         mode="candidate"
         @confirm-candidates="handleConfirmDocuments"
         @cancel="handleBackToInput"
@@ -65,11 +73,21 @@
           <h3>{{ stageLabel }}</h3>
           <p>正在按已确认的文献逐篇回溯全文 chunks，并生成多篇解读。</p>
         </div>
-        <a-button danger @click="handleCancel">取消</a-button>
+        <div class="progress-actions">
+          <a-button @click="handleReturnToInput">
+            <ArrowLeftOutlined />
+            返回
+          </a-button>
+          <a-button danger @click="handleCancel">取消</a-button>
+        </div>
       </div>
 
       <div v-if="reportContent" class="result-panel">
         <div class="result-toolbar">
+          <a-button @click="handleReturnToInput">
+            <ArrowLeftOutlined />
+            返回
+          </a-button>
           <a-button @click="handleNewReport">新建解读</a-button>
           <a-button @click="handleCopyReport">
             <CopyOutlined />
@@ -134,10 +152,12 @@
 import { computed, onMounted, ref } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import {
+  ArrowLeftOutlined,
   CopyOutlined,
   DeleteOutlined,
   FileExcelOutlined,
   ReloadOutlined,
+  SettingOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue';
 import {
@@ -161,19 +181,6 @@ type ReviewStage = 'inputting' | 'selecting' | 'generating' | 'completed';
 
 const TEMPLATE_ID = 'antimicrobial_compound';
 
-const templateFields = [
-  '化合物名称',
-  '结构类型',
-  '来源',
-  '抑菌浓度',
-  '作用病原菌',
-  '试验方法',
-  '靶标/机制',
-  '安全性数据',
-  '来源文献',
-  '专利信息',
-];
-
 const stage = ref<ReviewStage>('inputting');
 const question = ref('');
 const reviewLanguageCode = ref<string>('zh');
@@ -187,8 +194,13 @@ const taskHistory = ref<ReviewTaskRecord[]>([]);
 const loadingHistory = ref(false);
 const isSubmitting = ref(false);
 const scopePreview = ref<ReviewScopePreview | null>(null);
-const minimumScore = ref(0.6);
-const maxDocuments = ref(8);
+const candidateChunkSettings = ref({
+  seedFtsMaxResults: 60,
+  seedDenseMaxResults: 30,
+  seedDenseMinScore: 0.3,
+  seedBm25MaxResults: 40,
+  maxCandidates: 300,
+});
 let streamHandle: ReviewStreamHandle | null = null;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -228,8 +240,7 @@ const resetResult = () => {
 };
 
 const reviewLoadSettings = () => ({
-  minScore: minimumScore.value,
-  maxDocuments: maxDocuments.value,
+  ...candidateChunkSettings.value,
 });
 
 const loadSummaryTables = async (taskId: string) => {
@@ -288,6 +299,17 @@ const handleAsyncSubmit = async () => {
 const handleBackToInput = () => {
   cleanupPolling();
   stage.value = 'inputting';
+};
+
+const handleReturnToInput = async () => {
+  streamHandle?.close();
+  streamHandle = null;
+  cleanupPolling();
+  stage.value = 'inputting';
+  currentTaskId.value = '';
+  scopePreview.value = null;
+  resetResult();
+  await loadTaskHistory();
 };
 
 const handleConfirmDocuments = async (request: CandidateReviewRequest) => {
@@ -482,43 +504,43 @@ onMounted(() => {
   line-height: 1.7;
 }
 
-.template-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 14px 0 18px;
-}
-
-.template-chip {
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: #f3f4f6;
-  color: #374151;
-  font-size: 12px;
-}
-
 .review-load-settings {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin: 0 0 18px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 18px;
+  padding: 12px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #f8fafc;
 }
 
-.setting-field {
+.settings-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.setting-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   color: #475569;
   font-size: 13px;
 }
 
 .setting-field :deep(.ant-input-number) {
-  width: 92px;
+  width: 96px;
 }
 
 .action-bar,
@@ -547,7 +569,9 @@ onMounted(() => {
   color: #64748b;
 }
 
-.progress-panel button {
+.progress-actions {
+  display: flex;
+  gap: 8px;
   margin-left: auto;
 }
 
@@ -629,8 +653,12 @@ onMounted(() => {
     flex-direction: column;
   }
 
-  .progress-panel button {
+  .progress-actions {
     margin-left: 0;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

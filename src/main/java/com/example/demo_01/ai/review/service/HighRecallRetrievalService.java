@@ -3,6 +3,7 @@ package com.example.demo_01.ai.review.service;
 import com.example.demo_01.ai.rag.retrieval.Bm25ContentRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25IndexService;
 import com.example.demo_01.ai.review.config.ReviewProperties;
+import com.example.demo_01.ai.review.model.ReviewModels.ReviewLoadSettings;
 import com.example.demo_01.ai.review.model.ReviewModels.RetrievedChunk;
 import com.example.demo_01.ai.review.repository.ReviewRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,16 +55,20 @@ public class HighRecallRetrievalService {
     private RagDocumentSynopsisService ragDocumentSynopsisService;
 
     public List<RetrievedChunk> retrieveSeedChunks(List<String> queries) {
-        ReviewProperties.Retrieval cfg = reviewProperties.getRetrieval();
+        return retrieveSeedChunks(queries, null);
+    }
+
+    public List<RetrievedChunk> retrieveSeedChunks(List<String> queries, ReviewLoadSettings loadSettings) {
+        RetrievalSettings cfg = resolveRetrievalSettings(loadSettings);
         Map<String, RetrievedChunk> candidateMap = new LinkedHashMap<>();
         String corpusGuard = deriveCorpusGuard(queries);
         List<String> ftsQueries = selectFtsQueries(queries);
 
-        ragDocumentSynopsisService.backfillMissingSynopses(cfg.getSeedFtsMaxResults());
+        ragDocumentSynopsisService.backfillMissingSynopses(cfg.seedFtsMaxResults());
 
         for (String query : ftsQueries) {
             try {
-                List<UUID> hits = reviewRepository.searchDocumentsByFts(query, cfg.getSeedFtsMaxResults());
+                List<UUID> hits = reviewRepository.searchDocumentsByFts(query, cfg.seedFtsMaxResults());
                 for (RetrievedChunk chunk : reviewRepository.findPriorityChunksByDocumentIds(Set.copyOf(hits), 2)) {
                     if (passesCorpusGuard(chunk, corpusGuard)) {
                         candidateMap.putIfAbsent(chunk.chunkId(), chunk);
@@ -77,11 +82,11 @@ public class HighRecallRetrievalService {
         ContentRetriever denseRetriever = EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(embeddingStore)
                 .embeddingModel(quwenEmbeddingModel)
-                .maxResults(cfg.getSeedDenseMaxResults())
-                .minScore(cfg.getSeedDenseMinScore())
+                .maxResults(cfg.seedDenseMaxResults())
+                .minScore(cfg.seedDenseMinScore())
                 .build();
         ContentRetriever bm25Retriever = new Bm25ContentRetriever(
-                bm25IndexService, objectMapper, cfg.getSeedBm25MaxResults());
+                bm25IndexService, objectMapper, cfg.seedBm25MaxResults());
 
         for (String query : queries) {
             Query ragQuery = Query.from(query);
@@ -95,8 +100,8 @@ public class HighRecallRetrievalService {
 
         List<RetrievedChunk> result = new ArrayList<>(candidateMap.values());
         result.sort(Comparator.comparingDouble(RetrievedChunk::score).reversed());
-        if (result.size() > cfg.getMaxCandidates()) {
-            result = result.subList(0, cfg.getMaxCandidates());
+        if (result.size() > cfg.maxCandidates()) {
+            result = result.subList(0, cfg.maxCandidates());
         }
         log.info("Seed retrieval complete: {} candidates from {} queries", result.size(), queries.size());
         return result;
@@ -104,6 +109,31 @@ public class HighRecallRetrievalService {
 
     public List<RetrievedChunk> retrieve(List<String> queries) {
         return retrieveSeedChunks(queries);
+    }
+
+    private RetrievalSettings resolveRetrievalSettings(ReviewLoadSettings loadSettings) {
+        ReviewProperties.Retrieval defaults = reviewProperties.getRetrieval();
+        return new RetrievalSettings(
+                loadSettings != null && loadSettings.seedFtsMaxResults() != null
+                        ? loadSettings.seedFtsMaxResults() : defaults.getSeedFtsMaxResults(),
+                loadSettings != null && loadSettings.seedDenseMaxResults() != null
+                        ? loadSettings.seedDenseMaxResults() : defaults.getSeedDenseMaxResults(),
+                loadSettings != null && loadSettings.seedDenseMinScore() != null
+                        ? loadSettings.seedDenseMinScore() : defaults.getSeedDenseMinScore(),
+                loadSettings != null && loadSettings.seedBm25MaxResults() != null
+                        ? loadSettings.seedBm25MaxResults() : defaults.getSeedBm25MaxResults(),
+                loadSettings != null && loadSettings.maxCandidates() != null
+                        ? loadSettings.maxCandidates() : defaults.getMaxCandidates()
+        );
+    }
+
+    private record RetrievalSettings(
+            int seedFtsMaxResults,
+            int seedDenseMaxResults,
+            double seedDenseMinScore,
+            int seedBm25MaxResults,
+            int maxCandidates
+    ) {
     }
 
     private void retrieveAndMerge(ContentRetriever retriever,

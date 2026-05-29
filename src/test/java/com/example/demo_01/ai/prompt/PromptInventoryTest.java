@@ -49,7 +49,11 @@ class PromptInventoryTest {
         Path servicePrompt = PROMPTS.resolve(Path.of("ai", "ai-code-helper-service-system.txt"));
 
         assertTrue(Files.exists(servicePrompt));
-        assertFalse(Files.readString(servicePrompt).isBlank());
+        String prompt = Files.readString(servicePrompt);
+        assertFalse(prompt.isBlank());
+        assertFalse(prompt.contains("卵菌"));
+        assertFalse(prompt.contains("检索片段"));
+        assertFalse(prompt.contains("chunk_id"));
     }
 
     @Test

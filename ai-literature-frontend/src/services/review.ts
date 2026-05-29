@@ -11,6 +11,11 @@ export interface ReviewTaskSubmitRequest {
 export interface ReviewLoadSettings {
   minScore?: number;
   maxDocuments?: number;
+  seedFtsMaxResults?: number;
+  seedDenseMaxResults?: number;
+  seedDenseMinScore?: number;
+  seedBm25MaxResults?: number;
+  maxCandidates?: number;
 }
 
 export interface ReviewTaskAcceptedResponse {

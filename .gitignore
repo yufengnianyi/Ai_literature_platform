@@ -39,6 +39,7 @@ build/
 
 ### VS Code ###
 .vscode/
+.playwright-mcp/
 node_modules
 ai-literature-frontend/node_modules/
 ai-literature-frontend/dist/

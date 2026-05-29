@@ -358,7 +358,18 @@ public final class ReviewModels {
     ) {
     }
 
-    public record ReviewLoadSettings(Double minScore, Integer maxDocuments) {
+    public record ReviewLoadSettings(
+            Double minScore,
+            Integer maxDocuments,
+            Integer seedFtsMaxResults,
+            Integer seedDenseMaxResults,
+            Double seedDenseMinScore,
+            Integer seedBm25MaxResults,
+            Integer maxCandidates
+    ) {
+        public ReviewLoadSettings(Double minScore, Integer maxDocuments) {
+            this(minScore, maxDocuments, null, null, null, null, null);
+        }
     }
 
     public record ReviewTaskSubmitRequest(

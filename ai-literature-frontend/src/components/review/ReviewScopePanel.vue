@@ -14,8 +14,8 @@
       <a-tag color="purple">{{ selectedDocumentIds.size }} {{ labels.papers }}</a-tag>
     </div>
 
-    <div class="scope-grid">
-      <section class="scope-column">
+    <div class="scope-stack">
+      <section class="scope-section questions-section">
         <div class="column-title">
           <QuestionCircleOutlined />
           <span>{{ labels.userQuestions }}</span>
@@ -48,7 +48,7 @@
         </a-input>
       </section>
 
-      <section class="scope-column">
+      <section class="scope-section entities-section">
         <div class="column-title">
           <ExperimentOutlined />
           <span>{{ labels.relatedEntities }}</span>
@@ -66,35 +66,49 @@
         </div>
       </section>
 
-      <section class="scope-column document-column">
-        <div class="column-title">
-          <FileSearchOutlined />
-          <span>{{ labels.literature }}</span>
+      <section class="scope-section document-section">
+        <div class="document-section-head">
+          <div class="column-title">
+            <FileSearchOutlined />
+            <span>{{ labels.literature }}</span>
+          </div>
+          <div class="document-toolbar">
+            <a-select v-model:value="sortBy" size="small" style="width: 150px">
+              <a-select-option value="score">{{ labels.score }}</a-select-option>
+              <a-select-option value="relevance">{{ labels.relevance }}</a-select-option>
+              <a-select-option value="title">{{ labels.title }}</a-select-option>
+            </a-select>
+            <a-button size="small" @click="selectVisibleDocuments">{{ labels.selectVisible }}</a-button>
+          </div>
         </div>
-        <div v-if="mode === 'candidate'" class="score-threshold-panel">
+        <div v-if="mode === 'candidate' && hasScoredDocuments" class="score-threshold-panel">
           <div class="threshold-control">
             <span>{{ labels.minimumScore }}</span>
-            <a-input-number v-model:value="minimumScore" :min="0" :max="1" :step="0.05" size="small" />
+            <a-input-number
+              v-model:value="minimumScore"
+              :min="scoreRange.min"
+              :max="scoreRange.max"
+              :step="scoreStep"
+              size="small"
+            />
             <a-button size="small" @click="selectThresholdDocuments">{{ labels.selectByScore }}</a-button>
-          </div>
-          <div class="threshold-summary">
             <a-tag color="blue">{{ labels.matchingPapers }} {{ thresholdDocumentCount }}</a-tag>
-            <a-tag
-              v-for="item in thresholdCounts"
-              :key="item.threshold"
-              class="threshold-tag"
-            >
-              >= {{ item.threshold.toFixed(2) }}: {{ item.documentCount }}
-            </a-tag>
           </div>
-        </div>
-        <div class="document-toolbar">
-          <a-select v-model:value="sortBy" size="small" style="width: 150px">
-            <a-select-option value="score">{{ labels.score }}</a-select-option>
-            <a-select-option value="relevance">{{ labels.relevance }}</a-select-option>
-            <a-select-option value="title">{{ labels.title }}</a-select-option>
-          </a-select>
-          <a-button size="small" @click="selectVisibleDocuments">{{ labels.selectVisible }}</a-button>
+          <div class="score-histogram" :aria-label="labels.scoreDistribution">
+            <div
+              v-for="bucket in scoreBuckets"
+              :key="bucket.label"
+              class="score-bucket"
+            >
+              <div class="bucket-meta">
+                <span class="bucket-label">{{ bucket.label }}</span>
+                <span class="bucket-count">{{ bucket.count }}</span>
+              </div>
+              <div class="bucket-bar-shell">
+                <div class="bucket-bar" :style="{ width: `${bucket.height}%` }"></div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="document-list">
           <article
@@ -117,24 +131,6 @@
                 {{ knowledgeLabel(document.knowledgeStatus) }}
               </a-tag>
               <span v-if="document.relatedEntities.length">{{ document.relatedEntities.slice(0, 4).join(', ') }}</span>
-            </div>
-            <div v-if="document.compounds?.length" class="mini-section compound-section">
-              <strong>{{ labels.compounds }}</strong>
-              <div class="compound-tags">
-                <a-tag v-for="compound in document.compounds.slice(0, 6)" :key="compound">
-                  {{ compound }}
-                </a-tag>
-              </div>
-            </div>
-            <div v-if="document.compoundAliases?.length" class="mini-section">
-              <strong>{{ labels.aliasResolution }}</strong>
-              <ul>
-                <li v-for="alias in document.compoundAliases.slice(0, 4)" :key="`${alias.localAlias}-${alias.resolutionStatus}`">
-                  <span>{{ alias.localAlias }}</span>
-                  <span> -> {{ alias.resolvedName || labels.unresolvedAlias }}</span>
-                  <a-tag :color="aliasColor(alias.resolutionStatus)">{{ aliasStatusLabel(alias.resolutionStatus) }}</a-tag>
-                </li>
-              </ul>
             </div>
             <div v-if="document.innovationPoints.length" class="mini-section">
               <strong>{{ labels.innovation }}</strong>
@@ -195,7 +191,6 @@ const props = defineProps<{
   originalQuestion: string;
   mode: 'analysis' | 'candidate';
   languageCode?: string;
-  initialMinScore?: number;
 }>();
 
 const emit = defineEmits<{
@@ -224,21 +219,19 @@ const labels = computed(() => isChinese.value ? {
   questions: '个问题',
   entities: '个实体',
   papers: '篇文献',
-  userQuestions: '用户问题',
+  userQuestions: '扩展的问题',
   addQuestion: '添加一个聚焦子问题',
-  relatedEntities: '相关实体',
-  literature: '文献与创新点',
+  relatedEntities: '问题关联实体',
+  literature: '文献预览',
   score: '评分',
-  minimumScore: '最低评分',
+  minimumScore: '最低评分筛选',
   matchingPapers: '达标文献',
   selectByScore: '选择达标文献',
+  scoreDistribution: '评分分布',
   relevance: '相关性',
   title: '标题',
-  selectVisible: '选择当前可见',
+  selectVisible: '全选',
   untitled: '未命名文献',
-  compounds: '化合物',
-  aliasResolution: '别名解析',
-  unresolvedAlias: '未解析的局部标签',
   innovation: '创新点',
   keyFindings: '关键发现',
   previewText: '预览文本',
@@ -260,18 +253,16 @@ const labels = computed(() => isChinese.value ? {
   userQuestions: 'User Questions',
   addQuestion: 'Add a focused sub-question',
   relatedEntities: 'Related Entities',
-  literature: 'Literature and Novelty',
+  literature: 'Literature Preview',
   score: 'Score',
-  minimumScore: 'Minimum score',
+  minimumScore: 'Minimum score filter',
   matchingPapers: 'Matching papers',
   selectByScore: 'Select by score',
+  scoreDistribution: 'Score distribution',
   relevance: 'Relevance',
   title: 'Title',
-  selectVisible: 'Select visible',
+  selectVisible: 'Select all',
   untitled: 'Untitled document',
-  compounds: 'Compounds',
-  aliasResolution: 'Alias resolution',
-  unresolvedAlias: 'unresolved local label',
   innovation: 'Innovation',
   keyFindings: 'Key findings',
   previewText: 'Preview text',
@@ -292,11 +283,76 @@ const canConfirm = computed(() => {
   return true;
 });
 
+const scoredDocuments = computed(() =>
+  props.preview.documents
+    .map(document => document.score)
+    .filter((score): score is number => typeof score === 'number' && Number.isFinite(score))
+);
+
+const hasScoredDocuments = computed(() => scoredDocuments.value.length > 0);
+
+const scoreRange = computed(() => {
+  if (!hasScoredDocuments.value) {
+    return { min: 0, max: 0 };
+  }
+  return {
+    min: Math.min(...scoredDocuments.value),
+    max: Math.max(...scoredDocuments.value),
+  };
+});
+
+const scoreStep = computed(() => {
+  const span = scoreRange.value.max - scoreRange.value.min;
+  if (span >= 10) return 1;
+  if (span >= 1) return 0.1;
+  return 0.01;
+});
+
+const formatScore = (value: number) => {
+  const span = scoreRange.value.max - scoreRange.value.min;
+  if (span >= 10) return value.toFixed(0);
+  if (span >= 1) return value.toFixed(1);
+  return value.toFixed(2);
+};
+
+const scoreBuckets = computed(() => {
+  if (!hasScoredDocuments.value) return [];
+  const bucketCount = Math.min(6, Math.max(1, scoredDocuments.value.length));
+  const min = scoreRange.value.min;
+  const max = scoreRange.value.max;
+  const span = Math.max(max - min, 1);
+  const buckets = Array.from({ length: bucketCount }, (_, index) => {
+    const start = min + (span * index) / bucketCount;
+    const end = index === bucketCount - 1 ? max : min + (span * (index + 1)) / bucketCount;
+    return {
+      start,
+      end,
+      count: 0,
+      label: `${formatScore(start)}-${formatScore(end)}`,
+      height: 0,
+    };
+  });
+  for (const score of scoredDocuments.value) {
+    const index = max === min
+      ? 0
+      : Math.min(bucketCount - 1, Math.floor(((score - min) / span) * bucketCount));
+    const bucket = buckets[index];
+    if (bucket) {
+      bucket.count += 1;
+    }
+  }
+  const maxCount = Math.max(...buckets.map(bucket => bucket.count), 1);
+  return buckets.map(bucket => ({
+    ...bucket,
+    height: bucket.count === 0 ? 0 : Math.max(12, (bucket.count / maxCount) * 100),
+  }));
+});
+
 const resetSelections = () => {
   selectedQuestionIds.value = new Set(props.preview.questions.filter(q => q.selected).map(q => q.id));
   selectedEntityIds.value = new Set(props.preview.entities.filter(e => e.selected).map(e => e.id));
   selectedDocumentIds.value = new Set(props.preview.documents.filter(d => d.selected).map(d => d.id));
-  minimumScore.value = props.initialMinScore ?? 0.6;
+  minimumScore.value = scoreRange.value.min;
   customQuestions.value = [];
   customQuestion.value = '';
 };
@@ -328,7 +384,9 @@ const filteredDocuments = computed(() => {
     const entityMatch = selectedEntityNames.length === 0 ||
       document.relatedEntities.length === 0 ||
       document.relatedEntities.some(entity => selectedEntityNames.includes(entity));
-    return questionMatch && entityMatch;
+    const scoreMatch = props.mode !== 'candidate' || !hasScoredDocuments.value ||
+      scoreValue(document.score) >= minimumScore.value;
+    return questionMatch && entityMatch && scoreMatch;
   });
 
   return [...list].sort((a, b) => {
@@ -342,8 +400,6 @@ const filteredDocuments = computed(() => {
     return (b.score ?? 0) - (a.score ?? 0);
   });
 });
-
-const thresholdCounts = computed(() => props.preview.scoreThresholdCounts ?? []);
 
 const scoreValue = (score: number | null | undefined) => score ?? -1;
 
@@ -468,15 +524,6 @@ const knowledgeColor = (status?: string | null) => {
   }
 };
 
-const aliasColor = (status?: string | null) => {
-  switch (status) {
-    case 'RESOLVED': return 'green';
-    case 'AMBIGUOUS': return 'orange';
-    case 'UNRESOLVED': return 'red';
-    default: return 'default';
-  }
-};
-
 const relevanceLabel = (relevance: string | null) => {
   if (!isChinese.value) return relevance || 'N/A';
   switch (relevance) {
@@ -500,16 +547,6 @@ const knowledgeLabel = (status?: string | null) => {
       return '未命中';
     default:
       return status;
-  }
-};
-
-const aliasStatusLabel = (status?: string | null) => {
-  if (!isChinese.value) return status || 'UNKNOWN';
-  switch (status) {
-    case 'RESOLVED': return '已解析';
-    case 'AMBIGUOUS': return '有歧义';
-    case 'UNRESOLVED': return '未解析';
-    default: return status || '未知';
   }
 };
 
@@ -548,14 +585,18 @@ const categoryLabel = (category: string) => {
   color: #667085;
 }
 
-.scope-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(220px, 0.85fr) minmax(360px, 1.4fr);
+.scope-stack {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.scope-column {
+.scope-section {
   min-width: 0;
+  padding: 14px;
+  border: 1px solid #edf0f3;
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 
 .column-title {
@@ -571,6 +612,11 @@ const categoryLabel = (category: string) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.questions-section .option-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .option-row {
@@ -601,10 +647,18 @@ const categoryLabel = (category: string) => {
   font-size: 11px;
 }
 
+.document-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
 .document-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
 }
 
 .score-threshold-panel {
@@ -635,8 +689,55 @@ const categoryLabel = (category: string) => {
   width: 92px;
 }
 
-.threshold-tag {
-  margin-inline-end: 0;
+.score-histogram {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.score-bucket {
+  display: grid;
+  grid-template-columns: 58px minmax(80px, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: #475569;
+  font-size: 11px;
+}
+
+.bucket-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.bucket-bar-shell {
+  position: relative;
+  min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8edf3;
+  overflow: hidden;
+}
+
+.bucket-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #64748b;
+}
+
+.bucket-count {
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.bucket-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  line-height: 1.2;
 }
 
 .document-list {
@@ -699,12 +800,6 @@ const categoryLabel = (category: string) => {
   line-height: 1.45;
 }
 
-.compound-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
 .preview-collapse {
   margin-top: 8px;
 }
@@ -727,7 +822,15 @@ const categoryLabel = (category: string) => {
 }
 
 @media (max-width: 1100px) {
-  .scope-grid {
+  .questions-section .option-list {
+    grid-template-columns: 1fr;
+  }
+
+  .document-section-head {
+    flex-direction: column;
+  }
+
+  .score-histogram {
     grid-template-columns: 1fr;
   }
 }

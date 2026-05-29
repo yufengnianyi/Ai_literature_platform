@@ -4,7 +4,6 @@ import com.example.demo_01.ai.memory.PersistentChatMemoryStore;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.service.AiServices;
 import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Bean;
@@ -15,9 +14,6 @@ public class AiCodeHelperServiceFactory {
 
     @Resource
     private ChatModel myqwenChatModel;
-
-    @Resource(name = "ragContentRetriever")
-    private ContentRetriever ragContentRetriever;
 
     @Resource(name = "qwenStreamingChatModel")
     private StreamingChatModel streamingChatModel;
@@ -35,7 +31,6 @@ public class AiCodeHelperServiceFactory {
                         .maxMessages(20)
                         .chatMemoryStore(persistentChatMemoryStore)
                         .build())
-                .contentRetriever(ragContentRetriever)
                 .build();
     }
 }

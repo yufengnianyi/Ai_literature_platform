@@ -206,7 +206,7 @@ public class ReviewPipelineService {
         // Stage 3: High-recall retrieval
         updateStage(taskId, ReviewStage.RETRIEVAL);
         Instant retrievalStart = Instant.now();
-        List<RetrievedChunk> seedChunks = highRecallRetrievalService.retrieveSeedChunks(expandedQueries);
+        List<RetrievedChunk> seedChunks = highRecallRetrievalService.retrieveSeedChunks(expandedQueries, ctx.loadSettings);
         ctx.retrievalMs = Duration.between(retrievalStart, Instant.now()).toMillis();
         if (seedChunks == null || seedChunks.isEmpty()) {
             throw new IllegalStateException("No literature chunks were retrieved for this review question.");
@@ -507,17 +507,46 @@ public class ReviewPipelineService {
     }
 
     private ReviewLoadSettings normalizeLoadSettings(ReviewLoadSettings loadSettings) {
-        double minScore = reviewProperties.getRetrieval().getAutoSelectMinSeedScore();
+        ReviewProperties.Retrieval retrieval = reviewProperties.getRetrieval();
+        double minScore = retrieval.getAutoSelectMinSeedScore();
         Integer maxDocuments = null;
+        int seedFtsMaxResults = retrieval.getSeedFtsMaxResults();
+        int seedDenseMaxResults = retrieval.getSeedDenseMaxResults();
+        double seedDenseMinScore = retrieval.getSeedDenseMinScore();
+        int seedBm25MaxResults = retrieval.getSeedBm25MaxResults();
+        int maxCandidates = retrieval.getMaxCandidates();
         if (loadSettings != null) {
             if (loadSettings.minScore() != null) {
-                minScore = Math.max(0.0, Math.min(1.0, loadSettings.minScore()));
+                minScore = Math.max(0.0, loadSettings.minScore());
             }
             if (loadSettings.maxDocuments() != null) {
                 maxDocuments = Math.max(1, Math.min(100, loadSettings.maxDocuments()));
             }
+            if (loadSettings.seedFtsMaxResults() != null) {
+                seedFtsMaxResults = Math.max(1, loadSettings.seedFtsMaxResults());
+            }
+            if (loadSettings.seedDenseMaxResults() != null) {
+                seedDenseMaxResults = Math.max(1, loadSettings.seedDenseMaxResults());
+            }
+            if (loadSettings.seedDenseMinScore() != null) {
+                seedDenseMinScore = Math.max(0.0, Math.min(1.0, loadSettings.seedDenseMinScore()));
+            }
+            if (loadSettings.seedBm25MaxResults() != null) {
+                seedBm25MaxResults = Math.max(1, loadSettings.seedBm25MaxResults());
+            }
+            if (loadSettings.maxCandidates() != null) {
+                maxCandidates = Math.max(1, loadSettings.maxCandidates());
+            }
         }
-        return new ReviewLoadSettings(minScore, maxDocuments);
+        return new ReviewLoadSettings(
+                minScore,
+                maxDocuments,
+                seedFtsMaxResults,
+                seedDenseMaxResults,
+                seedDenseMinScore,
+                seedBm25MaxResults,
+                maxCandidates
+        );
     }
 
     private String formatScore(double value) {
