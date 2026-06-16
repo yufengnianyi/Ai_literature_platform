@@ -14,7 +14,6 @@
       <div class="header-actions">
         <a-space :size="12">
           <a-button :type="isHomeRoute ? 'primary' : 'default'" @click="goHome">Chat</a-button>
-          <a-button :type="isReviewRoute ? 'primary' : 'default'" @click="goReview">Review</a-button>
           <a-button
             v-if="isAdmin"
             :type="isPaperImportRoute ? 'primary' : 'default'"
@@ -45,7 +44,6 @@
           <template #overlay>
             <a-menu @click="handleUserMenuClick">
               <a-menu-item key="chat">Chat</a-menu-item>
-              <a-menu-item key="review">Review</a-menu-item>
               <a-menu-item v-if="isAdmin" key="import">Paper Import</a-menu-item>
               <a-menu-item v-if="isAdmin" key="manage">User Manage</a-menu-item>
               <a-menu-divider />
@@ -154,6 +152,7 @@
                           <div class="conversation-main">
                             <div class="conversation-title">{{ item.title }}</div>
                             <div class="conversation-meta">
+                              <span class="conversation-mode">{{ item.mode === 'REPORT' ? 'Report' : 'Chat' }}</span>
                               {{ item.pinned ? 'Pinned' : 'Updated' }} - {{ formatConversationDate(item.updatedAt) }}
                             </div>
                           </div>
@@ -252,12 +251,13 @@ const renameInputRef = ref();
 const {
   conversations,
   activeConversationId,
+  draftMode,
   isConversationLoading,
   initializeConversations,
-  createConversation,
   deleteConversation,
   renameConversation,
   togglePinConversation,
+  startDraft,
   setActiveConversation,
   resetConversationState,
 } = useConversationState();
@@ -266,7 +266,6 @@ const loginUser = computed(() => loginUserStore.loginUser);
 const isAdmin = computed(() => loginUser.value?.userRole === USER_ROLE_ADMIN);
 const displayName = computed(() => loginUser.value?.userName || loginUser.value?.userAccount || 'Workspace user');
 const isHomeRoute = computed(() => route.path === '/');
-const isReviewRoute = computed(() => route.path === '/review');
 const isPaperImportRoute = computed(() => route.path === '/admin/paper-import');
 const isUserManageRoute = computed(() => route.path === '/admin/user-manage');
 
@@ -321,15 +320,10 @@ const formatConversationDate = (value: string) => {
 };
 
 const handleCreateConversation = async () => {
-  try {
-    cancelRename();
-    await createConversation();
-    if (!isHomeRoute.value) {
-      await router.push('/');
-    }
-  } catch (error) {
-    console.error(error);
-    message.error('Failed to create conversation');
+  cancelRename();
+  startDraft(draftMode.value);
+  if (!isHomeRoute.value) {
+    await router.push('/');
   }
 };
 
@@ -446,10 +440,6 @@ const goHome = async () => {
   await router.push('/');
 };
 
-const goReview = async () => {
-  await router.push('/review');
-};
-
 const goUserManage = async () => {
   if (isAdmin.value) {
     await router.push('/admin/user-manage');
@@ -475,10 +465,6 @@ const handleLogout = async () => {
 const handleUserMenuClick = async ({ key }: MenuClickEvent) => {
   if (key === 'chat') {
     await goHome();
-    return;
-  }
-  if (key === 'review') {
-    await goReview();
     return;
   }
   if (key === 'import') {
@@ -832,6 +818,18 @@ onMounted(async () => {
   margin-top: 4px;
   font-size: 12px;
   color: #64748b;
+}
+
+.conversation-mode {
+  display: inline-flex;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .conversation-side {

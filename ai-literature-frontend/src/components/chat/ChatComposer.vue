@@ -1,9 +1,23 @@
 <template>
   <div class="chat-input-area">
     <div class="input-wrapper" :class="{ 'input-wrapper-disabled': disabled }">
+      <div class="mode-switch" aria-label="Conversation mode">
+        <button
+          v-for="option in modeOptions"
+          :key="option"
+          type="button"
+          class="mode-button"
+          :class="{ 'mode-button-active': mode === option }"
+          :disabled="disabled || mode === option"
+          @click="emit('mode-change', option)"
+        >
+          {{ option === 'CHAT' ? 'Chat' : 'Report' }}
+        </button>
+      </div>
+
       <a-textarea
         v-model:value="inputText"
-        placeholder="有问题，尽管问"
+        :placeholder="mode === 'REPORT' ? 'Ask for an evidence report' : 'Ask a question'"
         :auto-size="{ minRows: 1, maxRows: 5 }"
         aria-label="Message"
         class="custom-textarea"
@@ -12,7 +26,7 @@
       />
 
       <div class="right-tools">
-        <a-tooltip title="思考">
+        <a-tooltip v-if="mode === 'CHAT'" title="Thinking">
           <button
             class="think-toggle"
             :class="{ 'think-toggle-active': enableThinking }"
@@ -20,7 +34,7 @@
             type="button"
             @click="enableThinking = !enableThinking"
           >
-            思考
+            Think
           </button>
         </a-tooltip>
         <a-button
@@ -42,13 +56,17 @@
 import { ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { SendOutlined } from '@ant-design/icons-vue';
+import type { ConversationMode } from '@/types/conversation';
 
+const modeOptions: ConversationMode[] = ['CHAT', 'REPORT'];
 const props = defineProps<{
-  disabled?: boolean
+  disabled?: boolean;
+  mode: ConversationMode;
 }>();
 
 const emit = defineEmits<{
-  (e: 'send', text: string, options: { enableThinking: boolean }): void
+  (event: 'send', text: string, options: { enableThinking: boolean }): void;
+  (event: 'mode-change', mode: ConversationMode): void;
 }>();
 
 const inputText = ref('');
@@ -57,13 +75,9 @@ const sendNudging = ref(false);
 let nudgeTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 const triggerEmptyNudge = () => {
-  message.warning('不能为空');
+  message.warning('Message cannot be empty');
   sendNudging.value = false;
-
-  if (nudgeTimer) {
-    window.clearTimeout(nudgeTimer);
-  }
-
+  if (nudgeTimer) window.clearTimeout(nudgeTimer);
   window.requestAnimationFrame(() => {
     sendNudging.value = true;
     nudgeTimer = window.setTimeout(() => {
@@ -75,20 +89,18 @@ const triggerEmptyNudge = () => {
 
 const handleSend = () => {
   if (props.disabled) return;
-
   const text = inputText.value.trim();
   if (!text) {
     triggerEmptyNudge();
     return;
   }
-
-  emit('send', text, { enableThinking: enableThinking.value });
+  emit('send', text, { enableThinking: props.mode === 'CHAT' && enableThinking.value });
   inputText.value = '';
 };
 
-const handlePressEnter = (e: KeyboardEvent) => {
-  if (!e.shiftKey) {
-    e.preventDefault();
+const handlePressEnter = (event: KeyboardEvent) => {
+  if (!event.shiftKey) {
+    event.preventDefault();
     handleSend();
   }
 };
@@ -96,7 +108,7 @@ const handlePressEnter = (e: KeyboardEvent) => {
 
 <style scoped>
 .chat-input-area {
-  width: min(100%, 700px);
+  width: min(100%, 780px);
   margin: 0 auto;
 }
 
@@ -110,7 +122,6 @@ const handlePressEnter = (e: KeyboardEvent) => {
   border-radius: 28px;
   background: #fff;
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.12);
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .input-wrapper:focus-within {
@@ -120,6 +131,36 @@ const handlePressEnter = (e: KeyboardEvent) => {
 
 .input-wrapper-disabled {
   opacity: 0.72;
+}
+
+.mode-switch {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.mode-button {
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mode-button-active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.mode-button:disabled {
+  cursor: default;
 }
 
 .custom-textarea {
@@ -139,10 +180,6 @@ const handlePressEnter = (e: KeyboardEvent) => {
   line-height: 1.6;
 }
 
-.custom-textarea :deep(textarea::placeholder) {
-  color: #9ca3af;
-}
-
 .right-tools {
   flex: 0 0 auto;
   display: flex;
@@ -157,7 +194,6 @@ const handlePressEnter = (e: KeyboardEvent) => {
   border-radius: 999px;
   background: transparent;
   color: #6b7280;
-  font-size: 14px;
   cursor: pointer;
 }
 
@@ -167,36 +203,13 @@ const handlePressEnter = (e: KeyboardEvent) => {
   font-weight: 600;
 }
 
-.think-toggle:disabled {
-  cursor: not-allowed;
-}
-
 .send-btn,
-.send-btn:focus,
-.send-btn:focus-visible {
-  flex: 0 0 auto;
+.send-btn:focus {
   width: 38px;
   height: 38px;
   border: none;
   background: #2563eb !important;
   color: #fff !important;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
-}
-
-.send-btn:hover:not(:disabled) {
-  background: #1d4ed8 !important;
-  color: #fff !important;
-}
-
-.send-btn:active:not(:disabled) {
-  background: #1e40af !important;
-  color: #fff !important;
-}
-
-.send-btn:disabled {
-  background: #2563eb !important;
-  color: #fff !important;
-  opacity: 0.55;
 }
 
 .send-btn-nudge {
@@ -204,40 +217,27 @@ const handlePressEnter = (e: KeyboardEvent) => {
 }
 
 @keyframes sendNudge {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-2px);
-  }
-
-  55% {
-    transform: translateX(2px);
-  }
+  25% { transform: translateX(-2px); }
+  55% { transform: translateX(2px); }
 }
 
 @media (max-width: 640px) {
   .input-wrapper {
+    flex-wrap: wrap;
     border-radius: 22px;
   }
 
-  .think-toggle {
-    width: 34px;
-    padding: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-indent: 36px;
-    position: relative;
+  .mode-switch {
+    order: 1;
   }
 
-  .think-toggle::before {
-    content: '思';
-    position: absolute;
-    left: 0;
-    right: 0;
-    text-indent: 0;
+  .custom-textarea {
+    order: 3;
+    flex-basis: calc(100% - 52px);
+  }
+
+  .right-tools {
+    order: 4;
   }
 }
 </style>

@@ -49,6 +49,16 @@ ai-literature-frontend/dist/
 *.log
 *-deploy-*.zip
 
+# Local helper scripts and run artifacts
+/logs/
+/scripts/local/
+/scripts/tmp/
+/scripts/import-antimicrobial-summary-baseline.ps1
+/scripts/*.local.*
+/scripts/*-local.*
+/scripts/*-scratch.*
+/scripts/*-debug.*
+
 # RAG artifacts (generated data)
 /data/
 /data/rag/
@@ -56,6 +66,10 @@ data/rag/
 data/bm25-index/
 # Generated presentation artifacts
 /presentation-output/
+# Generated evidence artifacts
+/Evidence/
+# Generated report attachments
+/tmp/
 # GitNexus local index (generated)
 /.gitnexus/
 .gitnexus/

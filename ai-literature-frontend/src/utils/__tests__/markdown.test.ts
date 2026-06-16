@@ -6,7 +6,6 @@ import {
   prepareCitations,
   splitMarkdownStream,
 } from '../markdown.ts';
-import { extractMarkdownTables } from '../reviewPresentation.ts';
 import { normalizeSourcesPayload } from '../sources.ts';
 
 const headingNormalized = normalizeMarkdownSyntax('###Heading');
@@ -26,16 +25,6 @@ assert.equal(paragraphWithList, 'Summary line\n\n- Item A\n- Item B');
 
 const paragraphWithTable = normalizeMarkdownSyntax('Summary line\n| col | value |\n| --- | --- |\n| a | b |');
 assert.equal(paragraphWithTable, 'Summary line\n\n| col | value |\n| --- | --- |\n| a | b |');
-
-const extractedTables = extractMarkdownTables('Intro\n\n| col | value |\n| --- | --- |\n| a | b |\n| c | d |');
-assert.deepEqual(extractedTables, [
-  {
-    id: 'table-1',
-    title: 'Table 1',
-    headers: ['col', 'value'],
-    rows: [['a', 'b'], ['c', 'd']],
-  },
-]);
 
 const fenceStreamingState = splitMarkdownStream('```ts\nconst a = 1\n');
 assert.equal(fenceStreamingState.stableContent, '');
@@ -66,6 +55,31 @@ assert.match(
   /<sup class="citation-marker" data-cite="2"><a class="citation-link" href="#message-42-ref-2" data-reference-target="message-42-ref-2" aria-label="Jump to reference 2" title="Paper B · page 7">2<\/a><\/sup>/,
 );
 assert.match(preparedCitations.plaintextText, /\[2\]/);
+
+const preparedReportCitations = prepareCitations(
+  '发现一 [EVIDENCE:af28c653-ab23-4eff-a966-ef62751aaf3d]，文献背景 [LITERATURE:3c907604-f5f8-4cb5-a9d6-0238b11bdaf3]，再次引用 [EVIDENCE:af28c653-ab23-4eff-a966-ef62751aaf3d]。',
+  { referenceScope: 'message-report' },
+);
+assert.equal(preparedReportCitations.citations.length, 2);
+assert.equal(preparedReportCitations.citations[0]?.source, '证据记录 af28c653');
+assert.equal(
+  preparedReportCitations.citations[0]?.excerpt,
+  '完整 ID：af28c653-ab23-4eff-a966-ef62751aaf3d',
+);
+assert.equal(preparedReportCitations.citations[1]?.source, '内部文献 3c907604');
+assert.match(preparedReportCitations.processedText, /data-reference-target="message-report-ref-1"/);
+assert.match(preparedReportCitations.processedText, /data-reference-target="message-report-ref-2"/);
+assert.equal(
+  preparedReportCitations.plaintextText,
+  '发现一 [1]，文献背景 [2]，再次引用 [1]。',
+);
+
+const codeWrappedReportCitation = prepareCitations(
+  '发现 `[EVIDENCE:af28c653-ab23-4eff-a966-ef62751aaf3d]`',
+  { referenceScope: 'message-report-code' },
+);
+assert.equal(codeWrappedReportCitation.citations.length, 1);
+assert.doesNotMatch(codeWrappedReportCitation.processedText, /<code>/);
 
 const preparedRawHtmlCitation = prepareCitations(
   'Finding <sup class="citation-marker" data-cite="11"><a class="citation-link" href="#old" title="Paper C · Evidence">11</a></sup>',

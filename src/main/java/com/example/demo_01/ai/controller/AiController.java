@@ -41,6 +41,9 @@ public class AiController {
 
         String resolvedConversationId = resolveConversationId(conversationId, legacyMemoryId);
         conversationService.createConversationIfAbsent(normalizedUserId, resolvedConversationId);
+        conversationService.setMode(
+                normalizedUserId, resolvedConversationId, ConversationService.ConversationMode.CHAT);
+        conversationService.initializeTitleFromFirstQuestion(normalizedUserId, resolvedConversationId, prompt);
         String memoryKey = UserConversationKey.compose(normalizedUserId, resolvedConversationId);
         return chatStreamingService.stream(memoryKey, prompt, enableThinking);
     }

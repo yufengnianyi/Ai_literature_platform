@@ -133,6 +133,14 @@ public class RagDocumentRepository {
                 """, this::mapRow, limit);
     }
 
+    public List<RagDocumentRecord> findAllCanonicalCompleted() {
+        return jdbcTemplate.query(selectSql() + """
+                 where d.status = 'COMPLETED'
+                   and d.duplicate_of_document_id is null
+                 order by d.updated_at, d.document_id
+                """, this::mapRow);
+    }
+
     public void updateSynopsis(UUID documentId, RagDocumentSynopsis synopsis) {
         jdbcTemplate.update("""
                 update rag_document

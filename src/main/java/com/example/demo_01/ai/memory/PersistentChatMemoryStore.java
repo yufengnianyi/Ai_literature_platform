@@ -17,11 +17,7 @@ import java.util.Objects;
 @Component
 public class PersistentChatMemoryStore implements ChatMemoryStore {
 
-    private static final String SELECT_SNAPSHOT_SQL = """
-            select messages_json::text
-            from ai_chat_memory_snapshot
-            where user_id = ? and conversation_id = ?
-            """;
+    private static final int CONTEXT_MESSAGE_LIMIT = 20;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -33,16 +29,19 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
     @Transactional(readOnly = true)
     public List<ChatMessage> getMessages(Object memoryId) {
         UserConversationKey key = normalize(memoryId);
-        List<String> rows = jdbcTemplate.query(
-                SELECT_SNAPSHOT_SQL,
-                (rs, rowNum) -> rs.getString(1),
-                key.userId(),
-                key.conversationId()
-        );
-        if (rows.isEmpty()) {
-            return List.of();
-        }
-        return ChatMessageDeserializer.messagesFromJson(rows.get(0));
+        return jdbcTemplate.query("""
+                select message_json::text as message_json
+                from (
+                    select seq_no, message_json
+                    from ai_chat_message_history
+                    where user_id = ? and conversation_id = ?
+                    order by seq_no desc
+                    limit ?
+                ) recent
+                order by seq_no
+                """, (rs, rowNum) -> ChatMessageDeserializer.messageFromJson(
+                rs.getString("message_json")),
+                key.userId(), key.conversationId(), CONTEXT_MESSAGE_LIMIT);
     }
 
     @Override

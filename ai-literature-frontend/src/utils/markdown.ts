@@ -433,6 +433,10 @@ const parseExistingCitationHtml = (
 
 const citationTokenPattern = /(\{source=[^{}\n]+\}|〔source=[^〔〕\n]+〕)/gu;
 const codeWrappedCitationTokenPattern = /`{1,3}\s*(\{source=[^{}\n]+\}|〔source=[^〔〕\n]+〕)\s*`{1,3}/gu;
+const reportCitationTokenPattern =
+  /\[(EVIDENCE|LITERATURE):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]/g;
+const codeWrappedReportCitationTokenPattern =
+  /`{1,3}\s*(\[(?:EVIDENCE|LITERATURE):[0-9a-fA-F-]{36}\])\s*`{1,3}/g;
 
 export const normalizeMarkdownSyntax = (text: string, options?: { final?: boolean }): string => {
   if (!text) {
@@ -520,6 +524,25 @@ export const prepareCitations = (
     return parsed ? registerCitation(parsed, htmlMode) : '';
   };
 
+  const reportCitationReplacer = (token: string, htmlMode: boolean): string => {
+    const match = token.match(
+      /^\[(EVIDENCE|LITERATURE):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]$/,
+    );
+    if (!match?.[1] || !match[2]) {
+      return token;
+    }
+    const type = match[1];
+    const uuid = match[2].toLowerCase();
+    const label = type === 'EVIDENCE' ? '证据记录' : '内部文献';
+    return registerCitation(
+      {
+        source: `${label} ${uuid.slice(0, 8)}`,
+        excerpt: `完整 ID：${uuid}`,
+      },
+      htmlMode,
+    );
+  };
+
   const existingHtmlReplacer = (token: string, htmlMode: boolean): string => {
     const citation = parseExistingCitationHtml(token);
     if (!citation) {
@@ -532,6 +555,10 @@ export const prepareCitations = (
   const replaceCitationForms = (value: string, htmlMode: boolean): string =>
     value
       .replace(existingCitationHtmlPattern, (token) => existingHtmlReplacer(token, htmlMode))
+      .replace(codeWrappedReportCitationTokenPattern, (token, citation: string) =>
+        reportCitationReplacer(citation, htmlMode),
+      )
+      .replace(reportCitationTokenPattern, (token) => reportCitationReplacer(token, htmlMode))
       .replace(codeWrappedCitationTokenPattern, (token) => sourceTokenReplacer(token, htmlMode))
       .replace(citationTokenPattern, (token) => sourceTokenReplacer(token, htmlMode));
 

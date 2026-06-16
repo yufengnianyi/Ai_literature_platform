@@ -3,6 +3,9 @@ package com.example.demo_01.ai.rag;
 import com.example.demo_01.annotation.AuthCheck;
 import com.example.demo_01.ai.rag.api.RagDocumentController;
 import com.example.demo_01.ai.rag.api.RagJobController;
+import com.example.demo_01.ai.rag.entity.model.RagDocumentEntityModels.RagDocumentEntity;
+import com.example.demo_01.ai.rag.entity.model.RagDocumentEntityModels.RagDocumentEntityExtraction;
+import com.example.demo_01.ai.rag.entity.service.RagDocumentEntityExtractionService;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.service.RagBatchIngestionService;
 import com.example.demo_01.ai.rag.service.RagDocumentIngestionService;
@@ -26,6 +29,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +49,9 @@ class RagDocumentApiControllerTest {
     @MockitoBean
     private RagIngestionFromArtifactService ragIngestionFromArtifactService;
 
+    @MockitoBean
+    private RagDocumentEntityExtractionService ragDocumentEntityExtractionService;
+
     @Test
     void documentImportEndpointsShouldRequireAdminRole() throws Exception {
         assertAdminOnly(RagDocumentController.class.getMethod("upload", org.springframework.web.multipart.MultipartFile.class));
@@ -52,6 +59,11 @@ class RagDocumentApiControllerTest {
         assertAdminOnly(RagDocumentController.class.getMethod("ingest", UUID.class));
         assertAdminOnly(RagDocumentController.class.getMethod("getStats"));
         assertAdminOnly(RagDocumentController.class.getMethod("getDocument", UUID.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("extractEntities",
+                UUID.class,
+                com.example.demo_01.ai.rag.entity.model.RagDocumentEntityModels.RagDocumentEntityExtractionRequest.class));
+        assertAdminOnly(RagDocumentController.class.getMethod("extractEntitiesBatch",
+                com.example.demo_01.ai.rag.entity.model.RagDocumentEntityModels.RagDocumentEntityBatchExtractionRequest.class));
         assertAdminOnly(RagJobController.class.getMethod("getJob", UUID.class));
     }
 
@@ -154,6 +166,58 @@ class RagDocumentApiControllerTest {
                 .andExpect(jsonPath("$.data.latestJobId").value(latestJobId.toString()))
                 .andExpect(jsonPath("$.data.canonicalKey").value("doi:10.1000/test"))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    void extractEntitiesShouldReturnDocumentEntities() throws Exception {
+        UUID documentId = UUID.randomUUID();
+        RagDocumentEntityExtraction extraction = new RagDocumentEntityExtraction(
+                documentId,
+                "Test Paper",
+                "question",
+                2,
+                List.of(new RagDocumentEntity(
+                        "allicin",
+                        "Allicin",
+                        "COMPOUND",
+                        List.of("diallyl thiosulfinate"),
+                        List.of("chunk-1"),
+                        List.of("allicin inhibited pathogen growth"),
+                        0.91)),
+                List.of());
+        when(ragDocumentEntityExtractionService.extractDocument(documentId, "question"))
+                .thenReturn(extraction);
+
+        mockMvc.perform(post("/rag/documents/{documentId}/entities/extract", documentId)
+                        .contentType(APPLICATION_JSON)
+                        .content("{\"question\":\"question\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.documentId").value(documentId.toString()))
+                .andExpect(jsonPath("$.data.documentTitle").value("Test Paper"))
+                .andExpect(jsonPath("$.data.entities[0].canonicalName").value("Allicin"))
+                .andExpect(jsonPath("$.data.entities[0].entityType").value("COMPOUND"))
+                .andExpect(jsonPath("$.data.entities[0].sourceChunkIds[0]").value("chunk-1"));
+    }
+
+    @Test
+    void extractEntitiesBatchShouldReturnMultipleDocuments() throws Exception {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        when(ragDocumentEntityExtractionService.extractBatch(List.of(firstId, secondId), "question"))
+                .thenReturn(List.of(
+                        new RagDocumentEntityExtraction(firstId, "First", "question", 1, List.of(), List.of()),
+                        new RagDocumentEntityExtraction(secondId, "Second", "question", 1, List.of(), List.of())));
+
+        mockMvc.perform(post("/rag/documents/entities/extract-batch")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"question":"question","documentIds":["%s","%s"]}
+                                """.formatted(firstId, secondId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].documentId").value(firstId.toString()))
+                .andExpect(jsonPath("$.data[1].documentId").value(secondId.toString()));
     }
 
     @Test

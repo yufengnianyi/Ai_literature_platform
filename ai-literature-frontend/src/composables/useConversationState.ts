@@ -1,11 +1,14 @@
 import { readonly, ref } from 'vue';
 import { conversationService } from '@/services/conversation';
-import type { Conversation } from '@/types/conversation';
+import type { Conversation, ConversationMode } from '@/types/conversation';
 import { useLoginUserStore } from '@/stores/loginUser';
 import { pinia } from '@/stores';
 
 const conversationsState = ref<Conversation[]>([]);
 const activeConversationIdState = ref('');
+const draftModeState = ref<ConversationMode>('CHAT');
+const draftVersionState = ref(0);
+const draftActiveState = ref(false);
 const loadingState = ref(false);
 const initializedState = ref(false);
 let initializePromise: Promise<void> | null = null;
@@ -26,7 +29,33 @@ const sortConversations = (items: Conversation[]): Conversation[] => {
 
 const setActiveConversation = (conversationId: string) => {
   activeConversationIdState.value = conversationId;
+  draftActiveState.value = false;
+  const conversation = conversationsState.value.find((item) => item.conversationId === conversationId);
+  if (conversation) {
+    draftModeState.value = conversation.mode;
+  }
   persistActiveConversationId(conversationId);
+};
+
+const startDraft = (mode: ConversationMode = draftModeState.value) => {
+  activeConversationIdState.value = '';
+  draftModeState.value = mode;
+  draftActiveState.value = true;
+  draftVersionState.value += 1;
+  persistActiveConversationId('');
+};
+
+const setDraftMode = (mode: ConversationMode) => {
+  draftModeState.value = mode;
+};
+
+const markConversationMode = (conversationId: string, mode: ConversationMode) => {
+  conversationsState.value = conversationsState.value.map((item) =>
+    item.conversationId === conversationId ? { ...item, mode } : item,
+  );
+  if (activeConversationIdState.value === conversationId) {
+    draftModeState.value = mode;
+  }
 };
 
 const readPersistedActiveConversationId = (): string => {
@@ -57,7 +86,12 @@ const refreshConversations = async (): Promise<Conversation[]> => {
 
     if (sorted.length === 0) {
       activeConversationIdState.value = '';
+      draftActiveState.value = true;
       persistActiveConversationId('');
+      return sorted;
+    }
+
+    if (draftActiveState.value) {
       return sorted;
     }
 
@@ -68,6 +102,8 @@ const refreshConversations = async (): Promise<Conversation[]> => {
     if (!activeExists) {
       const nextConversationId = persistedExists ? persistedConversationId : latestConversation?.conversationId || '';
       activeConversationIdState.value = nextConversationId;
+      draftModeState.value =
+        sorted.find((item) => item.conversationId === nextConversationId)?.mode ?? 'CHAT';
       persistActiveConversationId(nextConversationId);
     }
 
@@ -77,15 +113,23 @@ const refreshConversations = async (): Promise<Conversation[]> => {
   }
 };
 
-const createConversation = async (title?: string): Promise<Conversation> => {
-  const payload = title && title.trim().length > 0 ? { title: title.trim() } : {};
+const createConversation = async (
+  mode: ConversationMode = 'CHAT',
+  title?: string,
+  activate = true,
+): Promise<Conversation> => {
+  const payload = {
+    mode,
+    ...(title && title.trim().length > 0 ? { title: title.trim() } : {}),
+  };
   const created = await conversationService.createConversation(payload);
   conversationsState.value = sortConversations([
     created,
     ...conversationsState.value.filter((it) => it.conversationId !== created.conversationId),
   ]);
-  activeConversationIdState.value = created.conversationId;
-  persistActiveConversationId(created.conversationId);
+  if (activate) {
+    setActiveConversation(created.conversationId);
+  }
   return created;
 };
 
@@ -108,6 +152,7 @@ const togglePinConversation = async (conversationId: string, pinned: boolean): P
 const deleteConversation = async (conversationId: string): Promise<void> => {
   const currentConversations = conversationsState.value;
   const deleteIndex = currentConversations.findIndex((item) => item.conversationId === conversationId);
+  const deletedMode = currentConversations[deleteIndex]?.mode ?? 'CHAT';
 
   await conversationService.deleteConversation(conversationId);
 
@@ -133,8 +178,7 @@ const deleteConversation = async (conversationId: string): Promise<void> => {
     return;
   }
 
-  setActiveConversation('');
-  await createConversation();
+  startDraft(deletedMode);
 };
 
 const initializeConversations = async (): Promise<void> => {
@@ -147,10 +191,7 @@ const initializeConversations = async (): Promise<void> => {
   }
 
   initializePromise = (async () => {
-    const rows = await refreshConversations();
-    if (rows.length === 0) {
-      await createConversation();
-    }
+    await refreshConversations();
     initializedState.value = true;
   })();
 
@@ -164,6 +205,9 @@ const initializeConversations = async (): Promise<void> => {
 const resetConversationState = () => {
   conversationsState.value = [];
   activeConversationIdState.value = '';
+  draftModeState.value = 'CHAT';
+  draftVersionState.value = 0;
+  draftActiveState.value = false;
   loadingState.value = false;
   initializedState.value = false;
   initializePromise = null;
@@ -174,10 +218,15 @@ export function useConversationState() {
   return {
     conversations: readonly(conversationsState),
     activeConversationId: readonly(activeConversationIdState),
+    draftMode: readonly(draftModeState),
+    draftVersion: readonly(draftVersionState),
     isConversationLoading: readonly(loadingState),
     initializeConversations,
     refreshConversations,
     createConversation,
+    startDraft,
+    setDraftMode,
+    markConversationMode,
     renameConversation,
     togglePinConversation,
     deleteConversation,

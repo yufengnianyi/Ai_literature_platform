@@ -18,18 +18,24 @@ public final class PromptCatalog {
     public static final String KG_CHUNK_RELATION_EXTRACTION_USER = "prompts/kg/chunk-relation-extraction-user.txt";
 
     public static final String REVIEW_QUERY_ANALYZER_SYSTEM = "prompts/review/query-analyzer-system.txt";
-    public static final String REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_SYSTEM =
-            "prompts/review/paper-evidence-table-synthesis-system.txt";
-    public static final String REVIEW_PAPER_EVIDENCE_TABLE_SYNTHESIS_ANTIMICROBIAL_SYSTEM =
-            "prompts/review/paper-evidence-table-synthesis-antimicrobial-system.txt";
-    public static final String REVIEW_CONCENTRATION_EXTRACTION_SYSTEM =
-            "prompts/review/concentration-extraction-system.txt";
-    public static final String REVIEW_REPORT_PAPER_CENTRIC_SYSTEM =
-            "prompts/review/report-paper-centric-system.txt";
-    public static final String REVIEW_REPORT_PAPER_BATCH_SUMMARY_SYSTEM =
-            "prompts/review/report-paper-batch-summary-system.txt";
-    public static final String REVIEW_REPORT_LOCALIZE_SUMMARY_SYSTEM =
-            "prompts/review/report-localize-summary-system.txt";
+    public static final String RAG_DOCUMENT_ENTITY_EXTRACTION_SYSTEM =
+            "prompts/rag/document-entity-extraction-system.txt";
+    public static final String RAG_EVALUATION_DOCUMENT_JUDGMENT_SYSTEM =
+            "prompts/rag/evaluation/document-judgment-system.txt";
+    public static final String RAG_EVALUATION_ANTIMICROBIAL_CLASSIFICATION_SYSTEM =
+            "prompts/rag/evaluation/antimicrobial-classification-system.txt";
+    public static final String RAG_EVALUATION_ANTIMICROBIAL_SUMMARY_SYSTEM =
+            "prompts/rag/evaluation/antimicrobial-summary-system.txt";
+    public static final String EVIDENCE_ANTIMICROBIAL_COMPOUND_TABLE_SYSTEM =
+            "prompts/evidence/antimicrobial-compound-table-system.txt";
+    public static final String REPORT_EVIDENCE_SYSTEM =
+            "prompts/report/evidence-report-system.txt";
+    public static final String REPORT_EVIDENCE_CITATION_REPAIR_SYSTEM =
+            "prompts/report/evidence-report-citation-repair-system.txt";
+    public static final String REPORT_FULL_DOCUMENT_BATCH_SYSTEM =
+            "prompts/report/full-document-batch-system.txt";
+    public static final String REPORT_SECTION_SYNTHESIS_SYSTEM =
+            "prompts/report/section-synthesis-system.txt";
 
     private PromptCatalog() {
     }

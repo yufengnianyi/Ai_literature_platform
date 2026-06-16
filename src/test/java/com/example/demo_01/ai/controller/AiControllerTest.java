@@ -76,6 +76,8 @@ class AiControllerTest {
                 )));
 
         verify(conversationService).createConversationIfAbsent("u-1", "conv-1");
+        verify(conversationService).setMode(
+                "u-1", "conv-1", ConversationService.ConversationMode.CHAT);
         verify(chatStreamingService).stream("u-1::conv-1", "hello", false);
     }
 

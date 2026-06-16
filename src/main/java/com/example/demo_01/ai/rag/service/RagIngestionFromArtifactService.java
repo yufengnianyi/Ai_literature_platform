@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.rag.service;
 
+import com.example.demo_01.ai.evidence.service.EvidenceExtractionService;
 import com.example.demo_01.ai.preprocessing.artifact.PreprocessArtifactLoader;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.DuplicateReason;
@@ -16,6 +17,7 @@ import com.example.demo_01.ai.rag.repository.RagIngestionJobRepository;
 import com.example.demo_01.exception.BusinessException;
 import com.example.demo_01.exception.ErrorCode;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +26,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class RagIngestionFromArtifactService {
 
     @Resource(name = "ragTaskExecutor")
@@ -40,6 +43,9 @@ public class RagIngestionFromArtifactService {
 
     @Resource
     private PreprocessArtifactLoader artifactLoader;
+
+    @Resource
+    private EvidenceExtractionService evidenceExtractionService;
 
     public RagUploadAcceptedResponse enqueueDocument(UUID documentId, UUID batchId) {
         RagDocumentRecord document = loadDocument(documentId);
@@ -102,6 +108,7 @@ public class RagIngestionFromArtifactService {
             metrics.totalMs = result.embedMs() + result.persistMs();
             jobRepository.update(jobId, RagJobStatus.RUNNING, RagIngestionStage.PERSISTING, null, null, null, metrics, null);
             jobRepository.update(jobId, RagJobStatus.COMPLETED, RagIngestionStage.COMPLETED, null, null, null, metrics, Instant.now());
+            enqueueEvidenceExtraction(documentId);
             return new RagDocumentIngestionOutcome(documentId, jobId, RagJobStatus.COMPLETED, null,
                     metrics.chunkCount, metrics.estimatedTokensTotal, metrics.providerTokensTotal,
                     null, null, null, null, null, metrics.embedMs, metrics.persistMs, metrics.totalMs);
@@ -111,6 +118,18 @@ public class RagIngestionFromArtifactService {
             return new RagDocumentIngestionOutcome(documentId, jobId, RagJobStatus.FAILED, null,
                     metrics.chunkCount, metrics.estimatedTokensTotal, metrics.providerTokensTotal,
                     null, null, null, null, null, metrics.embedMs, metrics.persistMs, metrics.totalMs);
+        }
+    }
+
+    private void enqueueEvidenceExtraction(UUID documentId) {
+        if (!evidenceExtractionService.isEnabled()) {
+            return;
+        }
+        try {
+            evidenceExtractionService.enqueue(documentId);
+        } catch (Exception ex) {
+            log.warn("RAG ingestion completed, but evidence extraction could not be queued for document {}: {}",
+                    documentId, ex.getMessage(), ex);
         }
     }
 }

@@ -7,17 +7,66 @@
         </div>
 
         <template v-else>
+          <div
+            v-if="
+              message.report &&
+              !['COMPLETED', 'PARTIAL_COMPLETED'].includes(message.report.status)
+            "
+            class="report-status-card"
+            :class="{ 'report-status-failed': message.report.status === 'FAILED' }"
+          >
+            <div class="report-status-header">
+              <span class="report-status-dot"></span>
+              <strong>{{ reportStatusText }}</strong>
+            </div>
+            <div class="report-status-meta">
+              <span v-if="message.report.evidenceCount > 0">
+                已匹配 {{ message.report.evidenceCount }} 条证据
+              </span>
+              <span v-if="message.report.selectedDocumentCount > 0">
+                已分析 {{ message.report.analyzedDocumentCount }}/{{
+                  message.report.selectedDocumentCount
+                }} 篇全文
+              </span>
+              <span v-if="message.report.progressPercent > 0">
+                {{ message.report.progressPercent }}%
+              </span>
+              <span v-if="message.report.status === 'FAILED'">
+                请稍后重试；若问题持续出现，请联系管理员。
+              </span>
+            </div>
+          </div>
+
           <details v-if="message.thinkingContent" class="thinking-details">
             <summary>{{ message.isLoading ? '思考中' : '已思考' }}</summary>
             <pre class="thinking-content">{{ message.thinkingContent }}</pre>
           </details>
 
           <div
+            v-if="
+              !message.report ||
+              ['COMPLETED', 'PARTIAL_COMPLETED', 'FAILED'].includes(message.report.status)
+            "
             class="markdown-content"
-            :class="{ 'plaintext-content': parsed.mode === 'plaintext-fallback' }"
+            :class="{
+              'plaintext-content': parsed.mode === 'plaintext-fallback',
+              'report-markdown': !!message.report,
+            }"
             v-html="parsed.html"
             @click="handleCitationClick"
           ></div>
+
+          <div
+            v-if="message.report?.warnings?.length"
+            class="report-warning-card"
+          >
+            <strong>报告生成提示</strong>
+            <ul>
+              <li v-for="warning in message.report.warnings" :key="warning">
+                {{ warning }}
+              </li>
+            </ul>
+          </div>
 
           <div v-if="parsed.pendingTail" class="pending-tail">
             {{ parsed.pendingTail }}
@@ -120,6 +169,38 @@ const parsed = computed(() => {
     sources: props.message.sources,
   });
 });
+
+const reportStatusText = computed(() => {
+  if (props.message.report?.phaseMessage) {
+    return props.message.report.phaseMessage;
+  }
+  switch (props.message.report?.status) {
+    case 'QUEUED':
+      return '报告已进入队列';
+    case 'REWRITING':
+      return '正在理解问题';
+    case 'MATCHING':
+      return '正在匹配证据表';
+    case 'GENERATING':
+      return '正在生成中文证据综述';
+    case 'PLANNING':
+      return '正在规划报告章节';
+    case 'ANALYZING_EVIDENCE':
+      return '正在分析结构化证据';
+    case 'RETRIEVING_LITERATURE':
+      return '正在检索补充文献';
+    case 'ANALYZING_LITERATURE':
+      return '正在逐篇分析全文';
+    case 'SYNTHESIZING':
+      return '正在进行跨文献综合';
+    case 'VALIDATING':
+      return '正在校验引用和数值';
+    case 'FAILED':
+      return '报告生成失败';
+    default:
+      return '正在准备报告';
+  }
+});
 </script>
 
 <style scoped>
@@ -173,6 +254,63 @@ const parsed = computed(() => {
   white-space: pre-wrap;
 }
 
+.report-status-card {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.report-status-failed {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.report-status-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.report-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: reportPulse 1.4s ease-in-out infinite;
+}
+
+.report-status-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  color: inherit;
+  opacity: 0.76;
+  font-size: 13px;
+}
+
+.report-warning-card {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.report-warning-card ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+@keyframes reportPulse {
+  50% { opacity: 0.35; transform: scale(0.82); }
+}
+
 .thinking-details {
   margin: 0 0 12px;
   color: #6b7280;
@@ -212,6 +350,14 @@ const parsed = computed(() => {
   overflow: auto;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.report-markdown :deep(p) {
+  text-indent: 2em;
+}
+
+.report-markdown :deep(li p) {
+  text-indent: 0;
 }
 
 .markdown-content :deep(p:first-child) {

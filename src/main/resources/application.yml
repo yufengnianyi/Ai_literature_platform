@@ -81,8 +81,51 @@ app:
         fused-max-results: 5
         rrf-k: 60
         bm25-index-path: ${app.ai.rag.retrieval.bm25-index-root:data/bm25-index}
+      evaluation:
+        report-root: ${APP_AI_RAG_EVALUATION_REPORT_ROOT:data/rag-evaluation}
+        chunk-batch-size: 12
+        judgment-max-attempts: ${APP_AI_RAG_EVALUATION_JUDGMENT_MAX_ATTEMPTS:3}
+        fts-max-results: ${APP_AI_RAG_EVALUATION_FTS_MAX_RESULTS:100}
+        dense-max-results: ${APP_AI_RAG_EVALUATION_DENSE_MAX_RESULTS:300}
+        dense-min-score: ${APP_AI_RAG_EVALUATION_DENSE_MIN_SCORE:0.0}
+        bm25-max-results: ${APP_AI_RAG_EVALUATION_BM25_MAX_RESULTS:100}
+        priority-chunks-per-fts-document: ${APP_AI_RAG_EVALUATION_PRIORITY_CHUNKS_PER_FTS_DOCUMENT:2}
+        rrf-k: ${APP_AI_RAG_EVALUATION_RRF_K:60}
+        max-documents: ${APP_AI_RAG_EVALUATION_MAX_DOCUMENTS:0}
+        entity-enhanced-enabled: ${APP_AI_RAG_EVALUATION_ENTITY_ENHANCED_ENABLED:true}
+        judgment-only: ${APP_AI_RAG_EVALUATION_JUDGMENT_ONLY:false}
+        antimicrobial-summary-max-attempts: ${APP_AI_RAG_EVALUATION_ANTIMICROBIAL_SUMMARY_MAX_ATTEMPTS:3}
+        antimicrobial-summary-source-experiment-id: ${APP_AI_RAG_EVALUATION_ANTIMICROBIAL_SUMMARY_SOURCE_EXPERIMENT_ID:b6aec474-a84c-48f6-8717-531042f09143}
+        max-entity-terms: ${APP_AI_RAG_EVALUATION_MAX_ENTITY_TERMS:20}
+        retrieval-scope: ${APP_AI_RAG_EVALUATION_RETRIEVAL_SCOPE:FULL_CORPUS}
+        source-judgments-100-experiment-id: ${APP_AI_RAG_EVALUATION_SOURCE_JUDGMENTS_100_EXPERIMENT_ID:b6aec474-a84c-48f6-8717-531042f09143}
+        source-judgments-1000-experiment-id: ${APP_AI_RAG_EVALUATION_SOURCE_JUDGMENTS_1000_EXPERIMENT_ID:9038d6bc-6213-4009-ae5e-d1bd45e0c4b8}
+        review-entity-best-recall-enabled: ${APP_AI_RAG_EVALUATION_REVIEW_ENTITY_BEST_RECALL_ENABLED:true}
+        review-entity-high-precision-enabled: ${APP_AI_RAG_EVALUATION_REVIEW_ENTITY_HIGH_PRECISION_ENABLED:false}
+        review-entity-high-precision-query-marker: ${APP_AI_RAG_EVALUATION_REVIEW_ENTITY_HIGH_PRECISION_QUERY_MARKER:antibacterial}
+        review-entity-best-recall-terms:
+          - antibacterial compounds
+          - Gram-positive bacteria
+          - Gram-negative bacteria
+          - resistant strains
+          - mechanism of action
+          - antibacterial activity
+          - chemical classification
+          - resistance development
+          - therapeutic application
+        document-rerank-max-documents: ${APP_AI_RAG_EVALUATION_DOCUMENT_RERANK_MAX_DOCUMENTS:0}
+        document-rerank-max-chunks-per-document: ${APP_AI_RAG_EVALUATION_DOCUMENT_RERANK_MAX_CHUNKS_PER_DOCUMENT:5}
+        document-rerank-max-document-chars: ${APP_AI_RAG_EVALUATION_DOCUMENT_RERANK_MAX_DOCUMENT_CHARS:7800}
+        document-rerank-min-score: ${APP_AI_RAG_EVALUATION_DOCUMENT_RERANK_MIN_SCORE:0.5}
+        rerank:
+          enabled: ${APP_AI_RAG_EVALUATION_RERANK_ENABLED:false}
+          endpoint: ${APP_AI_RAG_EVALUATION_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+          api-key: ${DASHSCOPE_API_KEY:}
+          model: ${APP_AI_RAG_EVALUATION_RERANK_MODEL:qwen3-vl-rerank}
+          max-candidates: ${APP_AI_RAG_EVALUATION_RERANK_MAX_CANDIDATES:100}
     review:
       enabled: true
+      legacy-enabled: false
       async-threads: 2
       retrieval:
         seed-fts-max-results: 60
@@ -100,6 +143,36 @@ app:
         core-thinking-budget: 8192
         standard-deep-thinking: false
         standard-thinking-budget: 0
+    evidence:
+      enabled: ${APP_AI_EVIDENCE_ENABLED:true}
+      async-threads: ${APP_AI_EVIDENCE_ASYNC_THREADS:2}
+      chunk-batch-size: ${APP_AI_EVIDENCE_CHUNK_BATCH_SIZE:12}
+      max-attempts: ${APP_AI_EVIDENCE_MAX_ATTEMPTS:3}
+      max-single-pass-chunks: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHUNKS:40}
+      max-single-pass-chars: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHARS:120000}
+      output-root: ${APP_AI_EVIDENCE_OUTPUT_ROOT:Evidence}
+    report:
+      output-root: ${APP_AI_REPORT_OUTPUT_ROOT:tmp}
+      source-experiment-id: ${APP_AI_REPORT_SOURCE_EXPERIMENT_ID:efe44f92-8d28-4902-bf77-a15d3bf14ee8}
+      max-evidence: ${APP_AI_REPORT_MAX_EVIDENCE:50000}
+      max-evidence-load: ${APP_AI_REPORT_MAX_EVIDENCE_LOAD:100000}
+      max-model-evidence: ${APP_AI_REPORT_MAX_MODEL_EVIDENCE:80}
+      max-direct-documents: ${APP_AI_REPORT_MAX_DIRECT_DOCUMENTS:15}
+      max-supplemental-documents: ${APP_AI_REPORT_MAX_SUPPLEMENTAL_DOCUMENTS:5}
+      retrieval-rounds: ${APP_AI_REPORT_RETRIEVAL_ROUNDS:2}
+      max-queries-per-round: ${APP_AI_REPORT_MAX_QUERIES_PER_ROUND:8}
+      dense-max-results: ${APP_AI_REPORT_DENSE_MAX_RESULTS:20}
+      dense-min-score: ${APP_AI_REPORT_DENSE_MIN_SCORE:0.35}
+      bm25-max-results: ${APP_AI_REPORT_BM25_MAX_RESULTS:30}
+      fused-max-results: ${APP_AI_REPORT_FUSED_MAX_RESULTS:20}
+      rrf-k: ${APP_AI_REPORT_RRF_K:60}
+      chunks-per-analysis-batch: ${APP_AI_REPORT_CHUNKS_PER_ANALYSIS_BATCH:8}
+      max-chars-per-analysis-batch: ${APP_AI_REPORT_MAX_CHARS_PER_ANALYSIS_BATCH:28000}
+      analysis-batch-overlap: ${APP_AI_REPORT_ANALYSIS_BATCH_OVERLAP:1}
+      max-document-analysis-attempts: ${APP_AI_REPORT_MAX_DOCUMENT_ANALYSIS_ATTEMPTS:2}
+      min-report-chars: ${APP_AI_REPORT_MIN_REPORT_CHARS:3000}
+      max-report-chars: ${APP_AI_REPORT_MAX_REPORT_CHARS:5000}
+      async-threads: ${APP_AI_REPORT_ASYNC_THREADS:2}
     kg:
       enabled: true
       async-threads: 2
