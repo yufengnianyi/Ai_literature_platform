@@ -75,12 +75,22 @@ app:
       vector-table: embedding_store
       batch-concurrency: 2
       retrieval:
-        dense-max-results: 5
-        dense-min-score: 0.6
-        bm25-max-results: 8
-        fused-max-results: 5
+        dense-max-results: ${APP_AI_RAG_RETRIEVAL_DENSE_MAX_RESULTS:15}
+        dense-min-score: ${APP_AI_RAG_RETRIEVAL_DENSE_MIN_SCORE:0.6}
+        bm25-max-results: ${APP_AI_RAG_RETRIEVAL_BM25_MAX_RESULTS:15}
+        fused-max-results: ${APP_AI_RAG_RETRIEVAL_FUSED_MAX_RESULTS:15}
         rrf-k: 60
         bm25-index-path: ${app.ai.rag.retrieval.bm25-index-root:data/bm25-index}
+      chat:
+        enabled: ${APP_AI_RAG_CHAT_ENABLED:true}
+        max-context-chunks: ${APP_AI_RAG_CHAT_MAX_CONTEXT_CHUNKS:5}
+        max-excerpt-chars: ${APP_AI_RAG_CHAT_MAX_EXCERPT_CHARS:600}
+        max-context-chars: ${APP_AI_RAG_CHAT_MAX_CONTEXT_CHARS:6000}
+        rerank:
+          enabled: ${APP_AI_RAG_CHAT_RERANK_ENABLED:true}
+          model: ${APP_AI_RAG_CHAT_RERANK_MODEL:qwen3-vl-rerank}
+          min-score: ${APP_AI_RAG_CHAT_RERANK_MIN_SCORE:0.2}
+          input-max-chars: ${APP_AI_RAG_CHAT_RERANK_INPUT_MAX_CHARS:2000}
       evaluation:
         report-root: ${APP_AI_RAG_EVALUATION_REPORT_ROOT:data/rag-evaluation}
         chunk-batch-size: 12
@@ -123,6 +133,19 @@ app:
           api-key: ${DASHSCOPE_API_KEY:}
           model: ${APP_AI_RAG_EVALUATION_RERANK_MODEL:qwen3-vl-rerank}
           max-candidates: ${APP_AI_RAG_EVALUATION_RERANK_MAX_CANDIDATES:100}
+    pretreatment:
+      quality:
+        min-chunks: ${APP_AI_PRETREATMENT_QUALITY_MIN_CHUNKS:3}
+        min-total-text-chars: ${APP_AI_PRETREATMENT_QUALITY_MIN_TOTAL_TEXT_CHARS:1500}
+        max-replacement-char-ratio: ${APP_AI_PRETREATMENT_QUALITY_MAX_REPLACEMENT_CHAR_RATIO:0.03}
+        max-short-line-ratio: ${APP_AI_PRETREATMENT_QUALITY_MAX_SHORT_LINE_RATIO:0.80}
+      title-vector:
+        active-threshold: ${APP_AI_PRETREATMENT_TITLE_VECTOR_ACTIVE_THRESHOLD:0.30}
+        thresholds:
+          - 0.30
+          - 0.40
+          - 0.50
+          - 0.60
     review:
       enabled: true
       legacy-enabled: false

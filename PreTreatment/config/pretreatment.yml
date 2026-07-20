@@ -1,0 +1,35 @@
+app:
+  ai:
+    pretreatment:
+      artifact-root: data/rag
+      output-root: PreTreatment/outputs
+      journal-quality-path: PreTreatment/config/journal-quality.csv
+      prompt-path: PreTreatment/prompts/oomycete-main-study-system.txt
+      acceptance-confidence-threshold: 0.65
+      max-documents: 0
+      representative-chunks: 8
+      max-llm-input-chars: 24000
+      llm-max-attempts: 3
+      quality:
+        min-chunks: 3
+        min-total-text-chars: 1500
+        max-replacement-char-ratio: 0.03
+        max-short-line-ratio: 0.80
+      title-vector:
+        active-threshold: 0.30
+        thresholds:
+          - 0.30
+          - 0.40
+          - 0.50
+          - 0.60
+      journal-resolution:
+        enabled: true
+        crossref-base-url: https://api.crossref.org
+        crossref-user-agent: PreTreatment/1.0 (mailto:example@example.com)
+        connect-timeout-ms: 5000
+        read-timeout-ms: 15000
+      cli:
+        enabled: true
+        mode: scan
+        apply-run-id:
+        dry-run: true

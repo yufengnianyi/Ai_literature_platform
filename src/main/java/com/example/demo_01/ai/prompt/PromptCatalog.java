@@ -11,6 +11,7 @@ public final class PromptCatalog {
 
     public static final String AI_CODE_HELPER_SYSTEM = "prompts/ai/ai-code-helper-system.txt";
     public static final String AI_CODE_HELPER_SERVICE_SYSTEM = "prompts/ai/ai-code-helper-service-system.txt";
+    public static final String AI_RAG_CHAT_SYSTEM = "prompts/ai/rag-chat-system.txt";
 
     public static final String KG_CHUNK_ENTITY_EXTRACTION_SYSTEM = "prompts/kg/chunk-entity-extraction-system.txt";
     public static final String KG_CHUNK_ENTITY_EXTRACTION_USER = "prompts/kg/chunk-entity-extraction-user.txt";
@@ -28,6 +29,10 @@ public final class PromptCatalog {
             "prompts/rag/evaluation/antimicrobial-summary-system.txt";
     public static final String EVIDENCE_ANTIMICROBIAL_COMPOUND_TABLE_SYSTEM =
             "prompts/evidence/antimicrobial-compound-table-system.txt";
+    public static final String EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM =
+            "prompts/evidence/multi-profile-classification-system.txt";
+    public static final String EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM =
+            "prompts/evidence/multi-profile-extraction-system.txt";
     public static final String REPORT_EVIDENCE_SYSTEM =
             "prompts/report/evidence-report-system.txt";
     public static final String REPORT_EVIDENCE_CITATION_REPAIR_SYSTEM =

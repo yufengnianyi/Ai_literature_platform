@@ -11,6 +11,14 @@ public class DoiNormalizer {
 
     private static final Pattern DOI_PATTERN = Pattern.compile("10\\.\\d{4,9}/[-._;()/:A-Z0-9]+", Pattern.CASE_INSENSITIVE);
 
+    public String firstDoi(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Matcher matcher = DOI_PATTERN.matcher(text);
+        return matcher.find() ? normalize(matcher.group()) : null;
+    }
+
     public String normalize(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
@@ -23,8 +31,12 @@ public class DoiNormalizer {
 
         Matcher matcher = DOI_PATTERN.matcher(candidate);
         if (matcher.find()) {
-            return matcher.group().toLowerCase(Locale.ROOT);
+            return trimTrailingPunctuation(matcher.group()).toLowerCase(Locale.ROOT);
         }
-        return candidate.isBlank() ? null : candidate.toLowerCase(Locale.ROOT);
+        return candidate.isBlank() ? null : trimTrailingPunctuation(candidate).toLowerCase(Locale.ROOT);
+    }
+
+    private String trimTrailingPunctuation(String value) {
+        return value.replaceAll("[\\.,;:]+$", "");
     }
 }

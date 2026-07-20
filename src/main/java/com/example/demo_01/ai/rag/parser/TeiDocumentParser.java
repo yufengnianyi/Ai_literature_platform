@@ -39,9 +39,12 @@ public class TeiDocumentParser {
         Document document = parseXml(teiXml);
         XPath xpath = XPathFactory.newInstance().newXPath();
 
-        String doiRaw = firstString(xpath, document,
-                "(//*[local-name()='teiHeader']//*[local-name()='idno' and translate(@type, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') = 'DOI'])[1]");
-        String title = firstNonBlank(
+        String doiRaw = firstNonBlank(
+                firstString(xpath, document,
+                        "(//*[local-name()='teiHeader']//*[local-name()='idno' and translate(@type, 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') = 'DOI'])[1]"),
+                doiNormalizer.firstDoi(firstString(xpath, document, "(//*[local-name()='teiHeader'])[1]"))
+        );
+        String rawTitle = firstNonBlank(
                 firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='titleStmt']/*[local-name()='title'])[1]"),
                 firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='analytic']/*[local-name()='title'])[1]")
         );
@@ -49,10 +52,12 @@ public class TeiDocumentParser {
         List<String> affiliations = extractDistinctTexts(xpath, document,
                 "//*[local-name()='teiHeader']//*[local-name()='affiliation']");
         String abstractText = extractAbstract(document, xpath);
-        String journal = firstNonBlank(
+        String rawJournal = firstNonBlank(
                 firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='monogr']/*[local-name()='title'])[1]"),
                 firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='sourceDesc']//*[local-name()='title'])[1]")
         );
+        String title = DocumentTitleHeuristics.validTitleOrNull(rawTitle, rawJournal);
+        String journal = DocumentTitleHeuristics.isInvalidExtractedTitle(rawJournal, title) ? null : rawJournal;
         String publicationDate = firstNonBlank(
                 firstString(xpath, document, "string((//*[local-name()='teiHeader']//*[local-name()='date'][@when])[1]/@when)"),
                 firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='date'])[1]")
@@ -86,6 +91,9 @@ public class TeiDocumentParser {
 
     private void appendAbstract(List<ChunkUnit> units, Document document, XPath xpath) {
         NodeList abstractParagraphs = nodes(xpath, document, "//*[local-name()='text']/*[local-name()='front']//*[local-name()='abstract']/*[local-name()='p']");
+        if (abstractParagraphs.getLength() == 0) {
+            abstractParagraphs = nodes(xpath, document, "//*[local-name()='teiHeader']//*[local-name()='profileDesc']/*[local-name()='abstract']/*[local-name()='p']");
+        }
         if (abstractParagraphs.getLength() == 0) {
             String abstractText = extractAbstract(document, xpath);
             if (abstractText != null && !abstractText.isBlank()) {
@@ -219,7 +227,10 @@ public class TeiDocumentParser {
     }
 
     private String extractAbstract(Document document, XPath xpath) {
-        return normalize(firstString(xpath, document, "(//*[local-name()='text']/*[local-name()='front']//*[local-name()='abstract'])[1]"));
+        return firstNonBlank(
+                normalize(firstString(xpath, document, "(//*[local-name()='text']/*[local-name()='front']//*[local-name()='abstract'])[1]")),
+                normalize(firstString(xpath, document, "(//*[local-name()='teiHeader']//*[local-name()='profileDesc']/*[local-name()='abstract'])[1]"))
+        );
     }
 
     private List<String> extractAuthors(XPath xpath, Document document) {

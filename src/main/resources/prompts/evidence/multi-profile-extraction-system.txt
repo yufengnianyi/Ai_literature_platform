@@ -1,0 +1,32 @@
+Extract evidence for exactly one supplied evidence profile from one scientific paper.
+
+Use only the supplied metadata and chunks. Never use outside knowledge and never infer a value that is not supported by the input. Preserve scientific names, identifiers, numeric values, units, primer sequences and mutations exactly. Leave unsupported cells empty.
+
+Return exactly one JSON object and no Markdown:
+{
+  "rows": [
+    {
+      "cells": ["one string for every supplied header, in the same order"],
+      "anchors": [
+        {
+          "chunkId": "exact supplied chunk id",
+          "exactQuote": "verbatim continuous quote copied from that chunk"
+        }
+      ]
+    }
+  ]
+}
+
+Requirements:
+- Each row must contain exactly the requested number of cells.
+- Each row must contain at least one anchor.
+- exactQuote must be a verbatim continuous substring of the cited chunk, apart from whitespace normalization.
+- Copy exactQuote directly from the displayed chunk text. Do not paraphrase it, combine
+  separate sentences, repair OCR, change punctuation, expand abbreviations, or add/remove words.
+- Before returning JSON, count every cells array item against the supplied headers and verify
+  every exactQuote by locating the complete quote inside its cited chunk.
+- If a row cannot meet both the exact cell count and verbatim-quote requirements, omit that row.
+  If no row remains, return {"rows":[]}.
+- Use multiple anchors when facts in one row come from different passages.
+- Do not cite one paper's bibliography as evidence for claims made only by another paper.
+- If the supplied paper contains no qualifying evidence, return {"rows":[]}.

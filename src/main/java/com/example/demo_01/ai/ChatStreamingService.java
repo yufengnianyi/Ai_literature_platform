@@ -37,17 +37,28 @@ public class ChatStreamingService {
     @Resource
     private DashScopeChatRequestFactory chatRequestFactory;
 
+    @Resource
+    private ChatRetrievalService chatRetrievalService;
+
     public Flux<ServerSentEvent<String>> stream(String memoryKey, String prompt, boolean enableThinking) {
         return Flux.create(sink -> {
+            ChatRetrievalService.RetrievedContext retrievedContext = chatRetrievalService.retrieve(prompt);
+
             sink.next(ServerSentEvent.<String>builder()
                     .event("sources")
-                    .data("[]")
+                    .data(retrievedContext.sourcesJson())
                     .build());
 
             List<ChatMessage> history = persistentChatMemoryStore.getMessages(memoryKey);
             List<ChatMessage> requestMessages = new ArrayList<>();
             requestMessages.add(SystemMessage.from(PromptResources.load(PromptCatalog.AI_CODE_HELPER_SERVICE_SYSTEM)));
             requestMessages.addAll(history);
+            if (retrievedContext.hasContext()) {
+                requestMessages.add(SystemMessage.from(
+                        PromptResources.load(PromptCatalog.AI_RAG_CHAT_SYSTEM)
+                                + "\n\n# 检索到的资料\n"
+                                + retrievedContext.contextBlock()));
+            }
             requestMessages.add(UserMessage.from(prompt == null ? "" : prompt.trim()));
 
             StringBuilder answer = new StringBuilder();

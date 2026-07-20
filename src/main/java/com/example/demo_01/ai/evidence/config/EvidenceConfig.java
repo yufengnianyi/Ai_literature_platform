@@ -29,4 +29,26 @@ public class EvidenceConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("multiProfileEvidenceTaskExecutor")
+    public TaskExecutor multiProfileEvidenceTaskExecutor(EvidenceProperties properties) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("multi-profile-evidence-");
+        executor.setCorePoolSize(properties.getAsyncThreads());
+        executor.setMaxPoolSize(properties.getAsyncThreads());
+        executor.setQueueCapacity(Math.max(16, properties.getAsyncThreads() * 4));
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean("multiProfileEvidenceBatchTaskExecutor")
+    public TaskExecutor multiProfileEvidenceBatchTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("multi-profile-batch-");
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(1);
+        executor.initialize();
+        return executor;
+    }
 }

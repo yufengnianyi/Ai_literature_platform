@@ -90,7 +90,13 @@ public class RagEvaluationMetricsService {
 
         int retrievedDocCount = retrievedDocs.size();
         int precisionDenominator = rankCut == null ? retrievedDocCount : rankCut;
-        double recallAtK = ratio(relevantRetrieved, relevantDocs.size());
+        long relevantChunkHits = hits.stream()
+                .map(RagEvaluationRetrievalHit::chunkId)
+                .filter(allKeyChunks::contains)
+                .count();
+        double recallAtK = rankCut == null
+                ? ratio(relevantRetrieved, relevantDocs.size())
+                : ratio(relevantChunkHits, hits.size());
         double precisionAtK = ratio(relevantRetrieved, precisionDenominator);
         return new MetricSlice(
                 at,

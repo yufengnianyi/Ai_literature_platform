@@ -2,12 +2,14 @@ package com.example.demo_01.ai.evidence.repository;
 
 import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.evidence.model.EvidenceModels.*;
+import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.ValidatedAnchor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -303,9 +305,25 @@ public class EvidenceRepository {
                 """, this::mapEvidence, sourceExperimentId, limit);
     }
 
+    @Transactional
     public void replaceDocumentEvidence(UUID runId,
                                         UUID documentId,
                                         List<NormalizedEvidenceRow> rows) {
+        List<UUID> evidenceIds = new java.util.ArrayList<>();
+        List<List<ValidatedAnchor>> anchors = new java.util.ArrayList<>();
+        for (int index = 0; index < (rows == null ? 0 : rows.size()); index++) {
+            evidenceIds.add(UUID.randomUUID());
+            anchors.add(List.of());
+        }
+        replaceDocumentEvidence(runId, documentId, rows, evidenceIds, anchors);
+    }
+
+    @Transactional
+    public void replaceDocumentEvidence(UUID runId,
+                                        UUID documentId,
+                                        List<NormalizedEvidenceRow> rows,
+                                        List<UUID> evidenceIds,
+                                        List<List<ValidatedAnchor>> anchorsByRow) {
         jdbcTemplate.update("""
                 UPDATE compound_evidence
                 SET is_current = FALSE, updated_at = CURRENT_TIMESTAMP
@@ -314,10 +332,15 @@ public class EvidenceRepository {
         if (rows == null || rows.isEmpty()) {
             return;
         }
+        if (evidenceIds == null || anchorsByRow == null
+                || evidenceIds.size() != rows.size() || anchorsByRow.size() != rows.size()) {
+            throw new IllegalArgumentException("Projected evidence IDs and anchors must align with rows");
+        }
         int rowIndex = 0;
         for (NormalizedEvidenceRow row : rows) {
+            UUID evidenceId = evidenceIds.get(rowIndex);
+            List<ValidatedAnchor> anchors = anchorsByRow.get(rowIndex);
             rowIndex++;
-            UUID evidenceId = UUID.randomUUID();
             jdbcTemplate.update("""
                     INSERT INTO compound_evidence (
                         evidence_id, run_id, document_id, row_index,
@@ -363,6 +386,18 @@ public class EvidenceRepository {
                     row.rowFingerprint(),
                     row.nameKind().name(),
                     row.dedupKey());
+            for (ValidatedAnchor anchor : anchors) {
+                jdbcTemplate.update("""
+                        INSERT INTO evidence_anchor (
+                            evidence_id, chunk_id, section_path, paragraph_index,
+                            sentence_start, sentence_end, page_start, page_end,
+                            exact_quote, quote_hash
+                        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+                        ON CONFLICT (evidence_id, chunk_id, quote_hash) DO NOTHING
+                        """, evidenceId, anchor.chunkId(), anchor.sectionPath(),
+                        anchor.paragraphIndex(), anchor.sentenceStart(), anchor.sentenceEnd(),
+                        anchor.exactQuote(), anchor.quoteHash());
+            }
         }
     }
 
