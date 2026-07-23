@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public final class MultiProfileEvidenceModels {
 
-    public static final String PROFILE_VERSION = "oomycete_questions_v1";
+    public static final String PROFILE_VERSION = "oomycete_questions_v2";
     public static final UUID DEFAULT_SOURCE_EXPERIMENT_ID =
             UUID.fromString("9038d6bc-6213-4009-ae5e-d1bd45e0c4b8");
 
@@ -132,8 +132,21 @@ public final class MultiProfileEvidenceModels {
             UUID recordId,
             List<String> cells,
             String fingerprint,
-            List<ValidatedAnchor> anchors
+            List<ValidatedAnchor> anchors,
+            ValidationStatus validationStatus,
+            String verificationNote
     ) {
+        public ValidatedEvidenceRow(UUID recordId,
+                                    List<String> cells,
+                                    String fingerprint,
+                                    List<ValidatedAnchor> anchors) {
+            this(recordId, cells, fingerprint, anchors, ValidationStatus.VALID, null);
+        }
+
+        public ValidatedEvidenceRow withValidation(ValidationStatus status, String note) {
+            return new ValidatedEvidenceRow(
+                    recordId, cells, fingerprint, anchors, status, note);
+        }
     }
 
     public record GenericEvidenceRecord(
@@ -148,6 +161,7 @@ public final class MultiProfileEvidenceModels {
             String rowFingerprint,
             ClassificationStatus classificationStatus,
             ValidationStatus validationStatus,
+            String verificationNote,
             ReviewStatus reviewStatus,
             String reviewNote,
             boolean current,

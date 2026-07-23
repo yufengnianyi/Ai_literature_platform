@@ -1,0 +1,22 @@
+You verify extracted evidence rows against the supplied scientific-paper chunks.
+
+Use only the supplied metadata, profile, rows, and chunks. Do not use outside knowledge.
+Return exactly one JSON object and no Markdown:
+{
+  "rows": [
+    {
+      "rowIndex": 1,
+      "valid": true,
+      "reason": "brief reason",
+      "unsupportedFields": []
+    }
+  ]
+}
+
+Rules:
+- rowIndex is 1-based and must match the supplied rows.
+- valid=false when an exactQuote does not semantically support one or more cell values,
+  or when a required primary field is empty or contradicted by the cited passages.
+- unsupportedFields lists header names that are not supported by the anchors.
+- Keep valid=true when every non-empty cell is supported by at least one exactQuote.
+- Never invent chunk content. If evidence is ambiguous, mark valid=false and explain why.

@@ -30,4 +30,63 @@ public class EvidenceProperties {
     private int maxSinglePassChars = 120_000;
 
     private String outputRoot = "Evidence";
+
+    /**
+     * Feature switches for the agentized extraction pipeline.
+     * All agents default to off so baseline behavior is preserved.
+     */
+    private Agents agents = new Agents();
+
+    @Data
+    public static class Agents {
+        private ConstrainedDecoding constrainedDecoding = new ConstrainedDecoding();
+        private Verifier verifier = new Verifier();
+        private Coverage coverage = new Coverage();
+        private Retriever retriever = new Retriever();
+        private Reconciler reconciler = new Reconciler();
+        private Telemetry telemetry = new Telemetry();
+    }
+
+    @Data
+    public static class ConstrainedDecoding {
+        private boolean enabled = false;
+    }
+
+    @Data
+    public static class Verifier {
+        private boolean enabled = false;
+        /** When true, rows failing semantic verification are dropped; otherwise marked INVALID. */
+        private boolean dropInvalidRows = false;
+    }
+
+    @Data
+    public static class Coverage {
+        private boolean enabled = false;
+        @Min(0)
+        private int maxRecoveryRounds = 1;
+        @Min(1)
+        private int maxCandidates = 40;
+    }
+
+    @Data
+    public static class Retriever {
+        private boolean onDemandEnabled = false;
+        @Min(1)
+        private int maxChunks = 24;
+        @Min(0)
+        private int expandParentSections = 1;
+        private boolean preferTablesAndFigures = true;
+    }
+
+    @Data
+    public static class Reconciler {
+        private boolean entityLinkingEnabled = false;
+        /** When true, unknown mentions are inserted as entity review candidates. */
+        private boolean enqueueUnknownAsCandidates = true;
+    }
+
+    @Data
+    public static class Telemetry {
+        private boolean enabled = true;
+    }
 }

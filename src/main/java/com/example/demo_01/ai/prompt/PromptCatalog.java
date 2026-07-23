@@ -33,6 +33,12 @@ public final class PromptCatalog {
             "prompts/evidence/multi-profile-classification-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM =
             "prompts/evidence/multi-profile-extraction-system.txt";
+    public static final String EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM =
+            "prompts/evidence/multi-profile-verify-system.txt";
+    public static final String EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM =
+            "prompts/evidence/multi-profile-coverage-system.txt";
+    public static final String EVIDENCE_MULTI_PROFILE_RETRIEVAL_SYSTEM =
+            "prompts/evidence/multi-profile-retrieval-system.txt";
     public static final String REPORT_EVIDENCE_SYSTEM =
             "prompts/report/evidence-report-system.txt";
     public static final String REPORT_EVIDENCE_CITATION_REPAIR_SYSTEM =

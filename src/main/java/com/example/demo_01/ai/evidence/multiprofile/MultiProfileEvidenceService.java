@@ -69,6 +69,24 @@ public class MultiProfileEvidenceService {
     private MultiProfileEvidenceExportService exportService;
 
     @Resource
+    private EvidenceExtractionAgent extractionAgent;
+
+    @Resource
+    private EvidenceVerifierAgent verifierAgent;
+
+    @Resource
+    private EvidenceCoverageAgent coverageAgent;
+
+    @Resource
+    private EvidenceRetrievalAgent retrievalAgent;
+
+    @Resource
+    private EvidenceReconcilerAgent reconcilerAgent;
+
+    @Resource
+    private EvidenceAgentTelemetryService telemetryService;
+
+    @Resource
     private ReviewReasoningChatClient chatClient;
 
     @Resource
@@ -308,12 +326,45 @@ public class MultiProfileEvidenceService {
         try {
             EvidenceProfile profile = profileRegistry.require(questionId);
             Map<String, ValidatedEvidenceRow> unique = new LinkedHashMap<>();
-            for (List<EvidenceChunk> modelChunks : modelBatches(chunks)) {
-                for (ValidatedEvidenceRow row : callExtractionModel(document, profile, modelChunks)) {
+            List<List<EvidenceChunk>> batches = telemetryService.timed(
+                    batch.batchId(), document.documentId(), questionId, "retriever",
+                    1, properties.getAgents().getRetriever().isOnDemandEnabled() ? 1 : 0, 0,
+                    telemetryService.detail("onDemand",
+                            properties.getAgents().getRetriever().isOnDemandEnabled()),
+                    () -> retrievalAgent.modelBatches(profile, chunks));
+
+            for (List<EvidenceChunk> modelChunks : batches) {
+                List<ValidatedEvidenceRow> extracted = telemetryService.timed(
+                        batch.batchId(), document.documentId(), questionId, "extractor",
+                        1, 1, 0,
+                        telemetryService.detail("chunkCount", modelChunks.size()),
+                        () -> extractionAgent.extract(document, profile, modelChunks));
+                for (ValidatedEvidenceRow row : extracted) {
                     unique.putIfAbsent(row.fingerprint(), row);
                 }
             }
-            List<ValidatedEvidenceRow> rows = List.copyOf(unique.values());
+
+            List<ValidatedEvidenceRow> extractedRows = List.copyOf(unique.values());
+            final List<ValidatedEvidenceRow> toVerify = extractedRows;
+            List<ValidatedEvidenceRow> verifiedRows = telemetryService.timed(
+                    batch.batchId(), document.documentId(), questionId, "verifier",
+                    1, properties.getAgents().getVerifier().isEnabled() ? 1 : 0, 0,
+                    telemetryService.detail("rowCount", toVerify.size()),
+                    () -> verifierAgent.verify(profile, toVerify, chunks));
+            final List<ValidatedEvidenceRow> toCover = verifiedRows;
+            List<ValidatedEvidenceRow> coveredRows = telemetryService.timed(
+                    batch.batchId(), document.documentId(), questionId, "coverage",
+                    1, properties.getAgents().getCoverage().isEnabled() ? 1 : 0, 0,
+                    telemetryService.detail("rowCountBefore", toCover.size()),
+                    () -> coverageAgent.recover(
+                            batch.batchId(), document, profile, chunks, toCover));
+            final List<ValidatedEvidenceRow> toReconcile = coveredRows;
+            List<ValidatedEvidenceRow> rows = telemetryService.timed(
+                    batch.batchId(), document.documentId(), questionId, "reconciler",
+                    1, 0, 0,
+                    telemetryService.detail("rowCount", toReconcile.size()),
+                    () -> reconcilerAgent.reconcile(document, profile, toReconcile));
+
             Path outputPath = documentOutputPath(batch.batchId(), document.documentId(), questionId);
             if (rows.isEmpty()) {
                 Files.deleteIfExists(outputPath);
@@ -337,29 +388,6 @@ public class MultiProfileEvidenceService {
             log.warn("Evidence extraction failed for document {} profile {}: {}",
                     document.documentId(), questionId, message(e), e);
         }
-    }
-
-    private List<ValidatedEvidenceRow> callExtractionModel(
-            SourceDocument document, EvidenceProfile profile, List<EvidenceChunk> chunks) {
-        String systemPrompt = PromptResources.load(
-                PromptCatalog.EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM);
-        String baseUserMessage = extractionInput(document, profile, chunks);
-        Exception lastError = null;
-        for (int attempt = 1; attempt <= properties.getMaxAttempts(); attempt++) {
-            String userMessage = retryMessage(baseUserMessage, lastError);
-            try {
-                String raw = responseText(chatClient.chatCore(
-                        SystemMessage.from(systemPrompt), UserMessage.from(userMessage)));
-                return outputValidator.parseAndValidateEvidence(raw, profile, chunks);
-            } catch (Exception e) {
-                lastError = e;
-                log.warn("Evidence profile {} attempt {}/{} failed for document {}: {}",
-                        profile.questionId(), attempt, properties.getMaxAttempts(),
-                        document.documentId(), message(e));
-            }
-        }
-        throw new IllegalStateException("Evidence profile " + profile.questionId()
-                + " failed after " + properties.getMaxAttempts() + " attempts", lastError);
     }
 
     private List<List<EvidenceChunk>> modelBatches(List<EvidenceChunk> chunks) {
@@ -421,32 +449,6 @@ public class MultiProfileEvidenceService {
                 Supplied chunks:
                 %s
                 """.formatted(questions, documentMetadata(document), renderChunks(chunks));
-    }
-
-    private String extractionInput(SourceDocument document,
-                                   EvidenceProfile profile,
-                                   List<EvidenceChunk> chunks) {
-        return """
-                Evidence profile:
-                - questionId: %s
-                - title: %s
-                - scope: %s
-                - one row represents: %s
-                - split rules: %s
-                - field guidance: %s
-                - headers in exact order: %s
-                - required primary fields: %s
-
-                %s
-
-                Supplied chunks:
-                %s
-                """.formatted(
-                profile.questionId(), profile.title(), profile.scope(), profile.rowUnit(),
-                profile.splitRules(), profile.guidance(), toJson(profile.headers()),
-                profile.primaryFieldIndexes().stream()
-                        .map(profile.headers()::get).toList(),
-                documentMetadata(document), renderChunks(chunks));
     }
 
     private String documentMetadata(SourceDocument document) {
@@ -528,7 +530,19 @@ public class MultiProfileEvidenceService {
                 PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM)
-                        + "\n" + profileRegistry.all());
+                        + "\n"
+                        + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM)
+                        + "\n"
+                        + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM)
+                        + "\n"
+                        + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_RETRIEVAL_SYSTEM)
+                        + "\n" + profileRegistry.all()
+                        + "\nagents="
+                        + "constrained=" + properties.getAgents().getConstrainedDecoding().isEnabled()
+                        + ";verifier=" + properties.getAgents().getVerifier().isEnabled()
+                        + ";coverage=" + properties.getAgents().getCoverage().isEnabled()
+                        + ";retriever=" + properties.getAgents().getRetriever().isOnDemandEnabled()
+                        + ";reconciler=" + properties.getAgents().getReconciler().isEntityLinkingEnabled());
     }
 
     private String sourceHash(List<SourceDocument> documents) {

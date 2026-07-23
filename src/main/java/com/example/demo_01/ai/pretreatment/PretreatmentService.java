@@ -3,7 +3,6 @@ package com.example.demo_01.ai.pretreatment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactDocument;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactScan;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.JournalQuality;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmJudgment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
@@ -11,10 +10,7 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.SkippedArtifact;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.TitleDecision;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.TitleVectorDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentQualityGate.QualityResult;
-import com.example.demo_01.ai.pretreatment.OomyceteTitleVectorMatcher.TitleMatchResult;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
 import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
 import jakarta.annotation.Resource;
@@ -40,15 +36,6 @@ public class PretreatmentService {
 
     @Resource
     private PretreatmentQualityGate qualityGate;
-
-    @Resource
-    private OomyceteTitleVectorMatcher titleVectorMatcher;
-
-    @Resource
-    private JournalQualityService journalQualityService;
-
-    @Resource
-    private JournalResolverService journalResolverService;
 
     @Resource
     private PretreatmentTitleMetadataResolver titleMetadataResolver;
@@ -80,13 +67,12 @@ public class PretreatmentService {
         repository.insertRun(runId, PretreatmentMode.scan, repository.configJson(properties), outputDir.toString(), startedAt);
         try {
             ArtifactScan scan = artifactScanner.scan(Path.of(properties.getArtifactRoot()), properties.getMaxDocuments());
-            Map<String, JournalQuality> journalQualityMap = journalQualityService.load(Path.of(properties.getJournalQualityPath()));
             List<PretreatmentDocumentResult> results = new ArrayList<>();
             for (SkippedArtifact skipped : scan.skipped()) {
                 results.add(skippedResult(runId, skipped));
             }
             for (ArtifactDocument document : scan.documents()) {
-                PretreatmentDocumentResult result = screenDocument(runId, document, journalQualityMap);
+                PretreatmentDocumentResult result = screenDocument(runId, document);
                 results.add(result);
                 repository.insertResult(result);
             }
@@ -145,22 +131,15 @@ public class PretreatmentService {
     }
 
     PretreatmentDocumentResult screenDocument(UUID runId,
-                                              ArtifactDocument document,
-                                              Map<String, JournalQuality> journalQualityMap) {
+                                              ArtifactDocument document) {
         RagDocumentMetadata metadata = document.metadata();
         if (titleMetadataResolver != null) {
             metadata = titleMetadataResolver.resolve(metadata);
         }
-        JournalQuality journalQuality = journalResolverService.resolve(metadata, journalQualityMap).quality();
         QualityResult qualityResult = qualityGate.evaluate(metadata, document.chunks(), properties.getQuality());
         if (qualityResult.decision() == QualityDecision.REJECT) {
-            return result(runId, document, metadata, qualityResult, null, journalQuality,
+            return result(runId, document, metadata, qualityResult,
                     LlmJudgment.notRun(qualityResult.reason()), qualityResult.rejectReasonCode());
-        }
-        TitleMatchResult titleMatch = titleVectorMatcher.match(metadata == null ? null : metadata.title(), properties.getTitleVector());
-        if (titleMatch.vectorDecision() == TitleVectorDecision.REJECT_LOW_TITLE_RELEVANCE) {
-            return result(runId, document, metadata, qualityResult, titleMatch, journalQuality,
-                    LlmJudgment.notRun("Title vector relevance is below active threshold."), "REJECTED_LOW_TITLE_RELEVANCE");
         }
         LlmJudgment judgment;
         try {
@@ -169,23 +148,20 @@ public class PretreatmentService {
                     metadata,
                     properties.getLlmMaxAttempts());
         } catch (Exception ex) {
-            judgment = new LlmJudgment(LlmLabel.UNCERTAIN, 0.0, List.of(), "", List.of(),
+            judgment = new LlmJudgment(LlmLabel.NOT_RUN, List.of(), "", List.of(),
                     "LLM judgment failed; manual review required: " + rootMessage(ex));
             log.warn("PreTreatment LLM judgment failed for document {}: {}", document.documentId(), rootMessage(ex));
         }
-        return result(runId, document, metadata, qualityResult, titleMatch, journalQuality, judgment, "");
+        return result(runId, document, metadata, qualityResult, judgment, "");
     }
 
     private PretreatmentDocumentResult result(UUID runId,
                                               ArtifactDocument document,
                                               RagDocumentMetadata metadata,
                                               QualityResult qualityResult,
-                                              TitleMatchResult titleMatch,
-                                              JournalQuality journalQuality,
                                               LlmJudgment judgment,
                                               String rejectReasonCode) {
-        double confidence = judgment.confidence() == null ? 0.0 : judgment.confidence();
-        FinalDecision finalDecision = finalDecision(qualityResult, titleMatch, judgment, confidence);
+        FinalDecision finalDecision = finalDecision(qualityResult, judgment);
         String finalRejectReasonCode = finalDecision == FinalDecision.REJECTED && (rejectReasonCode == null || rejectReasonCode.isBlank())
                 ? reasonCode(judgment)
                 : rejectReasonCode;
@@ -198,14 +174,7 @@ public class PretreatmentService {
                 metadata == null ? null : metadata.doiNormalized(),
                 qualityResult == null ? null : qualityResult.decision(),
                 qualityResult == null ? Map.of() : qualityResult.metrics(),
-                titleMatch == null ? null : titleMatch.titleDecision(),
-                titleMatch == null ? null : titleMatch.score(),
-                titleMatch == null ? null : titleMatch.bestProfileTerm(),
-                titleMatch == null ? Map.of() : titleMatch.thresholdPasses(),
-                titleMatch == null ? null : titleMatch.vectorDecision(),
-                journalQuality.tier(),
                 judgment.label(),
-                confidence,
                 finalDecision,
                 finalRejectReasonCode,
                 judgment.taxa(),
@@ -216,23 +185,17 @@ public class PretreatmentService {
     }
 
     private FinalDecision finalDecision(QualityResult qualityResult,
-                                        TitleMatchResult titleMatch,
-                                        LlmJudgment judgment,
-                                        double confidence) {
+                                        LlmJudgment judgment) {
         if (qualityResult != null && qualityResult.decision() == QualityDecision.REJECT) {
             return FinalDecision.REJECTED;
         }
-        if (titleMatch != null && titleMatch.vectorDecision() == TitleVectorDecision.REJECT_LOW_TITLE_RELEVANCE) {
-            return FinalDecision.REJECTED;
-        }
-        if (judgment.label() == LlmLabel.PRIMARY_OOMYCETE
-                && confidence >= properties.getAcceptanceConfidenceThreshold()) {
+        if (judgment.label() == LlmLabel.RELEVANT) {
             return FinalDecision.ACCEPTED;
         }
-        if (judgment.label() == LlmLabel.INCIDENTAL_MENTION || judgment.label() == LlmLabel.NOT_OOMYCETE) {
+        if (judgment.label() == LlmLabel.NOT_RELEVANT) {
             return FinalDecision.REJECTED;
         }
-        return FinalDecision.UNCERTAIN;
+        return FinalDecision.REJECTED;
     }
 
     private PretreatmentDocumentResult skippedResult(UUID runId, SkippedArtifact skipped) {
@@ -246,14 +209,7 @@ public class PretreatmentService {
                 QualityDecision.REJECT,
                 Map.of("chunkCount", 0, "totalTextChars", 0, "averageChunkChars", 0.0,
                         "replacementCharRatio", 0.0, "shortLineRatio", 0.0),
-                null,
-                null,
-                null,
-                Map.of(),
-                null,
-                PretreatmentModels.JournalQualityTier.UNKNOWN,
                 LlmLabel.NOT_RUN,
-                0.0,
                 FinalDecision.REJECTED,
                 "MISSING_ARTIFACT",
                 List.of(),
@@ -278,7 +234,7 @@ public class PretreatmentService {
                 scan.documents().size(),
                 count(results, FinalDecision.ACCEPTED),
                 count(results, FinalDecision.REJECTED),
-                count(results, FinalDecision.UNCERTAIN),
+                0,
                 count(results, FinalDecision.SKIPPED),
                 vectorsRemoved,
                 properties.getCli().isDryRun(),
@@ -312,8 +268,8 @@ public class PretreatmentService {
             return "";
         }
         return switch (judgment.label()) {
-            case INCIDENTAL_MENTION -> "LLM_INCIDENTAL_MENTION";
-            case NOT_OOMYCETE -> "LLM_NOT_OOMYCETE";
+            case NOT_RELEVANT -> "LLM_NOT_RELEVANT";
+            case NOT_RUN -> "LLM_NOT_RUN";
             default -> "";
         };
     }

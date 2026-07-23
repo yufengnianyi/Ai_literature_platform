@@ -4,7 +4,6 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.TitleVectorDecision;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
@@ -29,7 +28,6 @@ public class PretreatmentReportWriter {
             writeCsv(outputDir.resolve("results.csv"), results);
             writeIds(outputDir.resolve("accepted-document-ids.txt"), results, FinalDecision.ACCEPTED);
             writeIds(outputDir.resolve("rejected-document-ids.txt"), results, FinalDecision.REJECTED);
-            writeIds(outputDir.resolve("uncertain-document-ids.txt"), results, FinalDecision.UNCERTAIN);
             writeSummary(outputDir.resolve("summary.md"), summary, results);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write PreTreatment report: " + outputDir, e);
@@ -81,7 +79,7 @@ public class PretreatmentReportWriter {
 
     private void writeCsv(Path path, List<PretreatmentDocumentResult> results) throws IOException {
         StringBuilder builder = new StringBuilder();
-        builder.append("document_id,title,journal,doi,quality_decision,reject_reason_code,quality_metrics,title_decision,title_vector_score,title_best_profile_term,title_threshold_passes,title_vector_decision,journal_quality,llm_label,confidence,final_decision,reason\n");
+        builder.append("document_id,title,journal,doi,quality_decision,reject_reason_code,quality_metrics,llm_label,final_decision,reason\n");
         for (PretreatmentDocumentResult result : results) {
             builder.append(csv(result.documentId() == null ? "" : result.documentId().toString())).append(',')
                     .append(csv(result.title())).append(',')
@@ -90,14 +88,7 @@ public class PretreatmentReportWriter {
                     .append(csv(name(result.qualityDecision()))).append(',')
                     .append(csv(result.rejectReasonCode())).append(',')
                     .append(csv(json(result.qualityMetrics()))).append(',')
-                    .append(csv(name(result.titleDecision()))).append(',')
-                    .append(result.titleVectorScore() == null ? "" : result.titleVectorScore()).append(',')
-                    .append(csv(result.titleBestProfileTerm())).append(',')
-                    .append(csv(json(result.titleThresholdPasses()))).append(',')
-                    .append(csv(name(result.titleVectorDecision()))).append(',')
-                    .append(csv(name(result.journalQuality()))).append(',')
                     .append(csv(name(result.llmLabel()))).append(',')
-                    .append(result.confidence()).append(',')
                     .append(csv(name(result.finalDecision()))).append(',')
                     .append(csv(result.reason())).append('\n');
         }
@@ -132,21 +123,15 @@ public class PretreatmentReportWriter {
                 | Processed documents | %d |
                 | Accepted | %d |
                 | Rejected | %d |
-                | Uncertain | %d |
                 | Skipped | %d |
                 | Vectors removed | %d |
 
-                ## Three-layer Funnel
+                ## Screening Funnel
 
                 | Layer | Pass | Reject/Stop |
                 | --- | ---: | ---: |
                 | Quality gate | %d | %d |
-                | Title vector | %d | %d |
-                | Abstract LLM accepted | %d | %d |
-
-                ## Title Threshold Sweep
-
-                %s
+                | Title + abstract LLM | %d | %d |
                 """.formatted(
                 summary.runId(),
                 summary.mode(),
@@ -156,16 +141,12 @@ public class PretreatmentReportWriter {
                 summary.processedDocuments(),
                 summary.acceptedDocuments(),
                 summary.rejectedDocuments(),
-                summary.uncertainDocuments(),
                 summary.skippedDocuments(),
                 summary.vectorsRemoved(),
                 countQuality(results, QualityDecision.PASS),
                 countQuality(results, QualityDecision.REJECT),
-                countTitleVector(results, TitleVectorDecision.PASS),
-                countTitleVector(results, TitleVectorDecision.REJECT_LOW_TITLE_RELEVANCE),
                 count(results, FinalDecision.ACCEPTED),
-                count(results, FinalDecision.REJECTED) + count(results, FinalDecision.UNCERTAIN),
-                thresholdTable(results));
+                countPostQualityNotAccepted(results));
         Files.writeString(path, markdown);
     }
 
@@ -194,36 +175,10 @@ public class PretreatmentReportWriter {
         return (int) results.stream().filter(result -> result.qualityDecision() == decision).count();
     }
 
-    private int countTitleVector(List<PretreatmentDocumentResult> results, TitleVectorDecision decision) {
-        return (int) results.stream().filter(result -> result.titleVectorDecision() == decision).count();
-    }
-
-    private String thresholdTable(List<PretreatmentDocumentResult> results) {
-        java.util.LinkedHashSet<String> thresholds = new java.util.LinkedHashSet<>();
-        for (PretreatmentDocumentResult result : results) {
-            if (result.titleThresholdPasses() != null) {
-                thresholds.addAll(result.titleThresholdPasses().keySet());
-            }
-        }
-        if (thresholds.isEmpty()) {
-            return "_No title threshold data._";
-        }
-        StringBuilder builder = new StringBuilder();
-        builder.append("| Threshold | Pass | Reject |\n");
-        builder.append("| --- | ---: | ---: |\n");
-        for (String threshold : thresholds) {
-            int pass = 0;
-            int reject = 0;
-            for (PretreatmentDocumentResult result : results) {
-                Boolean value = result.titleThresholdPasses() == null ? null : result.titleThresholdPasses().get(threshold);
-                if (Boolean.TRUE.equals(value)) {
-                    pass++;
-                } else if (value != null) {
-                    reject++;
-                }
-            }
-            builder.append("| ").append(threshold).append(" | ").append(pass).append(" | ").append(reject).append(" |\n");
-        }
-        return builder.toString();
+    private int countPostQualityNotAccepted(List<PretreatmentDocumentResult> results) {
+        return (int) results.stream()
+                .filter(result -> result.qualityDecision() == QualityDecision.PASS)
+                .filter(result -> result.finalDecision() != FinalDecision.ACCEPTED)
+                .count();
     }
 }

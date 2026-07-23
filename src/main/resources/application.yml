@@ -139,13 +139,6 @@ app:
         min-total-text-chars: ${APP_AI_PRETREATMENT_QUALITY_MIN_TOTAL_TEXT_CHARS:1500}
         max-replacement-char-ratio: ${APP_AI_PRETREATMENT_QUALITY_MAX_REPLACEMENT_CHAR_RATIO:0.03}
         max-short-line-ratio: ${APP_AI_PRETREATMENT_QUALITY_MAX_SHORT_LINE_RATIO:0.80}
-      title-vector:
-        active-threshold: ${APP_AI_PRETREATMENT_TITLE_VECTOR_ACTIVE_THRESHOLD:0.30}
-        thresholds:
-          - 0.30
-          - 0.40
-          - 0.50
-          - 0.60
     review:
       enabled: true
       legacy-enabled: false
@@ -174,6 +167,26 @@ app:
       max-single-pass-chunks: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHUNKS:40}
       max-single-pass-chars: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHARS:120000}
       output-root: ${APP_AI_EVIDENCE_OUTPUT_ROOT:Evidence}
+      agents:
+        constrained-decoding:
+          enabled: ${APP_AI_EVIDENCE_CONSTRAINED_DECODING:false}
+        verifier:
+          enabled: ${APP_AI_EVIDENCE_VERIFIER:false}
+          drop-invalid-rows: ${APP_AI_EVIDENCE_VERIFIER_DROP_INVALID:false}
+        coverage:
+          enabled: ${APP_AI_EVIDENCE_COVERAGE:false}
+          max-recovery-rounds: ${APP_AI_EVIDENCE_COVERAGE_MAX_ROUNDS:1}
+          max-candidates: ${APP_AI_EVIDENCE_COVERAGE_MAX_CANDIDATES:40}
+        retriever:
+          on-demand-enabled: ${APP_AI_EVIDENCE_RETRIEVER:false}
+          max-chunks: ${APP_AI_EVIDENCE_RETRIEVER_MAX_CHUNKS:24}
+          expand-parent-sections: ${APP_AI_EVIDENCE_RETRIEVER_EXPAND:1}
+          prefer-tables-and-figures: ${APP_AI_EVIDENCE_RETRIEVER_PREFER_TABLES:true}
+        reconciler:
+          entity-linking-enabled: ${APP_AI_EVIDENCE_RECONCILER:false}
+          enqueue-unknown-as-candidates: ${APP_AI_EVIDENCE_RECONCILER_ENQUEUE:true}
+        telemetry:
+          enabled: ${APP_AI_EVIDENCE_TELEMETRY:true}
     report:
       output-root: ${APP_AI_REPORT_OUTPUT_ROOT:tmp}
       source-experiment-id: ${APP_AI_REPORT_SOURCE_EXPERIMENT_ID:efe44f92-8d28-4902-bf77-a15d3bf14ee8}

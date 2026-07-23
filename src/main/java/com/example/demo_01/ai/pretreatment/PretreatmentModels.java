@@ -23,28 +23,16 @@ public final class PretreatmentModels {
         scan, apply
     }
 
-    public enum TitleDecision {
-        TITLE_MATCH, TITLE_UNCERTAIN, REJECT_NO_OOMYCETE_SIGNAL
-    }
-
     public enum QualityDecision {
         PASS, REJECT
     }
 
-    public enum TitleVectorDecision {
-        PASS, REJECT_LOW_TITLE_RELEVANCE
-    }
-
-    public enum JournalQualityTier {
-        HIGH, MEDIUM, LOW, UNKNOWN
-    }
-
     public enum LlmLabel {
-        PRIMARY_OOMYCETE, INCIDENTAL_MENTION, NOT_OOMYCETE, UNCERTAIN, NOT_RUN
+        RELEVANT, NOT_RELEVANT, NOT_RUN
     }
 
     public enum FinalDecision {
-        ACCEPTED, REJECTED, UNCERTAIN, SKIPPED
+        ACCEPTED, REJECTED, SKIPPED
     }
 
     public record ArtifactDocument(
@@ -71,32 +59,6 @@ public final class PretreatmentModels {
     ) {
     }
 
-    public record JournalQuality(
-            JournalQualityTier tier,
-            boolean trusted,
-            String casPartition,
-            String source,
-            String note
-    ) {
-        public static JournalQuality unknown() {
-            return new JournalQuality(JournalQualityTier.UNKNOWN, false, null, null, null);
-        }
-    }
-
-    public record ResolvedJournal(
-            String rawJournal,
-            String resolvedJournal,
-            List<String> issns,
-            String publisher,
-            String source,
-            double confidence,
-            JournalQuality quality
-    ) {
-        public static ResolvedJournal raw(String rawJournal, JournalQuality quality) {
-            return new ResolvedJournal(rawJournal, rawJournal, List.of(), null, "RAW_METADATA", 0.3, quality);
-        }
-    }
-
     public record RepresentativeChunk(
             String chunkId,
             int chunkIndex,
@@ -108,14 +70,13 @@ public final class PretreatmentModels {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record LlmJudgment(
             LlmLabel label,
-            Double confidence,
             List<String> taxa,
             String researchFocus,
             List<String> evidenceChunkIds,
             String reason
     ) {
         public static LlmJudgment notRun(String reason) {
-            return new LlmJudgment(LlmLabel.NOT_RUN, 0.0, List.of(), "", List.of(), reason);
+            return new LlmJudgment(LlmLabel.NOT_RUN, List.of(), "", List.of(), reason);
         }
     }
 
@@ -128,14 +89,7 @@ public final class PretreatmentModels {
             String doi,
             QualityDecision qualityDecision,
             Map<String, Object> qualityMetrics,
-            TitleDecision titleDecision,
-            Double titleVectorScore,
-            String titleBestProfileTerm,
-            Map<String, Boolean> titleThresholdPasses,
-            TitleVectorDecision titleVectorDecision,
-            JournalQualityTier journalQuality,
             LlmLabel llmLabel,
-            double confidence,
             FinalDecision finalDecision,
             String rejectReasonCode,
             List<String> taxa,

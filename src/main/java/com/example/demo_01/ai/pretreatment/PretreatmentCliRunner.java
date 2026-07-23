@@ -29,12 +29,11 @@ public class PretreatmentCliRunner implements ApplicationRunner {
             return;
         }
         PretreatmentRunSummary summary = pretreatmentService.runCli();
-        log.info("PreTreatment {} completed: runId={}, accepted={}, rejected={}, uncertain={}, skipped={}, removed={}, output={}",
+        log.info("PreTreatment {} completed: runId={}, accepted={}, rejected={}, skipped={}, removed={}, output={}",
                 summary.mode(),
                 summary.runId(),
                 summary.acceptedDocuments(),
                 summary.rejectedDocuments(),
-                summary.uncertainDocuments(),
                 summary.skippedDocuments(),
                 summary.vectorsRemoved(),
                 summary.outputDir());

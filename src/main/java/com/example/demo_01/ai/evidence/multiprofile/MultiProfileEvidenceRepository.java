@@ -302,10 +302,13 @@ public class MultiProfileEvidenceRepository {
                     INSERT INTO generic_evidence_record (
                         record_id, batch_id, document_id, question_id, profile_version,
                         row_index, cells_json, row_fingerprint, classification_status,
-                        validation_status, review_status, is_current
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, 'VALID', 'PENDING', TRUE)
+                        validation_status, verification_note, review_status, is_current
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, 'PENDING', TRUE)
                     """, row.recordId(), batchId, documentId, questionId, profileVersion,
-                    rowIndex, toJson(row.cells()), row.fingerprint(), classificationStatus.name());
+                    rowIndex, toJson(row.cells()), row.fingerprint(), classificationStatus.name(),
+                    (row.validationStatus() == null
+                            ? ValidationStatus.VALID : row.validationStatus()).name(),
+                    row.verificationNote());
             for (ValidatedAnchor anchor : row.anchors()) {
                 jdbcTemplate.update("""
                         INSERT INTO generic_evidence_anchor (
@@ -538,6 +541,7 @@ public class MultiProfileEvidenceRepository {
                 rs.getString("row_fingerprint"),
                 ClassificationStatus.valueOf(rs.getString("classification_status")),
                 ValidationStatus.valueOf(rs.getString("validation_status")),
+                rs.getString("verification_note"),
                 ReviewStatus.valueOf(rs.getString("review_status")),
                 rs.getString("review_note"),
                 rs.getBoolean("is_current"),

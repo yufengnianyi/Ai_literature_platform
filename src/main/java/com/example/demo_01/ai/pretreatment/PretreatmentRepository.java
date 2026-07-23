@@ -1,13 +1,10 @@
 package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.JournalQualityTier;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunStatus;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.TitleDecision;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
@@ -100,11 +97,9 @@ public class PretreatmentRepository {
                 insert into pretreatment_document_result (
                     run_id, document_id, storage_dir, title, journal, doi,
                     quality_decision, quality_metrics_json,
-                    title_decision, title_vector_score, title_best_profile_term,
-                    title_threshold_passes_json, title_vector_decision,
-                    journal_quality, llm_label, confidence, final_decision, reject_reason_code,
+                    llm_label, final_decision, reject_reason_code,
                     taxa_json, research_focus, evidence_chunk_ids_json, reason, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?, ?,
+                ) values (?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?,
                     cast(? as jsonb), ?, cast(? as jsonb), ?, ?)
                 """,
                 result.runId(),
@@ -115,14 +110,7 @@ public class PretreatmentRepository {
                 result.doi(),
                 name(result.qualityDecision()),
                 toJson(result.qualityMetrics()),
-                name(result.titleDecision()),
-                result.titleVectorScore(),
-                result.titleBestProfileTerm(),
-                toJson(result.titleThresholdPasses()),
-                name(result.titleVectorDecision()),
-                name(result.journalQuality()),
                 name(result.llmLabel()),
-                result.confidence(),
                 name(result.finalDecision()),
                 result.rejectReasonCode(),
                 toJson(result.taxa()),
@@ -137,9 +125,7 @@ public class PretreatmentRepository {
             Map<String, Object> config = new LinkedHashMap<>();
             config.put("artifactRoot", properties.getArtifactRoot());
             config.put("outputRoot", properties.getOutputRoot());
-            config.put("journalQualityPath", properties.getJournalQualityPath());
             config.put("promptPath", properties.getPromptPath());
-            config.put("acceptanceConfidenceThreshold", properties.getAcceptanceConfidenceThreshold());
             config.put("maxDocuments", properties.getMaxDocuments());
             config.put("representativeChunks", properties.getRepresentativeChunks());
             config.put("maxLlmInputChars", properties.getMaxLlmInputChars());
@@ -148,10 +134,6 @@ public class PretreatmentRepository {
             config.put("qualityMinTotalTextChars", properties.getQuality().getMinTotalTextChars());
             config.put("qualityMaxReplacementCharRatio", properties.getQuality().getMaxReplacementCharRatio());
             config.put("qualityMaxShortLineRatio", properties.getQuality().getMaxShortLineRatio());
-            config.put("titleVectorActiveThreshold", properties.getTitleVector().getActiveThreshold());
-            config.put("titleVectorThresholds", properties.getTitleVector().getThresholds());
-            config.put("journalResolutionEnabled", properties.getJournalResolution().isEnabled());
-            config.put("journalResolutionCrossrefBaseUrl", properties.getJournalResolution().getCrossrefBaseUrl());
             config.put("cliMode", properties.getCli().getMode());
             config.put("dryRun", properties.getCli().isDryRun());
             return objectMapper.writeValueAsString(config);

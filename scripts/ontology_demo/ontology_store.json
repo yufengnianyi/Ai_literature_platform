@@ -1,0 +1,57 @@
+{
+  "schema_version": "ontology-demo-v1",
+  "entity_types": [
+    "pathogen",
+    "compound",
+    "disease",
+    "assay",
+    "target",
+    "host"
+  ],
+  "relation_types": [
+    "has_activity_against",
+    "evaluated_by",
+    "causes"
+  ],
+  "entities": [
+    {
+      "key": "pathogen:phytophthora_infestans",
+      "canonical_name": "Phytophthora infestans",
+      "entity_type": "pathogen",
+      "aliases": [
+        "P. infestans",
+        "potato late blight pathogen"
+      ],
+      "definition": "An oomycete pathogen causing potato late blight.",
+      "status": "approved",
+      "evidence": []
+    },
+    {
+      "key": "pathogen:pythium_ultimum",
+      "canonical_name": "Pythium ultimum",
+      "entity_type": "pathogen",
+      "aliases": [
+        "P. ultimum"
+      ],
+      "definition": "An oomycete pathogen associated with damping-off and root rot.",
+      "status": "approved",
+      "evidence": []
+    },
+    {
+      "key": "disease:late_blight",
+      "canonical_name": "Late blight",
+      "entity_type": "disease",
+      "aliases": [
+        "late blight"
+      ],
+      "definition": "A plant disease commonly caused by Phytophthora infestans.",
+      "status": "approved",
+      "evidence": []
+    }
+  ],
+  "relations": [],
+  "summary": {
+    "entity_count": 3,
+    "relation_count": 0
+  }
+}

@@ -112,11 +112,9 @@ public class PretreatmentLlmJudge {
         if (output == null) {
             return LlmJudgment.notRun("Empty LLM output");
         }
-        LlmLabel label = output.label() == null ? LlmLabel.UNCERTAIN : output.label();
-        double confidence = output.confidence() == null ? 0.0 : Math.max(0.0, Math.min(1.0, output.confidence()));
+        LlmLabel label = output.label() == null ? LlmLabel.NOT_RUN : output.label();
         return new LlmJudgment(
                 label,
-                confidence,
                 output.taxa() == null ? List.of() : output.taxa(),
                 output.researchFocus() == null ? "" : output.researchFocus(),
                 output.evidenceChunkIds() == null ? List.of() : output.evidenceChunkIds(),
