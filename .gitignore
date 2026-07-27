@@ -64,6 +64,10 @@ ai-literature-frontend/dist/
 /data/rag/
 data/rag/
 data/bm25-index/
+# Generated experiment outputs
+/outputs/
+/output/
+/PreTreatment/outputs/
 # Generated presentation artifacts
 /presentation-output/
 # Generated evidence artifacts
@@ -73,6 +77,8 @@ data/bm25-index/
 # GitNexus local index (generated)
 /.gitnexus/
 .gitnexus/
+**/__pycache__/
+*.py[cod]
 .codex/*
 !.codex/agents/
 !.codex/agents/**
