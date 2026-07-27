@@ -88,8 +88,19 @@ public final class EvidenceModels {
             Integer paragraphIndex,
             Integer sentenceStart,
             Integer sentenceEnd,
-            String text
+            String text,
+            String contentType,
+            String sourceTei
     ) {
+        /**
+         * Backward-compatible constructor for chunks that do not carry content-type / TEI
+         * provenance (e.g. synthetic or test chunks). Prefer the canonical constructor when the
+         * source metadata is available so on-demand table loading can locate the TEI.
+         */
+        public EvidenceChunk(String chunkId, String sectionPath, Integer paragraphIndex,
+                             Integer sentenceStart, Integer sentenceEnd, String text) {
+            this(chunkId, sectionPath, paragraphIndex, sentenceStart, sentenceEnd, text, null, null);
+        }
     }
 
     public record CompoundEvidenceRecord(

@@ -37,6 +37,24 @@ public class EvidenceProperties {
      */
     private Agents agents = new Agents();
 
+    /**
+     * On-demand table loading: when an evidence profile needs a table body (e.g. Q1 activity
+     * data), the relevant table is parsed from the document TEI, resolved and injected as an
+     * anchorable chunk. Disabled by default so baseline behavior is preserved.
+     */
+    private Table table = new Table();
+
+    @Data
+    public static class Table {
+        private boolean enabled = false;
+        /** Use an LLM to pick which table captions are relevant; falls back to keywords on failure. */
+        private boolean llmSelect = true;
+        @Min(1)
+        private int maxTables = 6;
+        @Min(1)
+        private int maxTableChars = 8_000;
+    }
+
     @Data
     public static class Agents {
         private ConstrainedDecoding constrainedDecoding = new ConstrainedDecoding();

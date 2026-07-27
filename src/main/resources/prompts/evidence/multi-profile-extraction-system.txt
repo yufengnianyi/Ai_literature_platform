@@ -30,3 +30,15 @@ Requirements:
 - Use multiple anchors when facts in one row come from different passages.
 - Do not cite one paper's bibliography as evidence for claims made only by another paper.
 - If the supplied paper contains no qualifying evidence, return {"rows":[]}.
+
+Tables and codes:
+- Chunks whose section starts with "Table" contain a markdown table rendered from the paper.
+  Read each data row as one candidate record; numeric cells (e.g. IC50/EC50/MIC values) are the
+  activity data. You may quote a whole table row verbatim as the anchor for its numeric cells.
+- Table cells often use codes: footnote markers (a, b, c ...), compound numbers (1, 2a), or
+  abbreviated names (e.g. "A. camptosporum"). When a cell is a code, resolve it using the table's
+  "Footnotes:" line, the "Legend:" block, or the paper's body text, and fill the completed value
+  (e.g. full binomial name or standard compound name) in the appropriate cell.
+- Every resolved value must still be anchored: cite the table row for the numeric value AND cite
+  the footnote/legend/body chunk that defines the code. Do not invent an expansion that is not
+  present verbatim in some supplied chunk.

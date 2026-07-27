@@ -72,6 +72,15 @@
 - Rerank：未启用
 - 实验总耗时：77196 ms
 
+## 测试文献
+
+- Acremoxanthone E 测试文献：
+  - 文献 ID：`7ae6fb01-cad8-4b71-a8db-35b6e03a22fb`
+  - 标题：`Acremoxanthone E, a Novel Member of Heterodimeric Polyketides with a Bicyclo[3.2.2]nonene Ring, Produced by Acremonium camptosporum W. Gams (Clavicipitaceae) Endophytic Fungus`
+  - GROBID 全文 TEI：`D:\Project\ai_coding_platform\demo_01\data\rag\7ae6fb01-cad8-4b71-a8db-35b6e03a22fb\document.tei.xml`
+  - GROBID 头部 TEI：`D:\Project\ai_coding_platform\demo_01\data\rag\7ae6fb01-cad8-4b71-a8db-35b6e03a22fb\header.tei.xml`
+  - 原始 PDF：`D:\Project\ai_coding_platform\demo_01\data\rag\7ae6fb01-cad8-4b71-a8db-35b6e03a22fb\source.pdf`
+
 ## 运行配置
 
 - `APP_AI_RAG_EVALUATION_SOURCE_JUDGMENTS_100_EXPERIMENT_ID`：100 篇标注复用来源。

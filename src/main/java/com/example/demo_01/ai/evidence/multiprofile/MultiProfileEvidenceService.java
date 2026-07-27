@@ -84,6 +84,9 @@ public class MultiProfileEvidenceService {
     private EvidenceReconcilerAgent reconcilerAgent;
 
     @Resource
+    private com.example.demo_01.ai.evidence.table.TableContextService tableContextService;
+
+    @Resource
     private EvidenceAgentTelemetryService telemetryService;
 
     @Resource
@@ -325,13 +328,16 @@ public class MultiProfileEvidenceService {
         repository.markExtractionRunning(batch.batchId(), document.documentId(), questionId);
         try {
             EvidenceProfile profile = profileRegistry.require(questionId);
+            // Phase C: augment this question's chunk set with any on-demand table bodies so their
+            // anchors stay valid through retrieval, extraction, verification and coverage.
+            List<EvidenceChunk> profileChunks = tableContextService.augment(profile, chunks);
             Map<String, ValidatedEvidenceRow> unique = new LinkedHashMap<>();
             List<List<EvidenceChunk>> batches = telemetryService.timed(
                     batch.batchId(), document.documentId(), questionId, "retriever",
                     1, properties.getAgents().getRetriever().isOnDemandEnabled() ? 1 : 0, 0,
                     telemetryService.detail("onDemand",
                             properties.getAgents().getRetriever().isOnDemandEnabled()),
-                    () -> retrievalAgent.modelBatches(profile, chunks));
+                    () -> retrievalAgent.modelBatches(profile, profileChunks));
 
             for (List<EvidenceChunk> modelChunks : batches) {
                 List<ValidatedEvidenceRow> extracted = telemetryService.timed(
@@ -350,14 +356,14 @@ public class MultiProfileEvidenceService {
                     batch.batchId(), document.documentId(), questionId, "verifier",
                     1, properties.getAgents().getVerifier().isEnabled() ? 1 : 0, 0,
                     telemetryService.detail("rowCount", toVerify.size()),
-                    () -> verifierAgent.verify(profile, toVerify, chunks));
+                    () -> verifierAgent.verify(profile, toVerify, profileChunks));
             final List<ValidatedEvidenceRow> toCover = verifiedRows;
             List<ValidatedEvidenceRow> coveredRows = telemetryService.timed(
                     batch.batchId(), document.documentId(), questionId, "coverage",
                     1, properties.getAgents().getCoverage().isEnabled() ? 1 : 0, 0,
                     telemetryService.detail("rowCountBefore", toCover.size()),
                     () -> coverageAgent.recover(
-                            batch.batchId(), document, profile, chunks, toCover));
+                            batch.batchId(), document, profile, profileChunks, toCover));
             final List<ValidatedEvidenceRow> toReconcile = coveredRows;
             List<ValidatedEvidenceRow> rows = telemetryService.timed(
                     batch.batchId(), document.documentId(), questionId, "reconciler",
@@ -542,7 +548,10 @@ public class MultiProfileEvidenceService {
                         + ";verifier=" + properties.getAgents().getVerifier().isEnabled()
                         + ";coverage=" + properties.getAgents().getCoverage().isEnabled()
                         + ";retriever=" + properties.getAgents().getRetriever().isOnDemandEnabled()
-                        + ";reconciler=" + properties.getAgents().getReconciler().isEntityLinkingEnabled());
+                        + ";reconciler=" + properties.getAgents().getReconciler().isEntityLinkingEnabled()
+                        + ";table=" + properties.getTable().isEnabled()
+                        + ":llmSelect=" + properties.getTable().isLlmSelect()
+                        + ":maxTables=" + properties.getTable().getMaxTables());
     }
 
     private String sourceHash(List<SourceDocument> documents) {

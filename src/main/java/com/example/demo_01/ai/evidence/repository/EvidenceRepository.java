@@ -264,7 +264,9 @@ public class EvidenceRepository {
                     integer(metadata.get("paragraph_index")),
                     integer(metadata.get("sentence_start")),
                     integer(metadata.get("sentence_end")),
-                    rs.getString("text")
+                    rs.getString("text"),
+                    string(metadata.get("content_type")),
+                    string(metadata.get("source_tei"))
             );
         }, documentId.toString());
     }
