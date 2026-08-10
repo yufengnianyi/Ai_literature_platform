@@ -65,8 +65,9 @@ public class EvidenceProfileRegistry {
                 "Create separate rows for different strains or isolates of the same species. If only a preliminary assembly is reported and effectors were not analyzed, leave effector statistics blank."));
         add(values, profile("Q6", "Oomycete functional genes, including metabolism and nutrition", List.of(
                         "Gene name", "Alias/homologous gene", "Gene ID/accession", "Oomycete species (Latin name)", "Strain/isolate",
-                        "Gene functional category", "Encoded protein/product", "Functional validation method", "Mutation/silencing phenotype",
-                        "Overexpression phenotype", "Expression pattern", "Biological process involved", "Reference", "Notes"),
+                        "Gene functional category", "Encoded protein/product", "Functional validation method", "Mutation phenotype (positive result)",
+                        "Negative/no-effect phenotype (key)", "Overexpression phenotype", "Expression pattern",
+                        "Upstream/downstream regulatory relationship", "Biological process involved", "Reference", "Notes"),
                 List.of(0, 3),
                 "Evidence on oomycete functional genes related to growth and development, pathogenicity or virulence, metabolism and nutrition, stress responses, cell wall or membrane biosynthesis, signaling, reproduction, and other non-classical-effector functions.",
                 "One oomycete species-gene combination.",
@@ -153,6 +154,7 @@ public class EvidenceProfileRegistry {
             case "Q6" -> """
                     Functional categories must use growth/development, pathogenicity/virulence, metabolism/nutrition, stress response, cell wall/membrane biosynthesis, signaling, reproduction/sexual reproduction, or other.
                     Record validation methods such as knockout, RNAi, overexpression, mutant phenotype analysis, chemical inhibition, heterologous expression, in vitro biochemical assay, transcriptomics, or complementation.
+                    Distinguish positive mutation or silencing phenotypes from key negative or no-effect phenotypes, and record upstream/downstream regulatory relationships only when supported by source evidence.
                     Mark review-derived entries as review-cited in Notes.
                     """;
             case "Q7" -> """

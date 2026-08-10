@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.evidence.multiprofile;
 
+import com.example.demo_01.ai.evidence.config.EvidenceConfigScope;
 import com.example.demo_01.ai.evidence.config.EvidenceProperties;
 import com.example.demo_01.ai.evidence.model.EvidenceModels.EvidenceChunk;
 import com.example.demo_01.ai.evidence.multiprofile.EvidenceProfileRegistry.EvidenceProfile;
@@ -14,6 +15,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -49,15 +51,23 @@ public class EvidenceCoverageAgent {
     @Resource
     private EvidenceProperties properties;
 
+    @Autowired(required = false)
+    private EvidenceConfigScope configScope;
+
     @Resource
     private ObjectMapper objectMapper;
+
+    /** Honours a per-run configuration override when an extraction run pinned one. */
+    private EvidenceProperties config() {
+        return configScope == null ? properties : configScope.current();
+    }
 
     public List<ValidatedEvidenceRow> recover(UUID batchId,
                                               SourceDocument document,
                                               EvidenceProfile profile,
                                               List<EvidenceChunk> chunks,
                                               List<ValidatedEvidenceRow> existing) {
-        if (!properties.getAgents().getCoverage().isEnabled()) {
+        if (!config().getAgents().getCoverage().isEnabled()) {
             return existing == null ? List.of() : List.copyOf(existing);
         }
         List<ValidatedEvidenceRow> current = existing == null
@@ -72,11 +82,11 @@ public class EvidenceCoverageAgent {
         List<CoverageCandidate> missing = candidates.stream()
                 .filter(candidate -> candidate != null
                         && !existingKeys.contains(primaryKeyFingerprint(profile, candidate.primaryKey())))
-                .limit(properties.getAgents().getCoverage().getMaxCandidates())
+                .limit(config().getAgents().getCoverage().getMaxCandidates())
                 .toList();
 
         List<String> recoveredFingerprints = new ArrayList<>();
-        int rounds = Math.max(0, properties.getAgents().getCoverage().getMaxRecoveryRounds());
+        int rounds = Math.max(0, config().getAgents().getCoverage().getMaxRecoveryRounds());
         for (int round = 0; round < rounds && !missing.isEmpty(); round++) {
             List<EvidenceChunk> focused = focusChunks(chunks, missing);
             List<ValidatedEvidenceRow> recovered =

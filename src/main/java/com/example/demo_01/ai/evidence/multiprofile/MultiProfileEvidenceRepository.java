@@ -56,6 +56,45 @@ public class MultiProfileEvidenceRepository {
         ), sourceExperimentId);
     }
 
+    public List<SourceDocument> findSourceDocumentsFromPretreatment(UUID pretreatmentRunId) {
+        return jdbcTemplate.query("""
+                SELECT r.document_id,
+                       coalesce(d.title, r.title) AS document_title,
+                       coalesce(d.authors_json::text, '[]') AS authors_json,
+                       d.publication_year,
+                       d.journal,
+                       coalesce(d.doi_normalized, d.doi_raw) AS doi,
+                       d.storage_root
+                FROM pretreatment_document_result r
+                JOIN rag_document d ON d.document_id = r.document_id
+                WHERE r.run_id = ?
+                  AND r.final_decision = 'ACCEPTED'
+                  AND d.status = 'COMPLETED'
+                  AND d.duplicate_of_document_id IS NULL
+                ORDER BY r.id
+                """, (rs, rowNum) -> new SourceDocument(
+                rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
+                fromJsonList(rs.getString("authors_json")),
+                (Integer) rs.getObject("publication_year"),
+                rs.getString("journal"),
+                rs.getString("doi"),
+                rs.getString("storage_root")
+        ), pretreatmentRunId);
+    }
+
+    public Optional<UUID> findLatestAcceptedPretreatmentRun() {
+        return jdbcTemplate.query("""
+                SELECT r.run_id
+                FROM pretreatment_run r
+                WHERE r.status = 'COMPLETED'
+                  AND r.accepted_documents > 0
+                ORDER BY r.finished_at DESC NULLS LAST, r.created_at DESC
+                LIMIT 1
+                """, (rs, rowNum) -> rs.getObject("run_id", UUID.class))
+                .stream().findFirst();
+    }
+
     public Optional<BatchRecord> findActiveBatch(UUID sourceExperimentId) {
         return jdbcTemplate.query("""
                 SELECT *
@@ -86,11 +125,32 @@ public class MultiProfileEvidenceRepository {
                 """, (rs, rowNum) -> rs.getObject("document_id", UUID.class), batchId);
     }
 
+    /**
+     * Prefers the stage-3 classification hash. Falls back to the legacy combined
+     * {@code prompt_hash} so batches created before V31 remain reusable.
+     */
     public Optional<BatchRecord> findReusableBatch(UUID sourceExperimentId,
                                                    String sourceHash,
                                                    String profileVersion,
-                                                   String promptHash,
+                                                   String classificationConfigHash,
+                                                   String legacyPromptHash,
                                                    String modelName) {
+        Optional<BatchRecord> byClassification = jdbcTemplate.query("""
+                SELECT *
+                FROM evidence_multi_profile_batch
+                WHERE source_experiment_id = ?
+                  AND source_hash = ?
+                  AND profile_version = ?
+                  AND classification_config_hash = ?
+                  AND coalesce(model_name, '') = coalesce(?, '')
+                  AND status = 'COMPLETED'
+                ORDER BY created_at DESC
+                LIMIT 1
+                """, this::mapBatch, sourceExperimentId, sourceHash, profileVersion,
+                classificationConfigHash, modelName).stream().findFirst();
+        if (byClassification.isPresent()) {
+            return byClassification;
+        }
         return jdbcTemplate.query("""
                 SELECT *
                 FROM evidence_multi_profile_batch
@@ -98,23 +158,29 @@ public class MultiProfileEvidenceRepository {
                   AND source_hash = ?
                   AND profile_version = ?
                   AND prompt_hash = ?
+                  AND classification_config_hash IS NULL
                   AND coalesce(model_name, '') = coalesce(?, '')
                   AND status = 'COMPLETED'
                 ORDER BY created_at DESC
                 LIMIT 1
-                """, this::mapBatch, sourceExperimentId, sourceHash, profileVersion, promptHash, modelName)
-                .stream().findFirst();
+                """, this::mapBatch, sourceExperimentId, sourceHash, profileVersion,
+                legacyPromptHash, modelName).stream().findFirst();
     }
 
     @Transactional
     public void insertBatch(BatchRecord batch, List<SourceDocument> documents) {
         jdbcTemplate.update("""
                 INSERT INTO evidence_multi_profile_batch (
-                    batch_id, source_experiment_id, source_hash, profile_version,
-                    prompt_hash, model_name, force, status, total_documents
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?)
-                """, batch.batchId(), batch.sourceExperimentId(), batch.sourceHash(),
-                batch.profileVersion(), batch.promptHash(), batch.modelName(), batch.force(),
+                    batch_id, source_type, source_experiment_id, source_pretreatment_run_id,
+                    source_hash, profile_version,
+                    prompt_hash, classification_config_hash, extraction_config_hash,
+                    run_extraction, model_name, force, status, total_documents
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?)
+                """, batch.batchId(), batch.sourceType().name(),
+                batch.sourceExperimentId(), batch.sourcePretreatmentRunId(),
+                batch.sourceHash(), batch.profileVersion(), batch.promptHash(),
+                batch.classificationConfigHash(), batch.extractionConfigHash(),
+                batch.runExtraction(), batch.modelName(), batch.force(),
                 batch.totalDocuments());
         for (SourceDocument document : documents) {
             jdbcTemplate.update("""
@@ -237,11 +303,24 @@ public class MultiProfileEvidenceRepository {
     }
 
     public void upsertMatch(UUID batchId, UUID documentId, ClassifiedQuestion result) {
-        ProfileExtractionStatus extractionStatus =
-                result.status() == ClassificationStatus.SUPPORTED
-                        || result.status() == ClassificationStatus.UNCERTAIN
-                        ? ProfileExtractionStatus.QUEUED
-                        : ProfileExtractionStatus.NOT_REQUESTED;
+        upsertMatch(batchId, documentId, result, true);
+    }
+
+    /**
+     * @param queueExtraction when false (classify-only batch), extraction_status stays
+     *                        {@code NOT_REQUESTED} even for SUPPORTED/UNCERTAIN matches
+     */
+    public void upsertMatch(UUID batchId, UUID documentId, ClassifiedQuestion result,
+                            boolean queueExtraction) {
+        ProfileExtractionStatus extractionStatus;
+        if (!queueExtraction) {
+            extractionStatus = ProfileExtractionStatus.NOT_REQUESTED;
+        } else if (result.status() == ClassificationStatus.SUPPORTED
+                || result.status() == ClassificationStatus.UNCERTAIN) {
+            extractionStatus = ProfileExtractionStatus.QUEUED;
+        } else {
+            extractionStatus = ProfileExtractionStatus.NOT_REQUESTED;
+        }
         jdbcTemplate.update("""
                 INSERT INTO evidence_document_question_match (
                     batch_id, document_id, question_id, classification_status,
@@ -286,10 +365,27 @@ public class MultiProfileEvidenceRepository {
     public void replaceEvidence(UUID batchId, UUID documentId, String questionId,
                                 String profileVersion, ClassificationStatus classificationStatus,
                                 List<ValidatedEvidenceRow> rows) {
-        jdbcTemplate.update("""
-                DELETE FROM generic_evidence_record
-                WHERE batch_id = ? AND document_id = ? AND question_id = ?
-                """, batchId, documentId, questionId);
+        replaceEvidence(batchId, null, documentId, questionId, profileVersion,
+                classificationStatus, rows);
+    }
+
+    @Transactional
+    public void replaceEvidence(UUID batchId, UUID extractionRunId, UUID documentId,
+                                String questionId, String profileVersion,
+                                ClassificationStatus classificationStatus,
+                                List<ValidatedEvidenceRow> rows) {
+        if (extractionRunId != null) {
+            jdbcTemplate.update("""
+                    DELETE FROM generic_evidence_record
+                    WHERE extraction_run_id = ? AND document_id = ? AND question_id = ?
+                    """, extractionRunId, documentId, questionId);
+        } else {
+            jdbcTemplate.update("""
+                    DELETE FROM generic_evidence_record
+                    WHERE batch_id = ? AND document_id = ? AND question_id = ?
+                      AND extraction_run_id IS NULL
+                    """, batchId, documentId, questionId);
+        }
         jdbcTemplate.update("""
                 UPDATE generic_evidence_record
                 SET is_current = FALSE, updated_at = CURRENT_TIMESTAMP
@@ -300,12 +396,14 @@ public class MultiProfileEvidenceRepository {
             rowIndex++;
             jdbcTemplate.update("""
                     INSERT INTO generic_evidence_record (
-                        record_id, batch_id, document_id, question_id, profile_version,
-                        row_index, cells_json, row_fingerprint, classification_status,
-                        validation_status, verification_note, review_status, is_current
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, 'PENDING', TRUE)
-                    """, row.recordId(), batchId, documentId, questionId, profileVersion,
-                    rowIndex, toJson(row.cells()), row.fingerprint(), classificationStatus.name(),
+                        record_id, batch_id, extraction_run_id, document_id, question_id,
+                        profile_version, row_index, cells_json, row_fingerprint,
+                        classification_status, validation_status, verification_note,
+                        review_status, is_current
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, 'PENDING', TRUE)
+                    """, row.recordId(), batchId, extractionRunId, documentId, questionId,
+                    profileVersion, rowIndex, toJson(row.cells()), row.fingerprint(),
+                    classificationStatus.name(),
                     (row.validationStatus() == null
                             ? ValidationStatus.VALID : row.validationStatus()).name(),
                     row.verificationNote());
@@ -467,12 +565,18 @@ public class MultiProfileEvidenceRepository {
     }
 
     private BatchRecord mapBatch(ResultSet rs, int rowNum) throws SQLException {
+        Boolean runExtraction = (Boolean) rs.getObject("run_extraction");
         return new BatchRecord(
                 rs.getObject("batch_id", UUID.class),
+                ClassificationSourceType.valueOf(rs.getString("source_type")),
                 rs.getObject("source_experiment_id", UUID.class),
+                rs.getObject("source_pretreatment_run_id", UUID.class),
                 rs.getString("source_hash"),
                 rs.getString("profile_version"),
                 rs.getString("prompt_hash"),
+                rs.getString("classification_config_hash"),
+                rs.getString("extraction_config_hash"),
+                runExtraction == null || runExtraction,
                 rs.getString("model_name"),
                 rs.getBoolean("force"),
                 BatchStatus.valueOf(rs.getString("status")),
@@ -532,6 +636,7 @@ public class MultiProfileEvidenceRepository {
         return new GenericEvidenceRecord(
                 recordId,
                 rs.getObject("batch_id", UUID.class),
+                rs.getObject("extraction_run_id", UUID.class),
                 rs.getObject("document_id", UUID.class),
                 rs.getString("document_title"),
                 rs.getString("question_id"),
@@ -549,6 +654,82 @@ public class MultiProfileEvidenceRepository {
                 instant(rs.getTimestamp("created_at")),
                 instant(rs.getTimestamp("updated_at"))
         );
+    }
+
+    public Optional<SourceDocument> findDocument(UUID documentId) {
+        return jdbcTemplate.query("""
+                SELECT document_id,
+                       title AS document_title,
+                       coalesce(authors_json::text, '[]') AS authors_json,
+                       publication_year,
+                       journal,
+                       coalesce(doi_normalized, doi_raw) AS doi,
+                       storage_root
+                FROM rag_document
+                WHERE document_id = ?
+                  AND status = 'COMPLETED'
+                  AND duplicate_of_document_id IS NULL
+                """, (rs, rowNum) -> new SourceDocument(
+                rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
+                fromJsonList(rs.getString("authors_json")),
+                (Integer) rs.getObject("publication_year"),
+                rs.getString("journal"),
+                rs.getString("doi"),
+                rs.getString("storage_root")
+        ), documentId).stream().findFirst();
+    }
+
+    public List<SourceDocument> findDocumentsByIds(List<UUID> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(",", documentIds.stream().map(id -> "?").toList());
+        List<Object> args = new ArrayList<>(documentIds);
+        return jdbcTemplate.query("""
+                SELECT document_id,
+                       title AS document_title,
+                       coalesce(authors_json::text, '[]') AS authors_json,
+                       publication_year,
+                       journal,
+                       coalesce(doi_normalized, doi_raw) AS doi,
+                       storage_root
+                FROM rag_document
+                WHERE document_id IN (%s)
+                  AND status = 'COMPLETED'
+                  AND duplicate_of_document_id IS NULL
+                ORDER BY document_id
+                """.formatted(placeholders), (rs, rowNum) -> new SourceDocument(
+                rs.getObject("document_id", UUID.class),
+                rs.getString("document_title"),
+                fromJsonList(rs.getString("authors_json")),
+                (Integer) rs.getObject("publication_year"),
+                rs.getString("journal"),
+                rs.getString("doi"),
+                rs.getString("storage_root")
+        ), args.toArray());
+    }
+
+    public List<QuestionMatchRecord> findMatchesForQuestion(
+            UUID batchId, String questionId, List<ClassificationStatus> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return List.of();
+        }
+        String placeholders = String.join(",", statuses.stream().map(s -> "?").toList());
+        List<Object> args = new ArrayList<>();
+        args.add(batchId);
+        args.add(questionId);
+        statuses.forEach(status -> args.add(status.name()));
+        return jdbcTemplate.query("""
+                SELECT m.*, d.document_title
+                FROM evidence_document_question_match m
+                JOIN evidence_multi_profile_document d
+                  ON d.batch_id = m.batch_id AND d.document_id = m.document_id
+                WHERE m.batch_id = ?
+                  AND m.question_id = ?
+                  AND m.classification_status IN (%s)
+                ORDER BY m.document_id
+                """.formatted(placeholders), this::mapMatch, args.toArray());
     }
 
     private List<ValidatedAnchor> findAnchors(UUID recordId) {

@@ -3,6 +3,7 @@ package com.example.demo_01.ai.evidence.multiprofile;
 import com.example.demo_01.ai.entitylibrary.model.EntityLibraryModels.EntityLibraryRow;
 import com.example.demo_01.ai.entitylibrary.model.EntityLibraryModels.EvidenceItem;
 import com.example.demo_01.ai.entitylibrary.repository.EntityLibraryRepository;
+import com.example.demo_01.ai.evidence.config.EvidenceConfigScope;
 import com.example.demo_01.ai.evidence.config.EvidenceProperties;
 import com.example.demo_01.ai.evidence.multiprofile.EvidenceProfileRegistry.EvidenceProfile;
 import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.ValidatedAnchor;
@@ -10,6 +11,7 @@ import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.V
 import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceRepository.SourceDocument;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -35,10 +37,18 @@ public class EvidenceReconcilerAgent {
     @Resource
     private EvidenceProperties properties;
 
+    @Autowired(required = false)
+    private EvidenceConfigScope configScope;
+
+    /** Honours a per-run configuration override when an extraction run pinned one. */
+    private EvidenceProperties config() {
+        return configScope == null ? properties : configScope.current();
+    }
+
     public List<ValidatedEvidenceRow> reconcile(SourceDocument document,
                                                 EvidenceProfile profile,
                                                 List<ValidatedEvidenceRow> rows) {
-        if (!properties.getAgents().getReconciler().isEntityLinkingEnabled()
+        if (!config().getAgents().getReconciler().isEntityLinkingEnabled()
                 || rows == null || rows.isEmpty()) {
             return rows == null ? List.of() : List.copyOf(rows);
         }
@@ -73,7 +83,7 @@ public class EvidenceReconcilerAgent {
                     cells.set(index, canonical);
                     changed = true;
                 }
-            } else if (properties.getAgents().getReconciler().isEnqueueUnknownAsCandidates()) {
+            } else if (config().getAgents().getReconciler().isEnqueueUnknownAsCandidates()) {
                 enqueueCandidate(document, profile, row, entityType, mention, normalizedKey);
             }
         }

@@ -25,6 +25,7 @@ public class EvidenceAdminController {
     private EvidenceRepository evidenceRepository;
 
     @PostMapping("/documents/{documentId}/extract")
+    @Deprecated
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<ExtractionAcceptedResponse> extract(
             @PathVariable UUID documentId,
@@ -33,6 +34,7 @@ public class EvidenceAdminController {
     }
 
     @PostMapping("/extractions/backfill")
+    @Deprecated
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<EvidenceBackfillResponse> backfill(
             @RequestBody(required = false) EvidenceBackfillRequest request) {

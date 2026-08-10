@@ -22,7 +22,13 @@ public final class MultiProfileEvidenceModels {
     }
 
     public enum ClassificationStatus {
-        SUPPORTED, UNCERTAIN, NOT_SUPPORTED, FAILED
+        SUPPORTED, UNCERTAIN, NOT_SUPPORTED, FAILED,
+        /**
+         * Carried by evidence rows produced by a forced extraction run that bypassed
+         * classification. Never written to {@code evidence_document_question_match} and never
+         * produced by the classification model.
+         */
+        NOT_CLASSIFIED
     }
 
     public enum ProfileExtractionStatus {
@@ -30,14 +36,46 @@ public final class MultiProfileEvidenceModels {
     }
 
     public enum ValidationStatus {
-        VALID, INVALID
+        VALID, INVALID, UNVERIFIED
     }
 
     public enum ReviewStatus {
         PENDING, APPROVED, REJECTED
     }
 
-    public record BatchRequest(UUID sourceExperimentId, boolean force) {
+    public enum ClassificationSourceType {
+        EXPERIMENT, PRETREATMENT, COHORT
+    }
+
+    /**
+     * @param expectedDocuments when set, the source must resolve to exactly this many documents.
+     *                          Guards against submitting a half-ingested corpus; leave null to
+     *                          accept whatever the source currently holds.
+     * @param runExtraction     when false the batch only classifies. Extraction is then driven
+     *                          separately per question via an extraction run, which lets one
+     *                          classification snapshot back many extraction experiments.
+     */
+    public record BatchRequest(UUID sourceExperimentId,
+                               UUID pretreatmentRunId,
+                               UUID cohortId,
+                               boolean force,
+                               Integer expectedDocuments,
+                               Boolean runExtraction) {
+
+        public BatchRequest(UUID sourceExperimentId, boolean force) {
+            this(sourceExperimentId, null, null, force, null, null);
+        }
+
+        public BatchRequest(UUID sourceExperimentId,
+                            boolean force,
+                            Integer expectedDocuments,
+                            Boolean runExtraction) {
+            this(sourceExperimentId, null, null, force, expectedDocuments, runExtraction);
+        }
+
+        public boolean resolvedRunExtraction() {
+            return runExtraction == null || runExtraction;
+        }
     }
 
     public record BatchAcceptedResponse(UUID batchId, BatchStatus status, int totalDocuments,
@@ -46,10 +84,15 @@ public final class MultiProfileEvidenceModels {
 
     public record BatchRecord(
             UUID batchId,
+            ClassificationSourceType sourceType,
             UUID sourceExperimentId,
+            UUID sourcePretreatmentRunId,
             String sourceHash,
             String profileVersion,
             String promptHash,
+            String classificationConfigHash,
+            String extractionConfigHash,
+            boolean runExtraction,
             String modelName,
             boolean force,
             BatchStatus status,
@@ -152,6 +195,7 @@ public final class MultiProfileEvidenceModels {
     public record GenericEvidenceRecord(
             UUID recordId,
             UUID batchId,
+            UUID extractionRunId,
             UUID documentId,
             String documentTitle,
             String questionId,

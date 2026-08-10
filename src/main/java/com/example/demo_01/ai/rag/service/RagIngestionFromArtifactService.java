@@ -122,15 +122,8 @@ public class RagIngestionFromArtifactService {
     }
 
     private void enqueueEvidenceExtraction(UUID documentId) {
-        if (!evidenceExtractionService.isEnabled()) {
-            return;
-        }
-        try {
-            evidenceExtractionService.enqueue(documentId);
-        } catch (Exception ex) {
-            log.warn("RAG ingestion completed, but evidence extraction could not be queued for document {}: {}",
-                    documentId, ex.getMessage(), ex);
-        }
+        log.debug("Skipping legacy evidence extraction enqueue for document {}; use stage-4 question extraction instead",
+                documentId);
     }
 }
 

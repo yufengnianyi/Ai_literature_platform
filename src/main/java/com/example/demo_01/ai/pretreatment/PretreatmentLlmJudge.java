@@ -2,7 +2,6 @@ package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmJudgment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.RepresentativeChunk;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,15 +25,6 @@ public class PretreatmentLlmJudge {
 
     @Resource
     private ObjectMapper objectMapper;
-
-    public LlmJudgment judge(Path promptPath,
-                             RagDocumentMetadata metadata,
-                             List<RepresentativeChunk> chunks,
-                             int maxAttempts) {
-        String systemPrompt = readPrompt(promptPath);
-        String baseUserMessage = userMessage(metadata, chunks);
-        return judgeWithMessage(systemPrompt, baseUserMessage, maxAttempts);
-    }
 
     public LlmJudgment judgeAbstract(Path promptPath,
                                      RagDocumentMetadata metadata,
@@ -78,24 +68,6 @@ public class PretreatmentLlmJudge {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read PreTreatment prompt: " + promptPath, e);
         }
-    }
-
-    private String userMessage(RagDocumentMetadata metadata, List<RepresentativeChunk> chunks) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("Metadata:\n");
-        builder.append("Title: ").append(value(metadata == null ? null : metadata.title())).append('\n');
-        builder.append("Journal: ").append(value(metadata == null ? null : metadata.journal())).append('\n');
-        builder.append("DOI: ").append(value(metadata == null ? null : metadata.doiNormalized())).append('\n');
-        builder.append("Abstract: ").append(value(metadata == null ? null : metadata.abstractText())).append("\n\n");
-        builder.append("Chunks:\n");
-        for (RepresentativeChunk chunk : chunks == null ? List.<RepresentativeChunk>of() : chunks) {
-            builder.append("--- chunk_id=").append(chunk.chunkId())
-                    .append("; section=").append(value(chunk.sectionPath()))
-                    .append(" ---\n")
-                    .append(value(chunk.text()))
-                    .append('\n');
-        }
-        return builder.toString();
     }
 
     private String abstractUserMessage(RagDocumentMetadata metadata) {

@@ -46,12 +46,42 @@ public final class PreprocessModels {
             String headerTeiPath,
             String fulltextTeiPath,
             String jsonlPath,
+            String tablesJsonlPath,
             String pdfSha256,
             String canonicalKey,
             RagDocumentMetadata metadata,
             int chunkCount,
             String chunkStrategyVersion,
             String preprocessVersion
+    ) {
+        public PreprocessArtifact(UUID documentId,
+                                  String storageRoot,
+                                  String sourcePdfPath,
+                                  String headerTeiPath,
+                                  String fulltextTeiPath,
+                                  String jsonlPath,
+                                  String pdfSha256,
+                                  String canonicalKey,
+                                  RagDocumentMetadata metadata,
+                                  int chunkCount,
+                                  String chunkStrategyVersion,
+                                  String preprocessVersion) {
+            this(documentId, storageRoot, sourcePdfPath, headerTeiPath, fulltextTeiPath,
+                    jsonlPath, null, pdfSha256, canonicalKey, metadata, chunkCount,
+                    chunkStrategyVersion, preprocessVersion);
+        }
+    }
+
+    public record TableBackfillRequest(
+            String artifactRoot,
+            Integer maxDocuments
+    ) {
+    }
+
+    public record TableBackfillResponse(
+            int scannedDocuments,
+            int materializedDocuments,
+            int failedDocuments
     ) {
     }
 

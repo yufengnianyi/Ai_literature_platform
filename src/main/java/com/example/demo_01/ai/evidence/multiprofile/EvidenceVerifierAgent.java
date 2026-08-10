@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.evidence.multiprofile;
 
+import com.example.demo_01.ai.evidence.config.EvidenceConfigScope;
 import com.example.demo_01.ai.evidence.config.EvidenceProperties;
 import com.example.demo_01.ai.evidence.model.EvidenceModels.EvidenceChunk;
 import com.example.demo_01.ai.evidence.multiprofile.EvidenceProfileRegistry.EvidenceProfile;
@@ -14,6 +15,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,13 +32,21 @@ public class EvidenceVerifierAgent {
     @Resource
     private EvidenceProperties properties;
 
+    @Autowired(required = false)
+    private EvidenceConfigScope configScope;
+
     @Resource
     private ObjectMapper objectMapper;
+
+    /** Honours a per-run configuration override when an extraction run pinned one. */
+    private EvidenceProperties config() {
+        return configScope == null ? properties : configScope.current();
+    }
 
     public List<ValidatedEvidenceRow> verify(EvidenceProfile profile,
                                              List<ValidatedEvidenceRow> rows,
                                              List<EvidenceChunk> chunks) {
-        if (!properties.getAgents().getVerifier().isEnabled() || rows == null || rows.isEmpty()) {
+        if (!config().getAgents().getVerifier().isEnabled() || rows == null || rows.isEmpty()) {
             return rows == null ? List.of() : List.copyOf(rows);
         }
 
@@ -66,7 +76,7 @@ public class EvidenceVerifierAgent {
             }
             ValidatedEvidenceRow invalid = row.withValidation(
                     ValidationStatus.INVALID, value(verdict.reason()));
-            if (!properties.getAgents().getVerifier().isDropInvalidRows()) {
+            if (!config().getAgents().getVerifier().isDropInvalidRows()) {
                 verified.add(invalid);
             }
         }

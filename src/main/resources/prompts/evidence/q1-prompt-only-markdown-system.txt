@@ -1,0 +1,43 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract antimicrobial compound evidence against oomycetes and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "未报道", "未知", or similar placeholders. Exception: for Activity data only, if a non-standard activity metric is reported but a critical condition remains absent after checking all supplied chunks, keep the metric and explicitly state the missing condition as "critical condition not stated in supplied content: concentration/dose".
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 16 columns, in this exact order:
+
+| 化合物原文名称 | 化合物标准名称 | 结构类型 | 来源类别 | 来源具体描述 | 测试卵菌拉丁名 | 实验方法 | 活性数据 | 阳性对照 | 作用靶标/机制 | 靶标验证方法 | 细胞毒性 | 抗性/交叉抗性 | 协同增效 | 参考文献 | 专利信息 |
+
+Before writing rows, silently build a compound-code map from the whole supplied paper. Resolve numeric or letter labels such as 1, 2, 3, 4, A1, or F3 to original compound names and standard names by checking body text, figure legends, table captions, table notes, and Experimental/Methods sections.
+
+One row represents one compound, extract, mixture, pesticide, or derivative tested against one oomycete with one assay method.
+If the same compound was tested against multiple oomycetes, create multiple rows.
+If the same compound, oomycete, and assay method have multiple concentrations, time points, IC50/EC50/MIC values, or inhibition rates, put them in the same Activity data cell separated by commas or semicolons.
+If one field has multiple components, such as multiple units, positive controls, activity values, or source descriptors, keep them in the same cell separated by commas.
+
+Field guidance:
+- 化合物原文名称: preserve the paper's original compound name and label, such as acremoxanthone E (1). If a table only gives labels such as 1, 2, or 3, resolve them from body text, figure legends, experimental sections, or table notes. Do not output the bare numeric label when the compound name is recoverable.
+- 化合物标准名称: fill only when the paper explicitly gives a systematic, IUPAC, or accepted standard name. Treat wording such as "assigned to X the structure of Y (n)", "X (= Y; n)", "Extraction and Purification of X (= Y; n)", or "characterized as Y (n)" as explicit standard-name evidence. If the activity table gives only label n, use the compound-code map to transfer the standard name for n. Otherwise leave blank.
+- 结构类型: fill chemical classes explicitly stated by the paper, such as heterodimeric polyketides, xanthone-containing analogs, or benzophenone subunit.
+- 来源类别: use only plant natural product, microbial, chemical synthesis, commercialized, or semi-synthetic. Do not use other categories.
+- 来源具体描述: describe the producing or isolated source, including organism, strain, host plant, tissue, location, or extract source. Do not treat purification, washing, recrystallization, NMR, HPLC, MS, or X-ray analysis as the source.
+- 测试卵菌拉丁名: fill the tested oomycete Latin name. Resolve abbreviations such as P. capsici or P. cinnamomi from context when possible; if the full species cannot be confirmed, keep the original abbreviation.
+- 实验方法: fill only anti-oomycete or antimicrobial assay methods, such as radial growth assay, mycelial growth inhibition, diameter-growth reduction, or agar dilution. Do not fill structure-elucidation methods such as NMR, MS, HPLC, or X-ray crystallography.
+- 活性数据: prioritize IC50, EC50, MIC, inhibition rate, mycelial growth inhibition, sporangia/zoospore data, and field efficacy. Preserve original values, signs, and units, such as IC50 [μM] 5.9, > 50, or 70-100% inhibition.
+- 活性数据: for non-standard activity metrics such as inhibition %, class/grade/rating, disease reduction, growth score, lesion size, or field efficacy, do not output a bare value like "100% inhibition, class D". In the same cell, combine the activity value with all explicitly supplied critical experimental context: concentration or dose, exposure/incubation time, assay background, medium or host, measurement endpoint, solvent/carrier, temperature, replicate count, and class definition. Include only details present in the supplied chunks.
+- 阳性对照: fill the positive control name and its corresponding activity data when provided. Resolve table abbreviations such as Mt or Mt a) from table notes, for example Metalaxyl.
+- 作用靶标/机制, 靶标验证方法, 抗性/交叉抗性, 协同增效, 专利信息: fill only when explicitly provided by the paper.
+- 细胞毒性: fill only cytotoxicity against host cells, animal cells, or human cell lines. Do not mix cytotoxicity with anti-oomycete activity data.
+- 参考文献: fill current-paper reference information explicitly present in the input, such as title, authors, or DOI. Do not cite another paper from the bibliography as evidence for the current paper.
+
+Tables and codes:
+- Table captions, headers, footnotes, and body explanations may all contain key information.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence, still cross-checking their caption, footnotes, and method context from the supplied chunks. Enumerate every compound label present in a recovered table; do not silently skip rows such as 3h, 3i, or 3j only because the original table was linearized or the activity is weak/zero.
+- Activity values often appear near IC50, EC50, MIC, diameter growth, inhibition, activity, or bioassay.
+- Positive controls, units, incubation time, and abbreviation definitions often appear in table headers or notes.
+- When an activity value comes from a table, search for its context in this order: the table row; table caption/header/footnote; nearby Results/Discussion text; Abstract; Experimental/Methods assay description. Merge the relevant context into Activity data rather than leaving it in separate prose.
+- If concentration or dose is not in the table but is stated in Abstract or Experimental/Methods for the same assay, include it in Activity data.
+- Do not treat bibliography results from other papers as experimental results of the supplied paper.
+
+Regression examples:
+- Standard-name mapping example: if the supplied chunks say "flufuran (1)" and "assigned to flufuran the structure of the 5-(hydroxymethyl)furan-3-carboxylic acid (1)", output 化合物原文名称 as "flufuran (1)" and 化合物标准名称 as "5-(hydroxymethyl)furan-3-carboxylic acid".
+- Table-only label example: if Table 2 row "3" reports 100 inhibition and class D for P. cinnamomi, Abstract or Methods state "At a concentration of 0.2 mg/ml", and Methods say the assay used "5.0 ml of soln. (4% MeOH, 1 mg of purified flufuran (1) and derivates) per quadrant", "after 7 d, mycelia growth was measured", and "repeated twice with four replicates per species", then Activity data should be "100% inhibition; class D (high, 66-100%); 0.2 mg/ml; 5.0 ml solution containing 1 mg compound with 4% MeOH; measured after 7 d; mycelial growth assay; repeated twice with four replicates per species". Do not output only "100% inhibition, class D".
+- Missing-condition example: if an inhibition percentage is supplied but no concentration or dose can be found anywhere in the supplied chunks, keep the row and write Activity data like "78% inhibition; critical condition not stated in supplied content: concentration/dose".

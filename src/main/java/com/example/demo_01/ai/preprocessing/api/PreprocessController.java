@@ -1,10 +1,13 @@
 package com.example.demo_01.ai.preprocessing.api;
 
+import com.example.demo_01.ai.evidence.table.TableJsonlMaterializationService;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.FolderPreprocessRequest;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessAcceptedResponse;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessBatchAcceptedResponse;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessBatchRecord;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessJobRecord;
+import com.example.demo_01.ai.preprocessing.model.PreprocessModels.TableBackfillRequest;
+import com.example.demo_01.ai.preprocessing.model.PreprocessModels.TableBackfillResponse;
 import com.example.demo_01.ai.preprocessing.service.DocumentPreprocessBatchService;
 import com.example.demo_01.ai.preprocessing.service.DocumentPreprocessService;
 import com.example.demo_01.common.BaseResponse;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +35,9 @@ public class PreprocessController {
 
     @Resource
     private DocumentPreprocessBatchService documentPreprocessBatchService;
+
+    @Resource
+    private TableJsonlMaterializationService tableJsonlMaterializationService;
 
     @PostMapping(value = "/documents", consumes = "multipart/form-data")
     public ResponseEntity<BaseResponse<PreprocessAcceptedResponse>> upload(@RequestPart("file") MultipartFile file) {
@@ -50,5 +57,17 @@ public class PreprocessController {
     @GetMapping("/batches/{batchId}")
     public BaseResponse<PreprocessBatchRecord> getBatch(@PathVariable UUID batchId) {
         return ResultUtils.success(documentPreprocessBatchService.getBatch(batchId));
+    }
+
+    @PostMapping("/tables/backfill")
+    public BaseResponse<TableBackfillResponse> backfillTables(
+            @RequestBody(required = false) TableBackfillRequest request) {
+        String artifactRoot = request == null || request.artifactRoot() == null
+                || request.artifactRoot().isBlank()
+                ? "data/rag" : request.artifactRoot();
+        int maxDocuments = request == null || request.maxDocuments() == null
+                ? 0 : request.maxDocuments();
+        return ResultUtils.success(tableJsonlMaterializationService.backfill(
+                Path.of(artifactRoot).toAbsolutePath().normalize(), maxDocuments));
     }
 }

@@ -32,7 +32,7 @@ public class EvidenceEvalHarnessService {
     @Resource
     private EvidenceExtractionScorer scorer;
 
-    @Resource
+    @Resource(name = "evidenceEvalReportService")
     private EvidenceEvalReportService reportService;
 
     @Resource

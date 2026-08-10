@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.evidence.multiprofile;
 
+import com.example.demo_01.ai.evidence.config.EvidenceConfigScope;
 import com.example.demo_01.ai.evidence.config.EvidenceProperties;
 import com.example.demo_01.ai.evidence.model.EvidenceModels.EvidenceChunk;
 import com.example.demo_01.ai.evidence.multiprofile.EvidenceProfileRegistry.EvidenceProfile;
@@ -12,6 +13,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -34,12 +36,20 @@ public class EvidenceRetrievalAgent {
     @Resource
     private EvidenceProperties properties;
 
+    @Autowired(required = false)
+    private EvidenceConfigScope configScope;
+
     @Resource
     private ObjectMapper objectMapper;
 
+    /** Honours a per-run configuration override when an extraction run pinned one. */
+    private EvidenceProperties config() {
+        return configScope == null ? properties : configScope.current();
+    }
+
     public List<List<EvidenceChunk>> modelBatches(EvidenceProfile profile,
                                                   List<EvidenceChunk> chunks) {
-        if (!properties.getAgents().getRetriever().isOnDemandEnabled()) {
+        if (!config().getAgents().getRetriever().isOnDemandEnabled()) {
             return staticBatches(chunks);
         }
         List<EvidenceChunk> selected = selectChunks(profile, chunks);
@@ -47,17 +57,17 @@ public class EvidenceRetrievalAgent {
             return staticBatches(chunks);
         }
         int totalChars = selected.stream().mapToInt(chunk -> value(chunk.text()).length()).sum();
-        if (selected.size() <= properties.getMaxSinglePassChunks()
-                && totalChars <= properties.getMaxSinglePassChars()) {
+        if (selected.size() <= config().getMaxSinglePassChunks()
+                && totalChars <= config().getMaxSinglePassChars()) {
             return List.of(selected);
         }
-        return partition(selected, Math.max(1, properties.getChunkBatchSize()));
+        return partition(selected, Math.max(1, config().getChunkBatchSize()));
     }
 
     private List<EvidenceChunk> selectChunks(EvidenceProfile profile, List<EvidenceChunk> chunks) {
         List<EvidenceChunk> ranked = rankHeuristically(profile, chunks);
         List<EvidenceChunk> shortlist = ranked.stream()
-                .limit(Math.max(properties.getAgents().getRetriever().getMaxChunks() * 2L, 12))
+                .limit(Math.max(config().getAgents().getRetriever().getMaxChunks() * 2L, 12))
                 .toList();
         try {
             String systemPrompt = PromptResources.load(
@@ -86,7 +96,7 @@ public class EvidenceRetrievalAgent {
             }
             if (chosen.isEmpty()) {
                 chosen = new ArrayList<>(shortlist.stream()
-                        .limit(properties.getAgents().getRetriever().getMaxChunks())
+                        .limit(config().getAgents().getRetriever().getMaxChunks())
                         .toList());
             }
             return trim(chosen);
@@ -98,7 +108,7 @@ public class EvidenceRetrievalAgent {
     }
 
     private List<EvidenceChunk> rankHeuristically(EvidenceProfile profile, List<EvidenceChunk> chunks) {
-        boolean preferTables = properties.getAgents().getRetriever().isPreferTablesAndFigures();
+        boolean preferTables = config().getAgents().getRetriever().isPreferTablesAndFigures();
         String haystack = (profile.title() + " " + profile.scope() + " " + profile.guidance())
                 .toLowerCase(Locale.ROOT);
         return chunks.stream()
@@ -133,7 +143,7 @@ public class EvidenceRetrievalAgent {
     }
 
     private List<EvidenceChunk> expand(List<EvidenceChunk> selected, List<EvidenceChunk> all) {
-        int expand = properties.getAgents().getRetriever().getExpandParentSections();
+        int expand = config().getAgents().getRetriever().getExpandParentSections();
         if (expand <= 0 || selected.isEmpty()) {
             return selected;
         }
@@ -161,17 +171,17 @@ public class EvidenceRetrievalAgent {
     }
 
     private List<EvidenceChunk> trim(List<EvidenceChunk> chunks) {
-        int max = Math.max(1, properties.getAgents().getRetriever().getMaxChunks());
+        int max = Math.max(1, config().getAgents().getRetriever().getMaxChunks());
         return chunks.stream().limit(max).toList();
     }
 
     private List<List<EvidenceChunk>> staticBatches(List<EvidenceChunk> chunks) {
         int totalChars = chunks.stream().mapToInt(chunk -> value(chunk.text()).length()).sum();
-        if (chunks.size() <= properties.getMaxSinglePassChunks()
-                && totalChars <= properties.getMaxSinglePassChars()) {
+        if (chunks.size() <= config().getMaxSinglePassChunks()
+                && totalChars <= config().getMaxSinglePassChars()) {
             return List.of(mergeChunks(contextChunks(chunks), chunks));
         }
-        int batchSize = Math.max(1, properties.getChunkBatchSize());
+        int batchSize = Math.max(1, config().getChunkBatchSize());
         List<EvidenceChunk> sharedContext = contextChunks(chunks);
         List<List<EvidenceChunk>> batches = new ArrayList<>();
         for (int start = 0; start < chunks.size(); start += batchSize) {
@@ -238,7 +248,7 @@ public class EvidenceRetrievalAgent {
                 %s
                 """.formatted(
                 profile.questionId(), profile.title(), profile.scope(),
-                properties.getAgents().getRetriever().getMaxChunks(), catalog);
+                config().getAgents().getRetriever().getMaxChunks(), catalog);
     }
 
     private String preview(String text, int max) {

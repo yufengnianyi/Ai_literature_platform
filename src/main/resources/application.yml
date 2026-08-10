@@ -4,6 +4,7 @@ spring:
   profiles:
     default: local
   flyway:
+    out-of-order: true
     ignore-migration-patterns:
       - "*:future"
       - "*:missing"
@@ -167,6 +168,19 @@ app:
       max-single-pass-chunks: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHUNKS:40}
       max-single-pass-chars: ${APP_AI_EVIDENCE_MAX_SINGLE_PASS_CHARS:120000}
       output-root: ${APP_AI_EVIDENCE_OUTPUT_ROOT:Evidence}
+      table:
+        enabled: ${APP_AI_EVIDENCE_TABLE_ENABLED:true}
+        enabled-question-ids: ${APP_AI_EVIDENCE_TABLE_ENABLED_QUESTION_IDS:Q1}
+        llm-select: ${APP_AI_EVIDENCE_TABLE_LLM_SELECT:true}
+        max-tables: ${APP_AI_EVIDENCE_TABLE_MAX_TABLES:6}
+        max-table-chars: ${APP_AI_EVIDENCE_TABLE_MAX_CHARS:8000}
+        recovery:
+          enabled: ${APP_AI_EVIDENCE_TABLE_RECOVERY_ENABLED:true}
+          max-recovered-tables: ${APP_AI_EVIDENCE_TABLE_RECOVERY_MAX_TABLES:3}
+          max-chars: ${APP_AI_EVIDENCE_TABLE_RECOVERY_MAX_CHARS:12000}
+      q1:
+        prompt-only-markdown:
+          enabled: ${APP_AI_EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN:true}
       agents:
         constrained-decoding:
           enabled: ${APP_AI_EVIDENCE_CONSTRAINED_DECODING:false}

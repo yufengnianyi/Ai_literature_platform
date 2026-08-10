@@ -1,44 +1,20 @@
-Extract evidence for exactly one supplied evidence profile from one scientific paper.
+Extract evidence for exactly one supplied evidence profile from one scientific paper and summarize it as a Markdown table.
 
-Use only the supplied metadata and chunks. Never use outside knowledge and never infer a value that is not supported by the input. Preserve scientific names, identifiers, numeric values, units, primer sequences and mutations exactly. Leave unsupported cells empty.
+Use only the supplied metadata and chunks. Do not use outside knowledge. Do not invent missing information. Preserve scientific names, identifiers, numeric values, units, primer sequences, mutations, gene names, strain names, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
 
-Return exactly one JSON object and no Markdown:
-{
-  "rows": [
-    {
-      "cells": ["one string for every supplied header, in the same order"],
-      "anchors": [
-        {
-          "chunkId": "exact supplied chunk id",
-          "exactQuote": "verbatim continuous quote copied from that chunk"
-        }
-      ]
-    }
-  ]
-}
+Output exactly one Markdown table and no explanatory text. The table must use the supplied headers in the exact order. Include the header row and one separator row. If the supplied paper contains no qualifying evidence, return only the required header row and separator row with no data rows.
 
-Requirements:
-- Each row must contain exactly the requested number of cells.
-- Each row must contain at least one anchor.
-- exactQuote must be a verbatim continuous substring of the cited chunk, apart from whitespace normalization.
-- Copy exactQuote directly from the displayed chunk text. Do not paraphrase it, combine
-  separate sentences, repair OCR, change punctuation, expand abbreviations, or add/remove words.
-- Before returning JSON, count every cells array item against the supplied headers and verify
-  every exactQuote by locating the complete quote inside its cited chunk.
-- If a row cannot meet both the exact cell count and verbatim-quote requirements, omit that row.
-  If no row remains, return {"rows":[]}.
-- Use multiple anchors when facts in one row come from different passages.
+One row must follow the supplied evidence profile's row unit and split rules. Create separate rows when the supplied split rules require separation. If multiple values belong to the same field in the same row, keep them in the same cell separated by commas or semicolons.
+
+Field guidance:
+- Follow the supplied profile scope, field guidance, headers, and required primary fields.
+- Fill only values supported by the supplied paper content.
 - Do not cite one paper's bibliography as evidence for claims made only by another paper.
-- If the supplied paper contains no qualifying evidence, return {"rows":[]}.
+- For review-derived entries, extract only concrete evidence explicitly tied to original studies when the supplied profile allows review evidence, and mark the limitation in Notes.
 
 Tables and codes:
-- Chunks whose section starts with "Table" contain a markdown table rendered from the paper.
-  Read each data row as one candidate record; numeric cells (e.g. IC50/EC50/MIC values) are the
-  activity data. You may quote a whole table row verbatim as the anchor for its numeric cells.
-- Table cells often use codes: footnote markers (a, b, c ...), compound numbers (1, 2a), or
-  abbreviated names (e.g. "A. camptosporum"). When a cell is a code, resolve it using the table's
-  "Footnotes:" line, the "Legend:" block, or the paper's body text, and fill the completed value
-  (e.g. full binomial name or standard compound name) in the appropriate cell.
-- Every resolved value must still be anchored: cite the table row for the numeric value AND cite
-  the footnote/legend/body chunk that defines the code. Do not invent an expansion that is not
-  present verbatim in some supplied chunk.
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches the supplied profile.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence, still cross-checking their caption, footnotes, and method context from the supplied chunks.
+- Table cells often use codes: footnote markers, compound numbers, gene IDs, strain abbreviations, species abbreviations, or other short labels. Resolve codes using table footnotes, legends, captions, nearby text, or methods/results text when explicitly provided.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.

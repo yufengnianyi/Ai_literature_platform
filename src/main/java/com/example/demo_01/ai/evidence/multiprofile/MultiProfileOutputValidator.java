@@ -242,7 +242,7 @@ public class MultiProfileOutputValidator {
             case SUPPORTED -> 3;
             case UNCERTAIN -> 2;
             case NOT_SUPPORTED -> 1;
-            case FAILED -> 0;
+            case FAILED, NOT_CLASSIFIED -> 0;
         };
     }
 

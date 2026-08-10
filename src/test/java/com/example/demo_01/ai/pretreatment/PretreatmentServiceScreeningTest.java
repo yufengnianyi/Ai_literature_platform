@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class PretreatmentServiceScreeningTest {
@@ -92,7 +93,7 @@ class PretreatmentServiceScreeningTest {
     }
 
     @Test
-    void applyStillRemovesOnlyRejectedIdsWhenNotDryRun() throws Exception {
+    void applyRecordsRejectedIdsWithoutDeletingVectors() throws Exception {
         UUID rejectedId = UUID.randomUUID();
         Path runDir = Files.createDirectories(tempDir.resolve("run-1"));
         Files.writeString(runDir.resolve("rejected-document-ids.txt"), rejectedId + "\n");
@@ -113,8 +114,8 @@ class PretreatmentServiceScreeningTest {
         var summary = service.apply();
 
         assertThat(summary.mode()).isEqualTo(PretreatmentMode.apply);
-        assertThat(summary.vectorsRemoved()).isEqualTo(1);
-        verify(vectorIngestionService).removeDocument(rejectedId);
+        assertThat(summary.vectorsRemoved()).isZero();
+        verifyNoInteractions(vectorIngestionService);
     }
 
     private PretreatmentService service(PretreatmentLlmJudge llmJudge) {

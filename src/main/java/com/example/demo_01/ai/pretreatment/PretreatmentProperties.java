@@ -28,12 +28,6 @@ public class PretreatmentProperties {
     private int maxDocuments = 0;
 
     @Min(1)
-    private int representativeChunks = 8;
-
-    @Min(1000)
-    private int maxLlmInputChars = 24000;
-
-    @Min(1)
     private int llmMaxAttempts = 3;
 
     @Valid

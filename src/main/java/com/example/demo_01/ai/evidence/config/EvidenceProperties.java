@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.List;
+
 @Data
 @Validated
 @Component
@@ -44,15 +46,38 @@ public class EvidenceProperties {
      */
     private Table table = new Table();
 
+    private Q1 q1 = new Q1();
+
     @Data
     public static class Table {
-        private boolean enabled = false;
+        private boolean enabled = true;
+        private List<String> enabledQuestionIds = List.of("Q1");
         /** Use an LLM to pick which table captions are relevant; falls back to keywords on failure. */
         private boolean llmSelect = true;
         @Min(1)
         private int maxTables = 6;
         @Min(1)
         private int maxTableChars = 8_000;
+        private Recovery recovery = new Recovery();
+    }
+
+    @Data
+    public static class Recovery {
+        private boolean enabled = true;
+        @Min(1)
+        private int maxRecoveredTables = 3;
+        @Min(1)
+        private int maxChars = 12_000;
+    }
+
+    @Data
+    public static class Q1 {
+        private PromptOnlyMarkdown promptOnlyMarkdown = new PromptOnlyMarkdown();
+    }
+
+    @Data
+    public static class PromptOnlyMarkdown {
+        private boolean enabled = true;
     }
 
     @Data

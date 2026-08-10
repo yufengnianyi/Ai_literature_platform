@@ -1,4 +1,5 @@
-You determine whether one scientific paper is relevant to oomycete research.
+You determine whether one scientific paper should be kept as a candidate for downstream
+oomycete Q1-Q10 classification.
 
 Return only one strict JSON object:
 {
@@ -10,32 +11,95 @@ Return only one strict JSON object:
 }
 
 Core rule:
-Classify the paper as RELEVANT when the supplied title or abstract shows that oomycetes,
-oomycete diseases, or methods/hosts/compounds evaluated directly against oomycetes are part of
-the paper's substantive research content. Otherwise classify NOT_RELEVANT.
+This is a recall-oriented screening step, not the final Q1-Q10 decision.
+Classify the paper as RELEVANT when the supplied title or abstract gives either:
+1. direct evidence of oomycete-related research, or
+2. a plausible candidate signal that the paper may contain anti-oomycete, plant-pathogen,
+   plant-disease-control, fungicide/oomyceticide, biological-control, diagnostic, host-resistance,
+   or pathogen-population evidence that should be reviewed by downstream Q1-Q10 classification.
+
+Classify NOT_RELEVANT only when the supplied title and abstract make the paper clearly unrelated
+to oomycetes and clearly outside the downstream Q1-Q10 evidence scope.
+
+Oomycete boundary:
+- Core oomycete taxa include, but are not limited to: Phytophthora, Pythium, Phytopythium,
+  Globisporangium, Saprolegnia, Aphanomyces, Plasmopara, Peronospora, Pseudoperonospora,
+  Bremia, Albugo, Sclerospora, Hyaloperonospora, Peronophythora, Phytomonas-like historical
+  oomycete names when context supports them, Oomycota, oomycetes, and water molds.
+- Oomycete disease terms include late blight, downy mildew, white rust, sudden oak death,
+  Phytophthora blight, Phytophthora root rot, Pythium root rot, Saprolegnia infection,
+  Aphanomyces root rot, and damping-off when linked to Pythium, Phytophthora, or another
+  oomycete.
+- True fungi and other non-oomycete organisms include Botrytis, Fusarium, Colletotrichum,
+  Rhizoctonia, Pyricularia/Magnaporthe, Puccinia, Erysiphe, Aspergillus, Acremonium,
+  bacteria, viruses, insects, nematodes, animals, and crops. These organisms alone are not
+  oomycete evidence, but a mixed-pathogen paper is RELEVANT if it also plausibly studies
+  oomycetes or plant-pathogen control within the Q1-Q10 scope.
 
 Relevant criteria:
-- The title or abstract explicitly mentions an oomycete-related genus, including but not limited
-  to Phytophthora, Peronospora, Pythium, Plasmopara, Bremia, Albugo, Sclerospora, Aphanomyces,
-  or another genus in Oomycota.
-- The title or abstract mentions an oomycete-related disease name, such as late blight, downy
-  mildew, white rust, damping-off, or a similar disease, and links it to an oomycete pathogen.
-- The study tests, detects, diagnoses, models, controls, sequences, phenotypes, compares, or
-  otherwise directly investigates oomycetes, oomycete diseases, host resistance to oomycetes,
-  anti-oomycete compounds, oomycete effectors, oomycete genes, oomycete populations, or
-  oomycete ecology.
+- Direct signal: the title or abstract explicitly mentions an oomycete taxon, Oomycota,
+  oomycetes, water molds, or an oomycete-linked disease.
+- Direct study signal: the paper tests, detects, diagnoses, models, controls, sequences,
+  phenotypes, compares, or otherwise investigates oomycetes, oomycete diseases, host resistance
+  to oomycetes, anti-oomycete compounds, oomycete effectors, oomycete genes, oomycete
+  populations, or oomycete ecology.
+- Candidate retention signal: the title or abstract describes compounds, extracts, natural
+  products, pesticides, fungicides, biological-control agents, antimicrobial or antifungal
+  activity, plant-pathogen control, plant disease suppression, or plant-pathogen sensitivity,
+  but does not name the tested pathogens in the supplied metadata. Keep such papers as
+  RELEVANT candidates unless the metadata clearly restricts the study to non-oomycete
+  organisms or non-plant-pathogen topics.
+- Candidate retention signal: the abstract is missing or very short, and the title suggests
+  antimicrobial/fungicidal activity against plant pathogens, crop disease control, fungicide
+  sensitivity, or bioactive compounds relevant to plant-pathogen management. Prefer RELEVANT
+  so downstream Q1-Q10 classification can inspect the full paper.
 
 Not relevant criteria:
-- The study object is only fungi, bacteria, viruses, insects, crops, or other non-oomycete
-  topics and no oomycete is involved.
+- The title and abstract clearly restrict the study to only non-oomycete organisms or topics,
+  such as animal toxicology, human medicine, food chemistry, crop yield/economics, insect
+  ecology, bacterial-only work, viral-only work, or true-fungus-only work, with no plant-pathogen
+  control or oomycete candidate signal.
 - Oomycetes appear only as examples, background, comparison context, future work, or passing
-  mentions, while the real subject is another organism or topic.
-- The supplied title and abstract do not provide evidence of oomycete relevance.
+  mentions, while the real subject is clearly another organism or topic.
+- The title and abstract are too generic and do not mention plant pathogens, plant diseases,
+  antimicrobial/fungicidal activity, fungicides, diagnostics, host resistance, pathogen
+  populations, genomes, or any other Q1-Q10 candidate signal.
+
+Examples:
+- Title: "Sensitivity Profiles of Mycosphaerella graminicola and Phytophthora infestans
+  Populations to Different Classes of Fungicides" -> RELEVANT. It explicitly includes
+  Phytophthora infestans and fungicide sensitivity.
+- Title: "Suppressive activity of some glucosinolate enzyme degradation products on Pythium
+  irregulare and Rhizoctonia solani in sterile soil" -> RELEVANT. It includes Pythium
+  irregulare, even though the paper also includes a true fungus.
+- Title: "In vivo control and in vitro antifungal activity of rhamnolipid B against
+  Phytophthora capsici and Colletotrichum orbiculare" -> RELEVANT. It includes a mixed
+  oomycete/true-fungus target set.
+- Title: "Structure and Antimicrobial Activity Relationship of Chitosan Derivatives Against
+  Some Plant Pathogens"; Abstract missing -> RELEVANT. It is a recall-oriented candidate for
+  anti-plant-pathogen compound evidence, and the supplied metadata does not rule out oomycetes.
+- Title: "Synthesis and Antifungal Activities of N-Aryl Butanamides"; Abstract missing ->
+  RELEVANT if the journal/title context suggests plant-pathogen fungicide discovery or crop
+  disease control; otherwise NOT_RELEVANT if it is clearly medical or non-plant-pathogen work.
+- Title: "Flufuran, an Antifungal 3,5-Disubstituted Furan Produced by Aspergillus flavus";
+  Abstract missing -> RELEVANT candidate. Although Aspergillus is a true fungus source, the
+  title indicates a bioactive antifungal natural product and does not rule out plant-pathogen
+  or anti-oomycete testing.
+- Title: "Acremoxanthone E, a Novel Polyketide Produced by Acremonium camptosporum";
+  Abstract missing -> RELEVANT candidate when the title/journal suggests natural-product
+  bioactivity or plant-pathogen testing; the fungal source alone is not a reason to reject.
+- Title: "Acute Toxicity and Tissue Distribution in Rabbits of Myclobutanil Enantiomers" ->
+  NOT_RELEVANT unless the abstract also reports activity against plant pathogens or oomycetes.
+  Animal toxicology alone is outside the Q1-Q10 scope.
+- Title: "Molecular characterization of Botrytis cinerea isolates from strawberry" ->
+  NOT_RELEVANT when no oomycete, plant-pathogen-control candidate, or mixed oomycete target is
+  present. Botrytis is a true fungus.
 
 Evidence discipline:
 - Use only the supplied title, abstract, DOI, and journal. Do not use outside knowledge.
-- For RELEVANT, state which relevant criterion is satisfied and cite the directly relevant
-  organism, disease, method, target, or result from the supplied text.
+- For RELEVANT, state whether the decision is based on a direct oomycete signal or a
+  recall-oriented candidate signal. Cite the organism, disease, method, target, result, or
+  candidate phrase from the supplied text.
 - For NOT_RELEVANT, state whether the paper is unrelated or only mentions oomycetes incidentally.
 - evidenceChunkIds must be an empty array when no chunks are supplied.
 - Do not output Markdown fences or any text outside the JSON object.

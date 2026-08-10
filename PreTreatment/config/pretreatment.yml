@@ -5,8 +5,6 @@ app:
       output-root: PreTreatment/outputs
       prompt-path: PreTreatment/prompts/oomycete-main-study-system.txt
       max-documents: 0
-      representative-chunks: 8
-      max-llm-input-chars: 24000
       llm-max-attempts: 3
       quality:
         min-chunks: 3

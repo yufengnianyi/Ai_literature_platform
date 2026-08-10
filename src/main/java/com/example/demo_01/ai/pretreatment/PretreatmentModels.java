@@ -59,14 +59,6 @@ public final class PretreatmentModels {
     ) {
     }
 
-    public record RepresentativeChunk(
-            String chunkId,
-            int chunkIndex,
-            String sectionPath,
-            String text
-    ) {
-    }
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record LlmJudgment(
             LlmLabel label,
@@ -113,6 +105,47 @@ public final class PretreatmentModels {
             boolean dryRun,
             Instant startedAt,
             Instant finishedAt
+    ) {
+    }
+
+    public record FilterRunRequest() {
+    }
+
+    public record FilterRunAccepted(
+            UUID runId,
+            PretreatmentRunStatus status
+    ) {
+    }
+
+    public record PretreatmentRunRecord(
+            UUID runId,
+            PretreatmentMode mode,
+            PretreatmentRunStatus status,
+            String outputDir,
+            int totalArtifacts,
+            int processedDocuments,
+            int acceptedDocuments,
+            int rejectedDocuments,
+            int uncertainDocuments,
+            int skippedDocuments,
+            int vectorsRemoved,
+            boolean dryRun,
+            UUID acceptedCohortId,
+            UUID rejectedCohortId,
+            String errorCode,
+            String errorMessage,
+            Instant startedAt,
+            Instant finishedAt,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+    }
+
+    public record PretreatmentDocumentPage(
+            List<PretreatmentDocumentResult> items,
+            int page,
+            int size,
+            long total
     ) {
     }
 }

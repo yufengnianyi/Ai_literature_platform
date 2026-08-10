@@ -10,6 +10,7 @@ import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessOut
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStage;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStatus;
 import com.example.demo_01.ai.preprocessing.repository.DocumentPreprocessJobRepository;
+import com.example.demo_01.ai.evidence.table.TableJsonlMaterializationService;
 import com.example.demo_01.ai.rag.artifact.JsonlArtifactWriter;
 import com.example.demo_01.ai.rag.chunk.TeiChunker;
 import com.example.demo_01.ai.rag.client.GrobidClient;
@@ -75,6 +76,9 @@ public class DocumentPreprocessService {
 
     @Resource
     private PreprocessArtifactManifestWriter manifestWriter;
+
+    @Resource
+    private TableJsonlMaterializationService tableJsonlMaterializationService;
 
     @Resource
     private FailedLiteratureCsvRecorder failedLiteratureCsvRecorder;
@@ -180,6 +184,7 @@ public class DocumentPreprocessService {
                     Instant artifactStart = Instant.now();
                     Path jsonlPath = upload.storageDir().resolve("document.jsonl");
                     jsonlArtifactWriter.write(jsonlPath, chunks);
+                    Path tablesJsonlPath = tableJsonlMaterializationService.materialize(fulltextTeiPath);
                     PreprocessArtifact artifact = new PreprocessArtifact(
                             documentId,
                             upload.storageDir().toAbsolutePath().toString(),
@@ -187,6 +192,7 @@ public class DocumentPreprocessService {
                             headerTeiPath.toAbsolutePath().toString(),
                             fulltextTeiPath.toAbsolutePath().toString(),
                             jsonlPath.toAbsolutePath().toString(),
+                            tablesJsonlPath == null ? null : tablesJsonlPath.toAbsolutePath().toString(),
                             upload.pdfSha256(),
                             canonicalKey,
                             finalMetadata,

@@ -33,6 +33,8 @@ public final class PromptCatalog {
             "prompts/evidence/multi-profile-classification-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM =
             "prompts/evidence/multi-profile-extraction-system.txt";
+    public static final String EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN_SYSTEM =
+            "prompts/evidence/q1-prompt-only-markdown-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM =
             "prompts/evidence/multi-profile-verify-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM =
@@ -41,6 +43,8 @@ public final class PromptCatalog {
             "prompts/evidence/multi-profile-retrieval-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_TABLE_SELECT_SYSTEM =
             "prompts/evidence/multi-profile-table-select-system.txt";
+    public static final String EVIDENCE_LINEARIZED_TABLE_RECOVERY_SYSTEM =
+            "prompts/evidence/linearized-table-recovery-system.txt";
     public static final String REPORT_EVIDENCE_SYSTEM =
             "prompts/report/evidence-report-system.txt";
     public static final String REPORT_EVIDENCE_CITATION_REPAIR_SYSTEM =

@@ -3,6 +3,7 @@ package com.example.demo_01.ai.rag.service;
 import com.example.demo_01.ai.config.AiPersistenceProperties;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.*;
 import com.example.demo_01.ai.rag.repository.RagIngestionBatchRepository;
+import com.example.demo_01.ai.stage.CohortService;
 import com.example.demo_01.exception.BusinessException;
 import com.example.demo_01.exception.ErrorCode;
 import com.example.demo_01.exception.ThrowUtils;
@@ -49,6 +50,9 @@ public class RagBatchIngestionService {
     @Resource
     private AiPersistenceProperties properties;
 
+    @Resource
+    private CohortService cohortService;
+
     public RagBatchAcceptedResponse ingestFolder(String folderPath) {
         Path folder = resolveFolder(folderPath);
         List<BatchPdf> pdfFiles = listPdfFiles(folder).stream()
@@ -88,6 +92,7 @@ public class RagBatchIngestionService {
         Instant startedAt = Instant.now();
         log.info("Starting RAG batch {} from {} with {} PDF files", batchId, source, pdfFiles.size());
         RagBatchMetrics metrics = new RagBatchMetrics();
+        List<UUID> completedDocumentIds = new ArrayList<>();
         metrics.totalFiles = pdfFiles.size();
         metrics.processedFiles = 0;
         metrics.completedFiles = 0;
@@ -121,6 +126,9 @@ public class RagBatchIngestionService {
                 BatchFileResult result = takeCompleted(completionService);
                 if (result.outcome() != null) {
                     accumulate(metrics, result.outcome());
+                    if (result.outcome().status() == RagJobStatus.COMPLETED) {
+                        completedDocumentIds.add(result.outcome().documentId());
+                    }
                     log.info(
                             "Batch {} file {}/{} finished: status={}, chunks={}, estimatedTokens={}, providerTokens={}, totalMs={}",
                             batchId,
@@ -159,6 +167,14 @@ public class RagBatchIngestionService {
         metrics.totalElapsedMs = Duration.between(startedAt, Instant.now()).toMillis();
         RagBatchStatus finalStatus = resolveBatchStatus(metrics);
         batchRepository.update(batchId, finalStatus, metrics, Instant.now());
+        if (!completedDocumentIds.isEmpty()) {
+            cohortService.create(
+                    "ingested-" + batchId,
+                    "RAG_INGESTION",
+                    batchId,
+                    completedDocumentIds,
+                    "completed by rag ingestion");
+        }
         log.info(
                 "Batch {} completed with status {}. totalFiles={}, processedFiles={}, completedFiles={}, duplicateFiles={}, failedFiles={}, chunks={}, estimatedTokens={}, providerTokens={}, totalElapsedMs={}",
                 batchId,

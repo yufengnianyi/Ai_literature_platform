@@ -2,19 +2,26 @@ package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactDocument;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactScan;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.FilterRunAccepted;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmJudgment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentPage;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunRecord;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunStatus;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.SkippedArtifact;
 import com.example.demo_01.ai.pretreatment.PretreatmentQualityGate.QualityResult;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
 import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
+import com.example.demo_01.ai.stage.CohortService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
@@ -38,9 +45,6 @@ public class PretreatmentService {
     private PretreatmentQualityGate qualityGate;
 
     @Resource
-    private PretreatmentTitleMetadataResolver titleMetadataResolver;
-
-    @Resource
     private PretreatmentLlmJudge llmJudge;
 
     @Resource
@@ -52,6 +56,13 @@ public class PretreatmentService {
     @Resource
     private RagVectorIngestionService ragVectorIngestionService;
 
+    @Resource
+    private CohortService cohortService;
+
+    @Resource
+    @Qualifier("preprocessTaskExecutor")
+    private TaskExecutor taskExecutor;
+
     public PretreatmentRunSummary runCli() {
         PretreatmentMode mode = parseMode(properties.getCli().getMode());
         return switch (mode) {
@@ -61,10 +72,75 @@ public class PretreatmentService {
     }
 
     public PretreatmentRunSummary scan() {
+        return scan(UUID.randomUUID(), null, null, true);
+    }
+
+    public FilterRunAccepted submitFilterRun() {
         UUID runId = UUID.randomUUID();
         Instant startedAt = Instant.now();
         Path outputDir = Path.of(properties.getOutputRoot()).resolve(runId.toString()).toAbsolutePath().normalize();
-        repository.insertRun(runId, PretreatmentMode.scan, repository.configJson(properties), outputDir.toString(), startedAt);
+        repository.insertRun(runId, PretreatmentMode.scan, repository.configJson(properties),
+                outputDir.toString(), startedAt);
+        taskExecutor.execute(() -> {
+            try {
+                scan(runId, outputDir, startedAt, false);
+            } catch (Exception e) {
+                log.warn("PreTreatment REST run {} failed: {}", runId, rootMessage(e), e);
+            }
+        });
+        return new FilterRunAccepted(runId, PretreatmentRunStatus.RUNNING);
+    }
+
+    public PretreatmentRunRecord requireRun(UUID runId) {
+        PretreatmentRunRecord run = repository.findRun(runId);
+        if (run == null) {
+            throw new IllegalArgumentException("PreTreatment run not found: " + runId);
+        }
+        return run;
+    }
+
+    public PretreatmentDocumentPage findDocuments(UUID runId, FinalDecision finalDecision,
+                                                  int page, int size) {
+        requireRun(runId);
+        return repository.findDocuments(runId, finalDecision, page, size);
+    }
+
+    public PretreatmentRunSummary garbageCollectRejectedVectors(UUID runId, boolean dryRun) {
+        PretreatmentRunRecord run = requireRun(runId);
+        List<UUID> rejectedIds = repository.findDocumentIds(runId, FinalDecision.REJECTED);
+        int removed = 0;
+        if (!dryRun) {
+            for (UUID documentId : rejectedIds) {
+                ragVectorIngestionService.removeDocument(documentId);
+                removed++;
+            }
+        }
+        return new PretreatmentRunSummary(
+                runId,
+                PretreatmentMode.apply,
+                run.outputDir(),
+                rejectedIds.size(),
+                rejectedIds.size(),
+                0,
+                rejectedIds.size(),
+                0,
+                0,
+                removed,
+                dryRun,
+                run.startedAt() == null ? Instant.now() : run.startedAt(),
+                Instant.now());
+    }
+
+    private PretreatmentRunSummary scan(UUID runId, Path outputDir, Instant startedAt,
+                                        boolean insertRun) {
+        Instant actualStartedAt = startedAt == null ? Instant.now() : startedAt;
+        Path actualOutputDir = outputDir == null
+                ? Path.of(properties.getOutputRoot()).resolve(runId.toString()).toAbsolutePath().normalize()
+                : outputDir;
+        if (insertRun) {
+            repository.insertRun(runId, PretreatmentMode.scan, repository.configJson(properties),
+                    actualOutputDir.toString(), actualStartedAt);
+        }
         try {
             ArtifactScan scan = artifactScanner.scan(Path.of(properties.getArtifactRoot()), properties.getMaxDocuments());
             List<PretreatmentDocumentResult> results = new ArrayList<>();
@@ -81,9 +157,11 @@ public class PretreatmentService {
                     repository.insertResult(result);
                 }
             }
-            PretreatmentRunSummary summary = summary(runId, PretreatmentMode.scan, outputDir, scan, results, 0, startedAt);
-            reportWriter.write(outputDir, summary, results);
+            PretreatmentRunSummary summary = summary(runId, PretreatmentMode.scan, actualOutputDir,
+                    scan, results, 0, actualStartedAt);
+            reportWriter.write(actualOutputDir, summary, results);
             repository.completeRun(summary);
+            publishFilterCohorts(runId, results);
             return summary;
         } catch (Exception ex) {
             repository.failRun(runId, "PRETREATMENT_SCAN", rootMessage(ex));
@@ -99,13 +177,6 @@ public class PretreatmentService {
         repository.insertRun(runId, PretreatmentMode.apply, repository.configJson(properties), applyRunDir.toString(), startedAt);
         try {
             List<UUID> rejectedIds = reportWriter.readRejectedIds(applyRunDir);
-            int removed = 0;
-            for (UUID documentId : rejectedIds) {
-                if (!properties.getCli().isDryRun()) {
-                    ragVectorIngestionService.removeDocument(documentId);
-                    removed++;
-                }
-            }
             Instant finishedAt = Instant.now();
             PretreatmentRunSummary summary = new PretreatmentRunSummary(
                     runId,
@@ -117,7 +188,7 @@ public class PretreatmentService {
                     rejectedIds.size(),
                     0,
                     0,
-                    removed,
+                    0,
                     properties.getCli().isDryRun(),
                     startedAt,
                     finishedAt
@@ -133,9 +204,6 @@ public class PretreatmentService {
     PretreatmentDocumentResult screenDocument(UUID runId,
                                               ArtifactDocument document) {
         RagDocumentMetadata metadata = document.metadata();
-        if (titleMetadataResolver != null) {
-            metadata = titleMetadataResolver.resolve(metadata);
-        }
         QualityResult qualityResult = qualityGate.evaluate(metadata, document.chunks(), properties.getQuality());
         if (qualityResult.decision() == QualityDecision.REJECT) {
             return result(runId, document, metadata, qualityResult,
@@ -245,6 +313,32 @@ public class PretreatmentService {
 
     private int count(List<PretreatmentDocumentResult> results, FinalDecision decision) {
         return (int) results.stream().filter(result -> result.finalDecision() == decision).count();
+    }
+
+    private void publishFilterCohorts(UUID runId, List<PretreatmentDocumentResult> results) {
+        List<UUID> accepted = ids(results, FinalDecision.ACCEPTED);
+        List<UUID> rejected = ids(results, FinalDecision.REJECTED);
+        UUID acceptedCohortId = cohortService.create(
+                "filter-accepted-" + runId,
+                "PRETREATMENT",
+                runId,
+                accepted,
+                "accepted by pretreatment");
+        UUID rejectedCohortId = cohortService.create(
+                "filter-rejected-" + runId,
+                "PRETREATMENT",
+                runId,
+                rejected,
+                "rejected by pretreatment");
+        repository.setCohorts(runId, acceptedCohortId, rejectedCohortId);
+    }
+
+    private List<UUID> ids(List<PretreatmentDocumentResult> results, FinalDecision decision) {
+        return results.stream()
+                .filter(result -> result.finalDecision() == decision)
+                .map(PretreatmentDocumentResult::documentId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     private PretreatmentMode parseMode(String mode) {

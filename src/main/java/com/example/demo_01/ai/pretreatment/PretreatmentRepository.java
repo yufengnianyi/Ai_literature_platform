@@ -1,11 +1,16 @@
 package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentPage;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunRecord;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunStatus;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,6 +25,12 @@ import java.util.UUID;
 
 @Repository
 public class PretreatmentRepository {
+
+    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
+    };
+    private static final TypeReference<Map<String, Object>> STRING_OBJECT_MAP =
+            new TypeReference<>() {
+            };
 
     @Resource
     private JdbcTemplate jdbcTemplate;
@@ -73,6 +84,17 @@ public class PretreatmentRepository {
                 summary.runId());
     }
 
+    public void setCohorts(UUID runId, UUID acceptedCohortId, UUID rejectedCohortId) {
+        jdbcTemplate.update("""
+                update pretreatment_run
+                set accepted_cohort_id = ?,
+                    rejected_cohort_id = ?,
+                    updated_at = ?
+                where run_id = ?
+                """, acceptedCohortId, rejectedCohortId,
+                Timestamp.from(Instant.now()), runId);
+    }
+
     public void failRun(UUID runId, String errorCode, String errorMessage) {
         Instant now = Instant.now();
         jdbcTemplate.update("""
@@ -120,6 +142,102 @@ public class PretreatmentRepository {
                 Timestamp.from(Instant.now()));
     }
 
+    public PretreatmentRunRecord findRun(UUID runId) {
+        return jdbcTemplate.query("""
+                select *
+                from pretreatment_run
+                where run_id = ?
+                """, this::mapRun, runId).stream().findFirst().orElse(null);
+    }
+
+    public PretreatmentDocumentPage findDocuments(UUID runId, FinalDecision finalDecision,
+                                                  int requestedPage, int requestedSize) {
+        int page = Math.max(0, requestedPage);
+        int size = Math.min(Math.max(1, requestedSize), 200);
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(runId);
+        String where = " where run_id = ?";
+        if (finalDecision != null) {
+            where += " and final_decision = ?";
+            args.add(finalDecision.name());
+        }
+        Long total = jdbcTemplate.queryForObject(
+                "select count(*) from pretreatment_document_result" + where,
+                Long.class, args.toArray());
+        List<Object> queryArgs = new java.util.ArrayList<>(args);
+        queryArgs.add(size);
+        queryArgs.add(page * size);
+        List<PretreatmentDocumentResult> items = jdbcTemplate.query("""
+                select *
+                from pretreatment_document_result
+                """ + where + """
+                order by id
+                limit ? offset ?
+                """, this::mapDocument, queryArgs.toArray());
+        return new PretreatmentDocumentPage(items, page, size, total == null ? 0 : total);
+    }
+
+    public List<UUID> findDocumentIds(UUID runId, FinalDecision finalDecision) {
+        return jdbcTemplate.query("""
+                select document_id
+                from pretreatment_document_result
+                where run_id = ?
+                  and final_decision = ?
+                  and document_id is not null
+                order by id
+                """, (rs, rowNum) -> rs.getObject("document_id", UUID.class),
+                runId, finalDecision.name());
+    }
+
+    private PretreatmentRunRecord mapRun(java.sql.ResultSet rs, int rowNum)
+            throws java.sql.SQLException {
+        return new PretreatmentRunRecord(
+                rs.getObject("run_id", UUID.class),
+                PretreatmentMode.valueOf(rs.getString("mode")),
+                PretreatmentRunStatus.valueOf(rs.getString("status")),
+                rs.getString("output_dir"),
+                rs.getInt("total_artifacts"),
+                rs.getInt("processed_documents"),
+                rs.getInt("accepted_documents"),
+                rs.getInt("rejected_documents"),
+                rs.getInt("uncertain_documents"),
+                rs.getInt("skipped_documents"),
+                rs.getInt("vectors_removed"),
+                rs.getBoolean("dry_run"),
+                rs.getObject("accepted_cohort_id", UUID.class),
+                rs.getObject("rejected_cohort_id", UUID.class),
+                rs.getString("error_code"),
+                rs.getString("error_message"),
+                instant(rs.getTimestamp("started_at")),
+                instant(rs.getTimestamp("finished_at")),
+                instant(rs.getTimestamp("created_at")),
+                instant(rs.getTimestamp("updated_at"))
+        );
+    }
+
+    private PretreatmentDocumentResult mapDocument(java.sql.ResultSet rs, int rowNum)
+            throws java.sql.SQLException {
+        String quality = rs.getString("quality_decision");
+        String llm = rs.getString("llm_label");
+        return new PretreatmentDocumentResult(
+                rs.getObject("run_id", UUID.class),
+                rs.getObject("document_id", UUID.class),
+                rs.getString("storage_dir"),
+                rs.getString("title"),
+                rs.getString("journal"),
+                rs.getString("doi"),
+                quality == null ? null : QualityDecision.valueOf(quality),
+                fromJsonMap(rs.getString("quality_metrics_json")),
+                llm == null ? null : LlmLabel.valueOf(llm),
+                FinalDecision.valueOf(rs.getString("final_decision")),
+                rs.getString("reject_reason_code"),
+                fromJsonList(rs.getString("taxa_json")),
+                rs.getString("research_focus"),
+                fromJsonList(rs.getString("evidence_chunk_ids_json")),
+                rs.getString("reason")
+        );
+    }
+
     public String configJson(PretreatmentProperties properties) {
         try {
             Map<String, Object> config = new LinkedHashMap<>();
@@ -127,8 +245,6 @@ public class PretreatmentRepository {
             config.put("outputRoot", properties.getOutputRoot());
             config.put("promptPath", properties.getPromptPath());
             config.put("maxDocuments", properties.getMaxDocuments());
-            config.put("representativeChunks", properties.getRepresentativeChunks());
-            config.put("maxLlmInputChars", properties.getMaxLlmInputChars());
             config.put("llmMaxAttempts", properties.getLlmMaxAttempts());
             config.put("qualityMinChunks", properties.getQuality().getMinChunks());
             config.put("qualityMinTotalTextChars", properties.getQuality().getMinTotalTextChars());
@@ -148,6 +264,32 @@ public class PretreatmentRepository {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize PreTreatment values", e);
         }
+    }
+
+    private List<String> fromJsonList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse PreTreatment list", e);
+        }
+    }
+
+    private Map<String, Object> fromJsonMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_OBJECT_MAP);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse PreTreatment metrics", e);
+        }
+    }
+
+    private Instant instant(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 
     private String name(Enum<?> value) {

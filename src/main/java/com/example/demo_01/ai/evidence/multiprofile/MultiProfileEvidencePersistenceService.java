@@ -35,8 +35,22 @@ public class MultiProfileEvidencePersistenceService {
                                 String sourceHash,
                                 String promptHash,
                                 String modelName) {
+        replaceEvidence(batchId, null, documentId, questionId, classificationStatus,
+                rows, sourceHash, promptHash, modelName);
+    }
+
+    @Transactional
+    public void replaceEvidence(UUID batchId,
+                                UUID extractionRunId,
+                                UUID documentId,
+                                String questionId,
+                                ClassificationStatus classificationStatus,
+                                List<ValidatedEvidenceRow> rows,
+                                String sourceHash,
+                                String promptHash,
+                                String modelName) {
         multiProfileRepository.replaceEvidence(
-                batchId, documentId, questionId,
+                batchId, extractionRunId, documentId, questionId,
                 MultiProfileEvidenceModels.PROFILE_VERSION, classificationStatus, rows);
         if (!"Q1".equals(questionId)) {
             return;
