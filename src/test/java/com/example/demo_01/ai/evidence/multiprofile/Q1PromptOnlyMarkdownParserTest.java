@@ -73,15 +73,16 @@ class Q1PromptOnlyMarkdownParserTest {
         String markdown = """
                 | Gene name | Alias/homologous gene | Gene ID/accession | Oomycete species (Latin name) | Strain/isolate | Gene functional category | Encoded protein/product | Functional validation method | Mutation phenotype (positive result) | Negative/no-effect phenotype (key) | Overexpression phenotype | Expression pattern | Upstream/downstream regulatory relationship | Biological process involved | Reference | Notes |
                 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-                | PcAvh1 | | PHYCA_12345 | Phytophthora capsici | LT1534 | pathogenicity/virulence | predicted protein | RNAi | reduced virulence | no growth defect | | induced during infection | | infection | Example paper | |
+                | PsMYB1 | PsMYBlike 2-7 | JX069980 | Phytophthora sojae | P6497; PsMYB1-silenced transformants T54, T77, T101; non-silenced T132 | growth/development | Myb transcription factor protein with R2R3 Myb DNA-binding domains | stable transformation-mediated gene silencing; qRT-PCR; DGE profiling; phenotype analysis | silenced mutants showed aberrant zoospore cleavage, reduced zoospore release, lower cyst germination, fewer oospores, and reduced zoospore-mediated virulence | mycelial growth and sporangia formation were not significantly affected | | expressed in mycelia, sporulating hyphae, zoospores, cysts, germinating cysts, and infection stages; down-regulated in PsSAK1-silenced cysts and IF1.5 h | PsMYB1 transcript depends on a functional PsSAK1 pathway; PsSAK1 regulates PsMYB1 | zoospore development; zoosporogenesis; cyst germination; oospore production; zoospore-mediated plant infection | A Myb Transcription Factor of Phytophthora sojae, Regulated by MAP Kinase PsSAK1, Is Required for Zoospore Development; DOI: 10.1371/journal.pone.0040246 | |
                 """;
 
         List<ValidatedEvidenceRow> rows = parser.parse(markdown, registry.require("Q6"));
 
         assertEquals(1, rows.size());
         assertEquals(16, rows.getFirst().cells().size());
-        assertEquals("PcAvh1", rows.getFirst().cells().getFirst());
-        assertEquals("reduced virulence", rows.getFirst().cells().get(8));
-        assertEquals("no growth defect", rows.getFirst().cells().get(9));
+        assertEquals("PsMYB1", rows.getFirst().cells().getFirst());
+        assertEquals("JX069980", rows.getFirst().cells().get(2));
+        assertTrue(rows.getFirst().cells().get(8).contains("aberrant zoospore cleavage"));
+        assertTrue(rows.getFirst().cells().get(12).contains("PsSAK1 regulates PsMYB1"));
     }
 }
