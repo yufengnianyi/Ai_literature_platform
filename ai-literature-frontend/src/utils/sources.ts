@@ -90,6 +90,16 @@ const buildSourceKey = (source: MessageSource): string =>
   ].join('||');
 
 export const normalizeSourcesPayload = (payload: unknown): MessageSource[] => {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.items)) {
+      return normalizeSourcesPayload(record.items);
+    }
+    if (Array.isArray(record.rag)) {
+      return normalizeSourcesPayload(record.rag);
+    }
+  }
+
   if (!Array.isArray(payload)) {
     return [];
   }

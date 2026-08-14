@@ -83,8 +83,6 @@ public class ReviewProperties {
     @Data
     public static class Xlsx {
 
-        private boolean legacyCompoundSheet = true;
-
         private boolean enableThreeSheet = true;
     }
 

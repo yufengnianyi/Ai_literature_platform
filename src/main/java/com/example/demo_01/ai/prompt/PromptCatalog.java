@@ -12,6 +12,9 @@ public final class PromptCatalog {
     public static final String AI_CODE_HELPER_SYSTEM = "prompts/ai/ai-code-helper-system.txt";
     public static final String AI_CODE_HELPER_SERVICE_SYSTEM = "prompts/ai/ai-code-helper-service-system.txt";
     public static final String AI_RAG_CHAT_SYSTEM = "prompts/ai/rag-chat-system.txt";
+    public static final String AI_Q1_EVIDENCE_CHAT_SYSTEM = "prompts/ai/q1-evidence-chat-system.txt";
+    public static final String AI_Q1_COMPOUND_REFERENCE_RESOLUTION_SYSTEM =
+            "prompts/ai/q1-compound-reference-resolution-system.txt";
 
     public static final String KG_CHUNK_ENTITY_EXTRACTION_SYSTEM = "prompts/kg/chunk-entity-extraction-system.txt";
     public static final String KG_CHUNK_ENTITY_EXTRACTION_USER = "prompts/kg/chunk-entity-extraction-user.txt";
@@ -31,10 +34,26 @@ public final class PromptCatalog {
             "prompts/evidence/antimicrobial-compound-table-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM =
             "prompts/evidence/multi-profile-classification-system.txt";
-    public static final String EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM =
-            "prompts/evidence/multi-profile-extraction-system.txt";
-    public static final String EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN_SYSTEM =
-            "prompts/evidence/q1-prompt-only-markdown-system.txt";
+    public static final String EVIDENCE_Q1_EXTRACTION_SYSTEM =
+            "prompts/evidence/q1-extraction-system.txt";
+    public static final String EVIDENCE_Q2_EXTRACTION_SYSTEM =
+            "prompts/evidence/q2-extraction-system.txt";
+    public static final String EVIDENCE_Q3_EXTRACTION_SYSTEM =
+            "prompts/evidence/q3-extraction-system.txt";
+    public static final String EVIDENCE_Q4_EXTRACTION_SYSTEM =
+            "prompts/evidence/q4-extraction-system.txt";
+    public static final String EVIDENCE_Q5_EXTRACTION_SYSTEM =
+            "prompts/evidence/q5-extraction-system.txt";
+    public static final String EVIDENCE_Q6_EXTRACTION_SYSTEM =
+            "prompts/evidence/q6-extraction-system.txt";
+    public static final String EVIDENCE_Q7_EXTRACTION_SYSTEM =
+            "prompts/evidence/q7-extraction-system.txt";
+    public static final String EVIDENCE_Q8_EXTRACTION_SYSTEM =
+            "prompts/evidence/q8-extraction-system.txt";
+    public static final String EVIDENCE_Q9_EXTRACTION_SYSTEM =
+            "prompts/evidence/q9-extraction-system.txt";
+    public static final String EVIDENCE_Q10_EXTRACTION_SYSTEM =
+            "prompts/evidence/q10-extraction-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM =
             "prompts/evidence/multi-profile-verify-system.txt";
     public static final String EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM =
@@ -53,6 +72,23 @@ public final class PromptCatalog {
             "prompts/report/full-document-batch-system.txt";
     public static final String REPORT_SECTION_SYNTHESIS_SYSTEM =
             "prompts/report/section-synthesis-system.txt";
+
+    public static String evidenceQuestionExtractionSystem(String questionId) {
+        return switch (questionId) {
+            case "Q1" -> EVIDENCE_Q1_EXTRACTION_SYSTEM;
+            case "Q2" -> EVIDENCE_Q2_EXTRACTION_SYSTEM;
+            case "Q3" -> EVIDENCE_Q3_EXTRACTION_SYSTEM;
+            case "Q4" -> EVIDENCE_Q4_EXTRACTION_SYSTEM;
+            case "Q5" -> EVIDENCE_Q5_EXTRACTION_SYSTEM;
+            case "Q6" -> EVIDENCE_Q6_EXTRACTION_SYSTEM;
+            case "Q7" -> EVIDENCE_Q7_EXTRACTION_SYSTEM;
+            case "Q8" -> EVIDENCE_Q8_EXTRACTION_SYSTEM;
+            case "Q9" -> EVIDENCE_Q9_EXTRACTION_SYSTEM;
+            case "Q10" -> EVIDENCE_Q10_EXTRACTION_SYSTEM;
+            default -> throw new IllegalArgumentException(
+                    "Unknown evidence extraction question: " + questionId);
+        };
+    }
 
     private PromptCatalog() {
     }

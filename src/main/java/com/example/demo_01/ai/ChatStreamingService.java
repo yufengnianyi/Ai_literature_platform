@@ -54,8 +54,11 @@ public class ChatStreamingService {
             requestMessages.add(SystemMessage.from(PromptResources.load(PromptCatalog.AI_CODE_HELPER_SERVICE_SYSTEM)));
             requestMessages.addAll(history);
             if (retrievedContext.hasContext()) {
+                String chatSystemPrompt = retrievedContext.hasQ1Evidence()
+                        ? PromptCatalog.AI_Q1_EVIDENCE_CHAT_SYSTEM
+                        : PromptCatalog.AI_RAG_CHAT_SYSTEM;
                 requestMessages.add(SystemMessage.from(
-                        PromptResources.load(PromptCatalog.AI_RAG_CHAT_SYSTEM)
+                        PromptResources.load(chatSystemPrompt)
                                 + "\n\n# 检索到的资料\n"
                                 + retrievedContext.contextBlock()));
             }

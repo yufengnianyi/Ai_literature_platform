@@ -46,17 +46,36 @@ public class ChatRetrievalService {
     @Resource
     private ObjectMapper objectMapper;
 
+    @Resource
+    private Q1EvidenceRetrievalService q1EvidenceRetrievalService;
+
     /**
-     * @param contextBlock human-readable numbered context injected into the prompt
-     * @param sourcesJson  JSON array serialized for the frontend {@code sources} event
-     * @param hasContext   whether any usable context was retrieved
+     * @param contextBlock    human-readable numbered context injected into the prompt
+     * @param sourcesJson     JSON array serialized for the frontend {@code sources} event
+     * @param hasContext      whether any usable context was retrieved
+     * @param hasQ1Evidence   whether curated Q1 compound-activity evidence was retrieved; callers
+     *                        use this to pick a Q1-specific system prompt instead of the generic
+     *                        literature-chat one
      */
-    public record RetrievedContext(String contextBlock, String sourcesJson, boolean hasContext) {
+    public record RetrievedContext(String contextBlock, String sourcesJson, boolean hasContext, boolean hasQ1Evidence) {
     }
 
     public RetrievedContext retrieve(String prompt) {
-        if (!ragChatProperties.isEnabled() || prompt == null || prompt.isBlank()) {
+        if (prompt == null || prompt.isBlank()) {
             return empty();
+        }
+
+        Q1EvidenceRetrievalService.Q1EvidenceContext q1Evidence = q1EvidenceRetrievalService.retrieve(prompt);
+        RagContext ragContext = retrieveRag(prompt);
+        String contextBlock = combinedContext(q1Evidence, ragContext);
+        String sourcesJson = combinedSources(q1Evidence, ragContext);
+
+        return new RetrievedContext(contextBlock, sourcesJson, !contextBlock.isBlank(), q1Evidence.hasContext());
+    }
+
+    private RagContext retrieveRag(String prompt) {
+        if (!ragChatProperties.isEnabled()) {
+            return RagContext.empty();
         }
 
         List<Content> contents;
@@ -64,11 +83,11 @@ public class ChatRetrievalService {
             contents = ragContentRetriever.retrieve(Query.from(prompt.trim()));
         } catch (Exception e) {
             log.warn("Chat RAG retrieval failed, falling back to plain chat: {}", e.getMessage());
-            return empty();
+            return RagContext.empty();
         }
 
         if (contents == null || contents.isEmpty()) {
-            return empty();
+            return RagContext.empty();
         }
 
         contents = rerank(prompt.trim(), contents);
@@ -98,10 +117,37 @@ public class ChatRetrievalService {
         }
 
         if (sources.isEmpty()) {
-            return empty();
+            return RagContext.empty();
         }
 
-        return new RetrievedContext(contextBlock.toString(), toJson(sources), true);
+        return new RagContext(contextBlock.toString(), sources);
+    }
+
+    private String combinedContext(
+            Q1EvidenceRetrievalService.Q1EvidenceContext q1Evidence,
+            RagContext ragContext) {
+        StringBuilder context = new StringBuilder();
+        if (q1Evidence.hasContext()) {
+            context.append("# Structured compound-activity evidence\n\n")
+                    .append(q1Evidence.contextBlock())
+                    .append("\n\n");
+        }
+        if (ragContext.hasContext()) {
+            context.append("# Retrieved literature snippets\n")
+                    .append("Use these snippets as supporting literature context.\n\n")
+                    .append(ragContext.contextBlock());
+        }
+        return context.toString().strip();
+    }
+
+    private String combinedSources(
+            Q1EvidenceRetrievalService.Q1EvidenceContext q1Evidence,
+            RagContext ragContext) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("rag", ragContext.sources());
+        payload.put("q1Evidence", q1Evidence.sources());
+        payload.put("items", ragContext.sources());
+        return toJson(payload);
     }
 
     /**
@@ -197,16 +243,26 @@ public class ChatRetrievalService {
         return normalized.substring(0, Math.max(0, maxChars - 1)).strip() + "…";
     }
 
-    private String toJson(List<Map<String, String>> sources) {
+    private String toJson(Object sources) {
         try {
             return objectMapper.writeValueAsString(sources);
         } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize chat RAG sources: {}", e.getMessage());
+            log.warn("Failed to serialize chat sources: {}", e.getMessage());
             return EMPTY_SOURCES_JSON;
         }
     }
 
     private RetrievedContext empty() {
-        return new RetrievedContext("", EMPTY_SOURCES_JSON, false);
+        return new RetrievedContext("", EMPTY_SOURCES_JSON, false, false);
+    }
+
+    private record RagContext(String contextBlock, List<Map<String, String>> sources) {
+        static RagContext empty() {
+            return new RagContext("", List.of());
+        }
+
+        boolean hasContext() {
+            return contextBlock != null && !contextBlock.isBlank();
+        }
     }
 }

@@ -1,0 +1,28 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q7 biological control and green disease management evidence against oomycete diseases and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve agent names, material names, virus names, species names, strains, doses, application methods, activity values, efficacy values, genome types, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 15 columns, in this exact order:
+
+| Biocontrol/control type | Name | Source (strain/plant species/material) | Target oomycete species | Mode of action | Antimicrobial/control mechanism | In vitro activity data | In vivo/field control efficacy (%) | Application method | Synergy with chemical agents | Viral genome type (oomycete viruses only) | Effect on host (oomycete viruses only) | Reference | Patent information | Notes |
+
+One row represents one biocontrol agent, material, compound, or virus-target oomycete combination.
+Create separate rows for different target oomycetes or application methods.
+Distinguish in vitro activity from greenhouse or field efficacy and preserve application method, dose, synergistic agent, and experimental conditions.
+
+Field guidance:
+- Biocontrol/control type must use microbial biocontrol agent, plant-derived inducer, nanomaterial, novel compound, oomycete virus, or other.
+- Distinguish in vitro activity from greenhouse or field efficacy.
+- Preserve application method, dose, synergistic chemical agents, viral genome type, host effect, and experimental conditions.
+- In vitro activity data should include original assay values and conditions when provided.
+- In vivo/field control efficacy should preserve percentages, disease index, disease reduction, lesion size, host, dose, timing, and environment when provided.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q7.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for agents, strains, controls, materials, target species, application methods, doses, and efficacy metrics only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q7 evidence, return only the required header row and separator row with no data rows.

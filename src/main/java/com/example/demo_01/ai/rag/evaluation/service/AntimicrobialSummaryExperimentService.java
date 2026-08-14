@@ -10,7 +10,7 @@ import com.example.demo_01.ai.rag.evaluation.repository.RagEvaluationRepository;
 import com.example.demo_01.ai.rag.evaluation.repository.RagEvaluationRepository.AntimicrobialDocument;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagChunk;
 import com.example.demo_01.ai.review.model.ReviewModels.RetrievedChunk;
-import com.example.demo_01.ai.review.repository.ReviewRepository;
+import com.example.demo_01.ai.rag.repository.RagChunkRepository;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -62,7 +62,7 @@ public class AntimicrobialSummaryExperimentService {
     private RagEvaluationRepository evaluationRepository;
 
     @Resource
-    private ReviewRepository reviewRepository;
+    private RagChunkRepository ragChunkRepository;
 
     @Resource
     private PreprocessArtifactLoader artifactLoader;
@@ -194,7 +194,7 @@ public class AntimicrobialSummaryExperimentService {
     }
 
     private List<RetrievedChunk> loadAllChunks(AntimicrobialDocument document) {
-        List<RetrievedChunk> databaseChunks = reviewRepository.findAllChunksByDocumentId(document.documentId());
+        List<RetrievedChunk> databaseChunks = ragChunkRepository.findAllChunksByDocumentId(document.documentId());
         if (databaseChunks != null && !databaseChunks.isEmpty()) {
             return databaseChunks;
         }

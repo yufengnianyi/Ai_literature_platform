@@ -1,5 +1,6 @@
 package com.example.demo_01.ai.evidence.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -11,6 +12,7 @@ import java.util.List;
 @Data
 @Validated
 @Component
+@JsonIgnoreProperties(ignoreUnknown = true)
 @ConfigurationProperties(prefix = "app.ai.evidence")
 public class EvidenceProperties {
 
@@ -46,8 +48,6 @@ public class EvidenceProperties {
      */
     private Table table = new Table();
 
-    private Q1 q1 = new Q1();
-
     @Data
     public static class Table {
         private boolean enabled = true;
@@ -68,16 +68,6 @@ public class EvidenceProperties {
         private int maxRecoveredTables = 3;
         @Min(1)
         private int maxChars = 12_000;
-    }
-
-    @Data
-    public static class Q1 {
-        private PromptOnlyMarkdown promptOnlyMarkdown = new PromptOnlyMarkdown();
-    }
-
-    @Data
-    public static class PromptOnlyMarkdown {
-        private boolean enabled = true;
     }
 
     @Data

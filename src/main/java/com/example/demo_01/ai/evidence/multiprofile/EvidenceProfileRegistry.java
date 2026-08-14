@@ -33,7 +33,7 @@ public class EvidenceProfileRegistry {
                         "Secretion/transport mechanism", "Host-cell entry mechanism", "Functional validation phenotype",
                         "Plant recognition/AVR activity", "Structure determination method", "PDB ID", "Reference", "Patent information", "Notes"),
                 List.of(0),
-                "Evidence on oomycete effectors, host targets, pathogenicity mechanisms, secretion or transport, host-cell entry, localization, expression, structural characterization, and functional validation.",
+                "Evidence on oomycete host-directed effectors, including secreted or translocated proteins, AVR proteins, host targets, immune suppression or activation, host-cell entry, localization, pathogenicity mechanisms, structural characterization, and functional validation.",
                 "One effector-oomycete species-host target combination.",
                 "Create separate rows for multiple host targets or oomycete species. For reviews, extract only concrete effector information that explicitly cites original studies and mark it as review-cited in Notes."));
         add(values, profile("Q3", "Resistance genes: host and non-host resistance", List.of(
@@ -69,9 +69,9 @@ public class EvidenceProfileRegistry {
                         "Negative/no-effect phenotype (key)", "Overexpression phenotype", "Expression pattern",
                         "Upstream/downstream regulatory relationship", "Biological process involved", "Reference", "Notes"),
                 List.of(0, 3),
-                "Evidence on oomycete functional genes related to growth and development, pathogenicity or virulence, metabolism and nutrition, stress responses, cell wall or membrane biosynthesis, signaling, reproduction, and other non-classical-effector functions.",
+                "Evidence on non-classical-effector oomycete functional genes related to pathogen-intrinsic growth and development, pathogenicity or virulence, metabolism and nutrition, stress responses, cell wall or membrane biosynthesis, signaling, transcriptional regulation, reproduction, and other non-effector functions.",
                 "One oomycete species-gene combination.",
-                "Create separate rows for different genes or strains. Combine multiple validation experiments for the same gene in the relevant fields using semicolons. If the gene is a confirmed classical RXLR or CRN effector, prefer Q2."));
+                "Create separate rows for different genes or strains. Combine multiple validation experiments for the same gene in the relevant fields using semicolons. If the gene has host-directed effector evidence such as secretion or translocation to the host, AVR activity, host target interaction, or direct manipulation of host immunity or host processes, prefer Q2 for that evidence."));
         add(values, profile("Q7", "Biological control and green disease management", List.of(
                         "Biocontrol/control type", "Name", "Source (strain/plant species/material)", "Target oomycete species", "Mode of action",
                         "Antimicrobial/control mechanism", "In vitro activity data", "In vivo/field control efficacy (%)", "Application method",
@@ -136,6 +136,8 @@ public class EvidenceProfileRegistry {
                     """;
             case "Q2" -> """
                     Effector families include RXLR, CRN, NLPP, GP15, elicitin, and similar families. Effector type must be cytoplasmic or apoplastic when stated.
+                    Treat a protein as Q2 when the source provides host-directed effector evidence: secretion or host translocation, AVR recognition, host target interaction, immune suppression or activation, induced host cell death, or direct manipulation of host processes.
+                    Do not use pathogenicity or virulence impact alone as sufficient effector evidence; general virulence genes without host-directed effector evidence belong in Q6.
                     Functional phenotypes must describe how overexpression, silencing, knockout, or mutation affects pathogenicity. AVR activity records recognition by the corresponding R gene.
                     Record secretion or transport mechanism, host-cell entry mechanism, structure determination method, and PDB ID only when the paper provides evidence.
                     """;
@@ -153,6 +155,8 @@ public class EvidenceProfileRegistry {
                     """;
             case "Q6" -> """
                     Functional categories must use growth/development, pathogenicity/virulence, metabolism/nutrition, stress response, cell wall/membrane biosynthesis, signaling, reproduction/sexual reproduction, or other.
+                    Use Q6 for genes whose evidence is mainly pathogen-intrinsic, including genes whose mutation, silencing, knockout, or overexpression changes virulence because of altered growth, sporulation, germination, metabolism, signaling, transcriptional regulation, stress response, reproduction, or infection fitness.
+                    Do not extract confirmed host-directed effectors into Q6 unless the paper also provides a separate non-effector pathogen-intrinsic function that can populate this profile.
                     Record validation methods such as knockout, RNAi, overexpression, mutant phenotype analysis, chemical inhibition, heterologous expression, in vitro biochemical assay, transcriptomics, or complementation.
                     Distinguish positive mutation or silencing phenotypes from key negative or no-effect phenotypes, and record upstream/downstream regulatory relationships only when supported by source evidence.
                     Mark review-derived entries as review-cited in Notes.

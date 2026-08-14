@@ -55,4 +55,19 @@ public class RagProcessingConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * Bounded pool for concurrent per-document Q1 compound-reference resolution
+     * during interactive chat turns.
+     */
+    @Bean("q1CompoundResolutionExecutor")
+    public TaskExecutor q1CompoundResolutionExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("q1-compound-resolve-");
+        executor.setCorePoolSize(8);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(32);
+        executor.initialize();
+        return executor;
+    }
 }

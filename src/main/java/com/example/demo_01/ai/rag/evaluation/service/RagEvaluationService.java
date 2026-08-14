@@ -14,7 +14,7 @@ import com.example.demo_01.ai.rag.retrieval.Bm25ContentRetriever;
 import com.example.demo_01.ai.rag.retrieval.Bm25IndexService;
 import com.example.demo_01.ai.review.model.ReviewModels.QueryAnalysis;
 import com.example.demo_01.ai.review.model.ReviewModels.RetrievedChunk;
-import com.example.demo_01.ai.review.repository.ReviewRepository;
+import com.example.demo_01.ai.rag.repository.RagChunkRepository;
 import com.example.demo_01.ai.review.service.QueryAnalyzerService;
 import com.example.demo_01.ai.review.service.QueryExpansionService;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
@@ -76,7 +76,7 @@ public class RagEvaluationService {
     private RagEvaluationMetricsService metricsService;
 
     @Resource
-    private ReviewRepository reviewRepository;
+    private RagChunkRepository ragChunkRepository;
 
     @Resource
     private QueryAnalyzerService queryAnalyzerService;
@@ -360,7 +360,7 @@ public class RagEvaluationService {
             if (alreadyJudgedDocumentIds.contains(document.documentId())) {
                 continue;
             }
-            List<RetrievedChunk> chunks = reviewRepository.findAllChunksByDocumentId(document.documentId());
+            List<RetrievedChunk> chunks = ragChunkRepository.findAllChunksByDocumentId(document.documentId());
             RagEvaluationDocumentJudgment judgment = judgeDocument(
                     experimentId, question, reportDir, document, chunks == null ? List.of() : chunks);
             evaluationRepository.upsertJudgment(judgment);
@@ -767,13 +767,13 @@ public class RagEvaluationService {
         for (String query : queries) {
             List<UUID> documentIds;
             try {
-                documentIds = reviewRepository.searchDocumentsByFts(query, ftsMaxResults());
+                documentIds = ragChunkRepository.searchDocumentsByFts(query, ftsMaxResults());
             } catch (Exception e) {
                 log.warn("RAG evaluation FTS query failed for '{}': {}", query, e.getMessage());
                 continue;
             }
             for (UUID documentId : documentIds) {
-                List<RetrievedChunk> chunks = reviewRepository.findPriorityChunksByDocumentIds(
+                List<RetrievedChunk> chunks = ragChunkRepository.findPriorityChunksByDocumentIds(
                         Set.of(documentId), priorityChunksPerFtsDocument());
                 if (chunks.isEmpty()) {
                     String key = documentId + "|";
@@ -932,7 +932,7 @@ public class RagEvaluationService {
         Set<UUID> documentIds = documentCandidates.stream()
                 .map(RagEvaluationRetrievalHit::documentId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<UUID, List<RetrievedChunk>> chunksByDocument = reviewRepository.findChunksByDocumentIds(documentIds).stream()
+        Map<UUID, List<RetrievedChunk>> chunksByDocument = ragChunkRepository.findChunksByDocumentIds(documentIds).stream()
                 .filter(chunk -> chunk.documentId() != null)
                 .collect(Collectors.groupingBy(RetrievedChunk::documentId, LinkedHashMap::new, Collectors.toList()));
         Map<UUID, Set<String>> preferredChunkIds = candidateHits.stream()

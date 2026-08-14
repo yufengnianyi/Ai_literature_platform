@@ -152,7 +152,7 @@
                           <div class="conversation-main">
                             <div class="conversation-title">{{ item.title }}</div>
                             <div class="conversation-meta">
-                              <span class="conversation-mode">{{ item.mode === 'REPORT' ? 'Report' : 'Chat' }}</span>
+                              <span class="conversation-mode">Chat</span>
                               {{ item.pinned ? 'Pinned' : 'Updated' }} - {{ formatConversationDate(item.updatedAt) }}
                             </div>
                           </div>

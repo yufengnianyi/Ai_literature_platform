@@ -1,0 +1,31 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q6 non-classical-effector oomycete functional gene evidence, including metabolism and nutrition, and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve gene names, aliases, species names, strain names, gene IDs, accession numbers, proteins, phenotypes, methods, numeric values, units, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 16 columns, in this exact order:
+
+| Gene name | Alias/homologous gene | Gene ID/accession | Oomycete species (Latin name) | Strain/isolate | Gene functional category | Encoded protein/product | Functional validation method | Mutation phenotype (positive result) | Negative/no-effect phenotype (key) | Overexpression phenotype | Expression pattern | Upstream/downstream regulatory relationship | Biological process involved | Reference | Notes |
+
+One row represents one oomycete species-gene combination.
+Create separate rows for different genes or strains.
+Combine multiple validation experiments for the same gene in the relevant fields using semicolons.
+If the gene has host-directed effector evidence such as secretion or translocation to the host, AVR activity, host target interaction, or direct manipulation of host immunity or host processes, prefer Q2 for that evidence.
+
+Field guidance:
+- Functional categories must use growth/development, pathogenicity/virulence, metabolism/nutrition, stress response, cell wall/membrane biosynthesis, signaling, reproduction/sexual reproduction, or other.
+- Use Q6 for genes whose evidence is mainly pathogen-intrinsic, including genes whose mutation, silencing, knockout, or overexpression changes virulence because of altered growth, sporulation, germination, metabolism, signaling, transcriptional regulation, stress response, reproduction, or infection fitness.
+- Do not extract confirmed host-directed effectors into Q6 unless the paper also provides a separate non-effector pathogen-intrinsic function that can populate this profile.
+- Record validation methods such as knockout, RNAi, overexpression, mutant phenotype analysis, chemical inhibition, heterologous expression, in vitro biochemical assay, transcriptomics, or complementation.
+- Distinguish positive mutation or silencing phenotypes from key negative or no-effect phenotypes.
+- Record upstream/downstream regulatory relationships only when supported by source evidence.
+- Mark review-derived entries as review-cited in Notes.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q6.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve gene IDs, strain abbreviations, phenotype codes, species abbreviations, and method abbreviations using table footnotes, legends, captions, nearby text, or methods/results text when explicitly provided.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q6 evidence, return only the required header row and separator row with no data rows.

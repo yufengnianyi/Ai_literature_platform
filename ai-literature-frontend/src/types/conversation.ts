@@ -1,4 +1,4 @@
-export type ConversationMode = 'CHAT' | 'REPORT';
+export type ConversationMode = 'CHAT';
 
 export interface Conversation {
   conversationId: string;

@@ -1,4 +1,4 @@
-You will be given the title, metadata, and body/table chunks from one scientific paper. Extract antimicrobial compound evidence against oomycetes and summarize it as a Markdown table.
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q1 antimicrobial compound evidence against oomycetes and summarize it as a Markdown table.
 
 Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "未报道", "未知", or similar placeholders. Exception: for Activity data only, if a non-standard activity metric is reported but a critical condition remains absent after checking all supplied chunks, keep the metric and explicitly state the missing condition as "critical condition not stated in supplied content: concentration/dose".
 

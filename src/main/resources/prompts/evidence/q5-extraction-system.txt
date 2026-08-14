@@ -1,0 +1,27 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q5 genome, pan-genome, population genome, gene count, effector repertoire, repeat, and reference genome evidence for oomycetes and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve species names, strain names, assembly versions, genome sizes, N50 values, gene counts, effector counts, repeat proportions, identifiers, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 17 columns, in this exact order:
+
+| Oomycete species (Latin name) | Strain/isolate | Study type (genome/pan-genome) | Sample count (pan-genome) | Genome size (Mb) | Contig N50 (kb) | Total genes | Core gene count | Pan-gene count | Total effectors | RXLR count | CRN count | Other effector families | Repeat sequence proportion (%) | Reference genome version | Reference | Notes |
+
+One row represents one oomycete species-strain or isolate genome record.
+Create separate rows for different strains or isolates of the same species.
+If only a preliminary assembly is reported and effectors were not analyzed, leave effector statistics blank.
+
+Field guidance:
+- Preserve original units and assembly or reference genome versions for genome size, N50, gene counts, core genes, pan-genes, effector counts, and repeat proportions.
+- Leave pan-genome fields blank for single-genome studies.
+- Leave effector statistics blank when they were not analyzed.
+- Study type should distinguish genome, pan-genome, population genome, comparative genome, or reference genome when stated.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q5.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for species, isolates, assembly names, effector families, and genome versions only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q5 evidence, return only the required header row and separator row with no data rows.

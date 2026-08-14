@@ -1,0 +1,29 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q3 host and non-host resistance gene, locus, QTL, mechanism, and validation evidence against oomycetes and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve gene names, locus names, QTL names, plant and oomycete species names, varieties, markers, chromosomal positions, identifiers, numeric values, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 26 columns, in this exact order:
+
+| Resistance type | Gene/locus name | Alias/homologous gene | Plant species (Latin name) | Plant variety/line | Resistance target (oomycete species/strain) | Recognized avirulence gene (AVR) | Resistance spectrum (race range) | Gene type | Nucleotide-binding domain | Chromosomal position | Cloning status | Resistance mechanism (molecular level) | Resistance level | Allelic variation | Resistance breakdown | PTI/ETI involvement | Signaling pathway (SA/JA/ET) | Transgenic/gene-editing application | Molecular marker | Breeding application | Functional validation method | Expression pattern | Reference | Patent information | Notes |
+
+One row represents one gene or mechanism-plant species-resistance type combination.
+Create separate rows for different pathogen targets, races, alleles, or resistance types.
+Clearly label host resistance and non-host resistance in Resistance type.
+For uncloned QTLs or GWAS candidates, record the cloning status explicitly.
+
+Field guidance:
+- Resistance type must be host resistance, non-host resistance, or partial/quantitative resistance.
+- Fill PTI/ETI and SA/JA/ET only when the source provides evidence.
+- Distinguish cloned genes from mapped QTLs, GWAS candidates, linked markers, and unnamed loci.
+- Functional validation methods may include map-based cloning, transgenic complementation, gene silencing, knockout, gene editing, allele testing, pathogen inoculation assays, marker validation, or expression analysis.
+- Resistance level should preserve original disease scores, lesion sizes, resistance classes, percentages, statistical comparisons, or race-spectrum descriptions.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q3.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for plant lines, pathogen races, resistance genes, AVR genes, markers, chromosomes, and species only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q3 evidence, return only the required header row and separator row with no data rows.

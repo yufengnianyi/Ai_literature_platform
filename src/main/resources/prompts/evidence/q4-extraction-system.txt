@@ -1,0 +1,28 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q4 fungicide or oomyceticide resistance, molecular target, target validation, mutation, field occurrence, and detection evidence and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve fungicide names, FRAC codes, target names, species names, strain names, mutation sites, EC50 values, ratios, locations, methods, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 18 columns, in this exact order:
+
+| Fungicide common name | Fungicide class (FRAC code) | Mode-of-action target (protein/pathway) | Target function | Target validation method | Target oomycete species | Strain/isolate | Resistance mutation gene | Mutation site (amino acid change) | Mutation type | Resistance level (EC50 ratio) | Field occurrence | Molecular detection method | Cross-resistance | Resistance management recommendation | Reference | Patent information | Notes |
+
+One row represents one agent-oomycete species-mutation site or target combination.
+Create separate rows for different mutation sites or oomycete species.
+If a paper reports target identification rather than resistance, leave resistance-related fields blank and populate target-related fields.
+
+Field guidance:
+- Preserve FRAC code, target gene or pathway, target function, target validation method, amino acid change, EC50 resistance ratio, field region, and molecular detection method.
+- Leave mutation fields blank when no explicit mutation site is reported.
+- Do not infer mutations from fungicide class.
+- Target validation methods may include mutant analysis, sequencing, gene replacement, heterologous expression, biochemical assay, docking, enzyme inhibition, RNAi, overexpression, or complementation when explicitly reported.
+- Resistance level should preserve EC50, EC50 ratio, resistance factor, MIC, qualitative class, frequency, and statistical context exactly as supplied.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q4.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for fungicides, controls, isolates, mutation names, locations, FRAC classes, and species only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q4 evidence, return only the required header row and separator row with no data rows.

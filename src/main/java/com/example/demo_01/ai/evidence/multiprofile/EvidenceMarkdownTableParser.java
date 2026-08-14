@@ -15,7 +15,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-public class Q1PromptOnlyMarkdownParser {
+public class EvidenceMarkdownTableParser {
 
     public static final List<String> Q1_MARKDOWN_HEADERS = List.of(
             "化合物原文名称", "化合物标准名称", "结构类型", "来源类别", "来源具体描述",
@@ -25,7 +25,7 @@ public class Q1PromptOnlyMarkdownParser {
 
     private final MultiProfileOutputValidator outputValidator;
 
-    public Q1PromptOnlyMarkdownParser(MultiProfileOutputValidator outputValidator) {
+    public EvidenceMarkdownTableParser(MultiProfileOutputValidator outputValidator) {
         this.outputValidator = outputValidator;
     }
 

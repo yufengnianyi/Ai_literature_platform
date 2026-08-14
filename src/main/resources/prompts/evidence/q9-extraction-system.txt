@@ -1,0 +1,28 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q9 disease epidemiology, environmental driver, risk warning, and prediction model evidence for oomycete diseases and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve disease names, pathogen species, host names, environmental factors, model names, input variables, outputs, validation metrics, locations, dates, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 10 columns, in this exact order:
+
+| Disease name | Pathogenic oomycete species | Main host | Favorable environmental factors | Prediction model name | Model input variables | Prediction output | Model accuracy/validation | Reference | Notes |
+
+One row represents one disease-model combination.
+Create separate rows for different models for the same disease.
+Distinguish general environmental correlations from true prediction models, and record input variables, prediction output, and validation metrics.
+
+Field guidance:
+- Distinguish environmental correlation descriptions from true prediction models.
+- Record model input variables, prediction output, independent validation metrics, and field validation context when available.
+- Favorable environmental factors may include temperature, humidity, leaf wetness, rainfall, soil moisture, season, region, inoculum pressure, host stage, or management factors when explicitly connected to disease epidemic or risk.
+- Model accuracy/validation should preserve AUC, R2, RMSE, sensitivity, specificity, accuracy, validation dataset, field validation, or other metrics exactly as supplied.
+- If a paper only reports epidemiological drivers and no named model, leave model-specific fields blank but keep qualifying disease-environment evidence.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q9.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for diseases, pathogens, hosts, regions, environmental variables, model names, and validation metrics only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q9 evidence, return only the required header row and separator row with no data rows.

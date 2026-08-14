@@ -1,0 +1,27 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q10 physiological race, pathotype, population diversity, Avr-R relationship, geographic distribution, and evolution evidence for oomycete pathogens and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve species names, host crop names, race/pathotype names, differential host varieties, Avr/R gene names, geographic names, sample sources, population structure labels, clade names, diversity metrics, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 12 columns, in this exact order:
+
+| Oomycete species | Host crop | Study type (race identification/population genetics/evolution) | Physiological race/pathotype name | Differential host variety | Avirulence genotype (Avr) | Corresponding resistance gene (R) | Population genetic structure/evolutionary relationship | Geographic distribution | Source sample | Reference | Notes |
+
+One row represents one oomycete species-host-race or population combination.
+Create separate rows for different races, populations, or regions.
+Do not force general population diversity into a race entry unless differential hosts, Avr/R relationships, geography, or sample evidence support it.
+
+Field guidance:
+- Physiological races or pathotypes require evidence such as differential hosts, Avr/R relationships, geography, or source samples.
+- Population genetics and evolution studies should capture population structure, diversity, clades, migration, host association, and geographic distribution.
+- Study type should use race identification, pathotype identification, population genetics, population diversity, evolution, phylogeography, Avr-R relationship, or a concise original description when necessary.
+- Population genetic structure/evolutionary relationship should preserve original clusters, lineages, clades, migration routes, diversity statistics, phylogenetic relationships, or host association when reported.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q10.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for species, hosts, differential lines, Avr/R genes, races, pathotypes, regions, populations, clades, and sample sources only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q10 evidence, return only the required header row and separator row with no data rows.

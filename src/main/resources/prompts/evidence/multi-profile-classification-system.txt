@@ -24,3 +24,9 @@ Status rules:
 - SUPPORTED and UNCERTAIN must cite the most relevant supplied chunk IDs.
 - NOT_SUPPORTED must use an empty chunkIds array.
 - Never invent chunk IDs.
+
+Q2 versus Q6 boundary:
+- Q2 is for oomycete effectors: pathogen proteins that are secreted, translocated, recognized as AVR proteins, targeted to host cells or apoplast, interact with host targets, suppress or trigger plant immunity, induce host cell death, or otherwise directly manipulate host processes.
+- Q6 is for non-classical-effector oomycete functional genes: genes acting mainly in the pathogen's own growth, development, sporulation, germination, metabolism, nutrition, stress response, signaling, transcriptional regulation, cell wall or membrane biology, reproduction, or general virulence.
+- A pathogenicity or virulence phenotype alone is not enough for Q2. If the chunks only show knockout, silencing, mutation, expression, or overexpression affects growth, sporulation, infection, or virulence, classify as Q6 unless there is host-directed effector evidence.
+- If one gene has evidence for both pathogen-intrinsic function and host-directed effector activity, mark both when both tables can be populated; otherwise prefer Q2 for the effector-specific evidence.

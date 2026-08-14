@@ -1,23 +1,9 @@
 <template>
   <div class="chat-input-area">
     <div class="input-wrapper" :class="{ 'input-wrapper-disabled': disabled }">
-      <div class="mode-switch" aria-label="Conversation mode">
-        <button
-          v-for="option in modeOptions"
-          :key="option"
-          type="button"
-          class="mode-button"
-          :class="{ 'mode-button-active': mode === option }"
-          :disabled="disabled || mode === option"
-          @click="emit('mode-change', option)"
-        >
-          {{ option === 'CHAT' ? 'Chat' : 'Report' }}
-        </button>
-      </div>
-
       <a-textarea
         v-model:value="inputText"
-        :placeholder="mode === 'REPORT' ? 'Ask for an evidence report' : 'Ask a question'"
+        placeholder="Ask a question about the research literature"
         :auto-size="{ minRows: 1, maxRows: 5 }"
         aria-label="Message"
         class="custom-textarea"
@@ -26,7 +12,7 @@
       />
 
       <div class="right-tools">
-        <a-tooltip v-if="mode === 'CHAT'" title="Thinking">
+        <a-tooltip title="Thinking">
           <button
             class="think-toggle"
             :class="{ 'think-toggle-active': enableThinking }"
@@ -56,17 +42,12 @@
 import { ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { SendOutlined } from '@ant-design/icons-vue';
-import type { ConversationMode } from '@/types/conversation';
-
-const modeOptions: ConversationMode[] = ['CHAT', 'REPORT'];
 const props = defineProps<{
   disabled?: boolean;
-  mode: ConversationMode;
 }>();
 
 const emit = defineEmits<{
   (event: 'send', text: string, options: { enableThinking: boolean }): void;
-  (event: 'mode-change', mode: ConversationMode): void;
 }>();
 
 const inputText = ref('');
@@ -94,7 +75,7 @@ const handleSend = () => {
     triggerEmptyNudge();
     return;
   }
-  emit('send', text, { enableThinking: props.mode === 'CHAT' && enableThinking.value });
+  emit('send', text, { enableThinking: enableThinking.value });
   inputText.value = '';
 };
 
@@ -131,36 +112,6 @@ const handlePressEnter = (event: KeyboardEvent) => {
 
 .input-wrapper-disabled {
   opacity: 0.72;
-}
-
-.mode-switch {
-  flex: 0 0 auto;
-  display: flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: #f1f5f9;
-}
-
-.mode-button {
-  height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.mode-button-active {
-  background: #fff;
-  color: #1d4ed8;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
-}
-
-.mode-button:disabled {
-  cursor: default;
 }
 
 .custom-textarea {
@@ -225,10 +176,6 @@ const handlePressEnter = (event: KeyboardEvent) => {
   .input-wrapper {
     flex-wrap: wrap;
     border-radius: 22px;
-  }
-
-  .mode-switch {
-    order: 1;
   }
 
   .custom-textarea {

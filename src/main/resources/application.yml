@@ -87,6 +87,18 @@ app:
         max-context-chunks: ${APP_AI_RAG_CHAT_MAX_CONTEXT_CHUNKS:5}
         max-excerpt-chars: ${APP_AI_RAG_CHAT_MAX_EXCERPT_CHARS:600}
         max-context-chars: ${APP_AI_RAG_CHAT_MAX_CONTEXT_CHARS:6000}
+        q1-evidence:
+          enabled: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_ENABLED:true}
+          max-rows: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_ROWS:90}
+          max-distinct-compounds: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_DISTINCT_COMPOUNDS:50}
+          max-rows-per-compound: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_ROWS_PER_COMPOUND:3}
+          max-compounds-per-document: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_COMPOUNDS_PER_DOCUMENT:5}
+          max-row-chars: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_ROW_CHARS:1400}
+          max-context-chars: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_CONTEXT_CHARS:45000}
+          max-resolution-calls-per-turn: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_RESOLUTION_CALLS:20}
+          resolution-timeout-ms: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_RESOLUTION_TIMEOUT_MS:8000}
+          max-resolution-chunks-per-document: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_MAX_RESOLUTION_CHUNKS:6}
+          resolution-chunk-context-chars: ${APP_AI_RAG_CHAT_Q1_EVIDENCE_RESOLUTION_CHUNK_CHARS:3000}
         rerank:
           enabled: ${APP_AI_RAG_CHAT_RERANK_ENABLED:true}
           model: ${APP_AI_RAG_CHAT_RERANK_MODEL:qwen3-vl-rerank}
@@ -178,9 +190,6 @@ app:
           enabled: ${APP_AI_EVIDENCE_TABLE_RECOVERY_ENABLED:true}
           max-recovered-tables: ${APP_AI_EVIDENCE_TABLE_RECOVERY_MAX_TABLES:3}
           max-chars: ${APP_AI_EVIDENCE_TABLE_RECOVERY_MAX_CHARS:12000}
-      q1:
-        prompt-only-markdown:
-          enabled: ${APP_AI_EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN:true}
       agents:
         constrained-decoding:
           enabled: ${APP_AI_EVIDENCE_CONSTRAINED_DECODING:false}

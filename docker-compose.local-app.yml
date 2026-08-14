@@ -32,6 +32,9 @@ services:
       APP_AI_KG_ENABLED: ${APP_AI_KG_ENABLED:-true}
       APP_AI_KG_GRAPH_BUILDER_ENABLED: ${APP_AI_KG_GRAPH_BUILDER_ENABLED:-false}
       APP_AI_KG_GRAPH_BUILDER_ENDPOINT: ${APP_AI_KG_GRAPH_BUILDER_ENDPOINT:-}
+    volumes:
+      - ./data:/app/data
+      - ./Evidence:/app/Evidence
     ports:
       - "8081:8081"
 

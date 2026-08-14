@@ -4,7 +4,7 @@ import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.rag.entity.model.RagDocumentEntityModels.*;
 import com.example.demo_01.ai.review.model.ReviewModels.RetrievedChunk;
-import com.example.demo_01.ai.review.repository.ReviewRepository;
+import com.example.demo_01.ai.rag.repository.RagChunkRepository;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
 import com.example.demo_01.exception.BusinessException;
 import com.example.demo_01.exception.ErrorCode;
@@ -36,7 +36,7 @@ public class RagDocumentEntityExtractionService {
     private static final int MAX_EVIDENCE_TEXTS_PER_ENTITY = 5;
 
     @Resource
-    private ReviewRepository reviewRepository;
+    private RagChunkRepository ragChunkRepository;
 
     @Resource
     private ReviewReasoningChatClient reasoningChatClient;
@@ -48,7 +48,7 @@ public class RagDocumentEntityExtractionService {
         if (documentId == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "documentId is required");
         }
-        List<RetrievedChunk> chunks = reviewRepository.findAllChunksByDocumentId(documentId);
+        List<RetrievedChunk> chunks = ragChunkRepository.findAllChunksByDocumentId(documentId);
         if (chunks == null || chunks.isEmpty()) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR,
                     "No chunks found for document: " + documentId);

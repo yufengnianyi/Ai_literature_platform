@@ -69,7 +69,7 @@ const handleSubmit = async () => {
     await router.push(redirect);
   } catch (error) {
     console.error(error);
-    message.error('Login failed');
+    message.error('Password incorrect');
   } finally {
     submitting.value = false;
   }

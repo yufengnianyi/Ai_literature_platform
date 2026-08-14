@@ -20,10 +20,6 @@ public final class EvidenceModels {
         QUEUED, RUNNING, COMPLETED, NO_EVIDENCE, FAILED
     }
 
-    public enum BatchStatus {
-        QUEUED, RUNNING, COMPLETED, PARTIAL_FAILED, FAILED
-    }
-
     public enum ValidationStatus {
         VALID, INVALID
     }
@@ -147,69 +143,4 @@ public final class EvidenceModels {
     ) {
     }
 
-    public record ExtractionRunRecord(
-            UUID runId,
-            UUID batchId,
-            UUID documentId,
-            String documentTitle,
-            ExtractionStatus status,
-            boolean skipped,
-            int rowCount,
-            String outputPath,
-            String sourceHash,
-            String promptHash,
-            String modelName,
-            String errorCode,
-            String errorMessage,
-            Long elapsedMs,
-            Instant startedAt,
-            Instant finishedAt,
-            Instant createdAt,
-            Instant updatedAt
-    ) {
-    }
-
-    public record ExtractionBatchRecord(
-            UUID batchId,
-            BatchStatus status,
-            boolean force,
-            int totalDocuments,
-            int processedDocuments,
-            int skippedDocuments,
-            int completedDocuments,
-            int noEvidenceDocuments,
-            int failedDocuments,
-            Long elapsedMs,
-            Instant startedAt,
-            Instant finishedAt,
-            Instant createdAt,
-            Instant updatedAt
-    ) {
-    }
-
-    public record ExtractionAcceptedResponse(
-            UUID runId,
-            UUID documentId,
-            ExtractionStatus status,
-            boolean skipped
-    ) {
-    }
-
-    public record EvidenceBackfillRequest(boolean force) {
-    }
-
-    public record EvidenceBackfillResponse(
-            UUID batchId,
-            BatchStatus status,
-            int totalDocuments
-    ) {
-    }
-
-    public record ExtractionRunPage(
-            List<ExtractionRunRecord> items,
-            int page,
-            int size,
-            long total
-    ) {
-    }
 }

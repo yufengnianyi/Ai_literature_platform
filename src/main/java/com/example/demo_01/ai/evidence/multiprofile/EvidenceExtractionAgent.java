@@ -9,7 +9,6 @@ import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceReposito
 import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import jakarta.annotation.Resource;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -29,16 +27,13 @@ public class EvidenceExtractionAgent {
     private ReviewReasoningChatClient chatClient;
 
     @Resource
-    private Q1PromptOnlyMarkdownParser promptOnlyMarkdownParser;
+    private EvidenceMarkdownTableParser markdownTableParser;
 
     @Resource
     private EvidenceProperties properties;
 
     @Autowired(required = false)
     private EvidenceConfigScope configScope;
-
-    @Resource
-    private ObjectMapper objectMapper;
 
     /** Honours a per-run configuration override when an extraction run pinned one. */
     private EvidenceProperties config() {
@@ -48,11 +43,8 @@ public class EvidenceExtractionAgent {
     public List<ValidatedEvidenceRow> extract(SourceDocument document,
                                               EvidenceProfile profile,
                                               List<EvidenceChunk> chunks) {
-        if (isQ1PromptOnlyMarkdown(profile)) {
-            return extractQ1PromptOnlyMarkdown(document, profile, chunks);
-        }
         String systemPrompt = PromptResources.load(
-                PromptCatalog.EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM);
+                PromptCatalog.evidenceQuestionExtractionSystem(profile.questionId()));
         String baseUserMessage = extractionInput(document, profile, chunks);
         Exception lastError = null;
         for (int attempt = 1; attempt <= config().getMaxAttempts(); attempt++) {
@@ -60,76 +52,31 @@ public class EvidenceExtractionAgent {
             try {
                 String raw = responseText(chatClient.chatCore(
                         SystemMessage.from(systemPrompt), UserMessage.from(userMessage)));
-                return promptOnlyMarkdownParser.parse(raw, profile);
+                return markdownTableParser.parse(raw, profile);
             } catch (Exception e) {
                 lastError = e;
-                log.warn("Evidence profile {} attempt {}/{} failed for document {}: {}",
+                log.warn("Evidence profile {} prompt-only Markdown attempt {}/{} failed for document {}: {}",
                         profile.questionId(), attempt, config().getMaxAttempts(),
                         document.documentId(), message(e));
             }
         }
         throw new IllegalStateException("Evidence profile " + profile.questionId()
-                + " failed after " + config().getMaxAttempts() + " attempts", lastError);
-    }
-
-    private List<ValidatedEvidenceRow> extractQ1PromptOnlyMarkdown(SourceDocument document,
-                                                                   EvidenceProfile profile,
-                                                                   List<EvidenceChunk> chunks) {
-        String systemPrompt = PromptResources.load(
-                PromptCatalog.EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN_SYSTEM);
-        String baseUserMessage = q1PromptOnlyInput(document, chunks);
-        Exception lastError = null;
-        for (int attempt = 1; attempt <= config().getMaxAttempts(); attempt++) {
-            String userMessage = q1MarkdownRetryMessage(baseUserMessage, lastError);
-            try {
-                String raw = responseText(chatClient.chatCore(
-                        SystemMessage.from(systemPrompt), UserMessage.from(userMessage)));
-                return promptOnlyMarkdownParser.parse(raw, profile);
-            } catch (Exception e) {
-                lastError = e;
-                log.warn("Q1 prompt-only Markdown attempt {}/{} failed for document {}: {}",
-                        attempt, config().getMaxAttempts(), document.documentId(), message(e));
-            }
-        }
-        throw new IllegalStateException("Q1 prompt-only Markdown extraction failed after "
-                + config().getMaxAttempts() + " attempts", lastError);
+                + " prompt-only Markdown extraction failed after " + config().getMaxAttempts()
+                + " attempts", lastError);
     }
 
     private String extractionInput(SourceDocument document,
                                    EvidenceProfile profile,
                                    List<EvidenceChunk> chunks) {
         return """
-                Evidence profile:
-                - questionId: %s
-                - title: %s
-                - scope: %s
-                - one row represents: %s
-                - split rules: %s
-                - field guidance: %s
-                - headers in exact order: %s
-                - required primary fields: %s
+                Task: Extract %s evidence (%s) from this paper.
 
                 %s
 
                 Supplied chunks:
                 %s
                 """.formatted(
-                profile.questionId(), profile.title(), profile.scope(), profile.rowUnit(),
-                profile.splitRules(), profile.guidance(), toJson(profile.headers()),
-                profile.primaryFieldIndexes().stream()
-                        .map(profile.headers()::get).toList(),
-                documentMetadata(document), renderChunks(chunks));
-    }
-
-    private String q1PromptOnlyInput(SourceDocument document, List<EvidenceChunk> chunks) {
-        return """
-                Task: Extract Q1 antimicrobial compound evidence against oomycetes from this paper.
-
-                %s
-
-                Supplied chunks:
-                %s
-                """.formatted(documentMetadata(document), renderChunks(chunks));
+                profile.questionId(), profile.title(), documentMetadata(document), renderChunks(chunks));
     }
 
     private String documentMetadata(SourceDocument document) {
@@ -172,28 +119,10 @@ public class EvidenceExtractionAgent {
                 """.formatted(String.join(" | ", expectedMarkdownHeaders(profile)));
     }
 
-    private String q1MarkdownRetryMessage(String base, Exception error) {
-        if (error == null) {
-            return base;
-        }
-        return base + "\n\nPrevious output failed parsing: " + message(error)
-                + """
-
-                Return the complete corrected Markdown table only. Use exactly the required
-                Chinese 16-column header row and one separator row. Do not add prose, JSON,
-                code fences, N/A, 未报道, or 未知. If no evidence qualifies, return the same
-                required header and separator rows with no data rows.
-                """;
-    }
-
-    private boolean isQ1PromptOnlyMarkdown(EvidenceProfile profile) {
-        return "Q1".equals(profile.questionId())
-                && config().getQ1() != null
-                && config().getQ1().getPromptOnlyMarkdown() != null
-                && config().getQ1().getPromptOnlyMarkdown().isEnabled();
-    }
-
     private List<String> expectedMarkdownHeaders(EvidenceProfile profile) {
+        if ("Q1".equals(profile.questionId())) {
+            return EvidenceMarkdownTableParser.Q1_MARKDOWN_HEADERS;
+        }
         return profile.headers();
     }
 
@@ -203,14 +132,6 @@ public class EvidenceExtractionAgent {
             throw new IllegalArgumentException("Model returned no text");
         }
         return response.aiMessage().text().trim();
-    }
-
-    private String toJson(Object value) {
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to serialize prompt JSON", e);
-        }
     }
 
     private String message(Throwable error) {

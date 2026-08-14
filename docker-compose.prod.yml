@@ -61,6 +61,9 @@ services:
       SPRING_NEO4J_USERNAME: ${SPRING_NEO4J_USERNAME:-neo4j}
       SPRING_NEO4J_PASSWORD: ${SPRING_NEO4J_PASSWORD:-demo_01_graph}
       APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-}
+    volumes:
+      - ./data:/app/data
+      - ./Evidence:/app/Evidence
 
   web:
     image: ${WEB_IMAGE:-ai_literature-web:latest}

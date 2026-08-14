@@ -1,6 +1,5 @@
 package com.example.demo_01.ai.rag.service;
 
-import com.example.demo_01.ai.evidence.service.EvidenceExtractionService;
 import com.example.demo_01.ai.preprocessing.artifact.PreprocessArtifactLoader;
 import com.example.demo_01.ai.preprocessing.model.PreprocessModels.PreprocessStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.DuplicateReason;
@@ -43,9 +42,6 @@ public class RagIngestionFromArtifactService {
 
     @Resource
     private PreprocessArtifactLoader artifactLoader;
-
-    @Resource
-    private EvidenceExtractionService evidenceExtractionService;
 
     public RagUploadAcceptedResponse enqueueDocument(UUID documentId, UUID batchId) {
         RagDocumentRecord document = loadDocument(documentId);
@@ -108,7 +104,6 @@ public class RagIngestionFromArtifactService {
             metrics.totalMs = result.embedMs() + result.persistMs();
             jobRepository.update(jobId, RagJobStatus.RUNNING, RagIngestionStage.PERSISTING, null, null, null, metrics, null);
             jobRepository.update(jobId, RagJobStatus.COMPLETED, RagIngestionStage.COMPLETED, null, null, null, metrics, Instant.now());
-            enqueueEvidenceExtraction(documentId);
             return new RagDocumentIngestionOutcome(documentId, jobId, RagJobStatus.COMPLETED, null,
                     metrics.chunkCount, metrics.estimatedTokensTotal, metrics.providerTokensTotal,
                     null, null, null, null, null, metrics.embedMs, metrics.persistMs, metrics.totalMs);
@@ -119,11 +114,6 @@ public class RagIngestionFromArtifactService {
                     metrics.chunkCount, metrics.estimatedTokensTotal, metrics.providerTokensTotal,
                     null, null, null, null, null, metrics.embedMs, metrics.persistMs, metrics.totalMs);
         }
-    }
-
-    private void enqueueEvidenceExtraction(UUID documentId) {
-        log.debug("Skipping legacy evidence extraction enqueue for document {}; use stage-4 question extraction instead",
-                documentId);
     }
 }
 

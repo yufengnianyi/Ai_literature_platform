@@ -573,9 +573,7 @@ public class MultiProfileEvidenceService {
 
     private String extractionConfigHash() {
         return sha256(
-                PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM)
-                        + "\n"
-                        + PromptResources.load(PromptCatalog.EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN_SYSTEM)
+                questionExtractionPrompts()
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM)
                         + "\n"
@@ -585,8 +583,6 @@ public class MultiProfileEvidenceService {
                         + "\n" + profileRegistry.all()
                         + "\nagents="
                         + "constrained=" + properties.getAgents().getConstrainedDecoding().isEnabled()
-                        + ";q1PromptOnlyMarkdown="
-                        + properties.getQ1().getPromptOnlyMarkdown().isEnabled()
                         + ";verifier=" + properties.getAgents().getVerifier().isEnabled()
                         + ";coverage=" + properties.getAgents().getCoverage().isEnabled()
                         + ";retriever=" + properties.getAgents().getRetriever().isOnDemandEnabled()
@@ -605,9 +601,7 @@ public class MultiProfileEvidenceService {
     /** Exposed for stage-4 runs that hash a resolved {@link EvidenceProperties} snapshot. */
     public String hashExtractionConfig(String configSnapshotJson) {
         return sha256(
-                PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_EXTRACTION_SYSTEM)
-                        + "\n"
-                        + PromptResources.load(PromptCatalog.EVIDENCE_Q1_PROMPT_ONLY_MARKDOWN_SYSTEM)
+                questionExtractionPrompts()
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM)
                         + "\n"
@@ -616,6 +610,19 @@ public class MultiProfileEvidenceService {
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_RETRIEVAL_SYSTEM)
                         + "\n" + profileRegistry.all()
                         + "\n" + configSnapshotJson);
+    }
+
+    private String questionExtractionPrompts() {
+        StringBuilder builder = new StringBuilder();
+        for (EvidenceProfile profile : profileRegistry.all()) {
+            if (builder.length() > 0) {
+                builder.append('\n');
+            }
+            builder.append(profile.questionId()).append('=')
+                    .append(PromptResources.load(
+                            PromptCatalog.evidenceQuestionExtractionSystem(profile.questionId())));
+        }
+        return builder.toString();
     }
 
     public void writeEvidenceMarkdown(Path outputPath, String questionId,

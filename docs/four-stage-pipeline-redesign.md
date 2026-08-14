@@ -1,7 +1,7 @@
 # 四阶段流水线重新设计方案
 
-> 文档日期：2026-07-27  
-> 状态：设计定稿；实施为分步推进（步骤 1–4 主体已落地，步骤 5–8 未完成）  
+> 文档日期：2026-07-27（架构定稿）；进度更新：2026-08-12  
+> 状态：步骤 1–4、6 与 cohort 已落地；stage_run 与旧抽取管线已退役  
 > 相关实现：`V31__decouple_classification_and_extraction.sql`、`QuestionExtraction*`、表格按需加载（`ai.evidence.table`）
 
 ---
@@ -60,12 +60,9 @@
 
 ### 3.2 Stage Run（阶段运行）
 
-用统一的批次抽象收敛多套状态机（概念模型）：
+各阶段使用**各自领域内的 run 表**（pretreatment_run、evidence_multi_profile_batch、evidence_question_extraction_run），通过 **cohort** 在阶段间传递文献集合。
 
-```
-stage_run (run_id, stage, cohort_id, input_hash, config_hash, status, ...)
-stage_run_document (run_id, document_id, status, error, elapsed_ms)
-```
+> **注**：曾设计统一的 `stage_run` / `stage_run_document` 表（V32），但从未在 Java 中接线，已于 **V34 删除**。不再作为目标架构的一部分。
 
 关键约定：
 
@@ -201,13 +198,14 @@ POST /stages/extract/documents/{documentId}
 
 | 动作 | 对象 |
 |------|------|
-| 新增 | `document_cohort`、`cohort_member` |
-| 新增 | `stage_run`、`stage_run_document` |
-| 拆分 | multi-profile batch → 分类 run + 提取 run，各自 `config_hash` |
-| 拆分 | 分类标签表（只读快照）与提取任务状态表（避免 upsert 重置 extraction） |
-| 提升 | pretreatment 结果接入 stage_run，供下游消费 |
-| 补齐 | 缺失的早期 Flyway baseline（`rag_document` 等） |
-| 退役 | 旧版单 profile Q1 管线（统一走多画像 / 按问提取） |
+| 已有 | `document_cohort`、`cohort_member` |
+| 已有 | multi-profile batch（分类）+ `evidence_question_extraction_run`（按问提取），各自 `config_hash` |
+| 已有 | `generic_evidence_record`（多 profile 证据行） |
+| 保留 | `evidence_extraction_run` + `compound_evidence`（Q1 镜像 + 报告读取） |
+| 已删 | `stage_run`、`stage_run_document`（V34） |
+| 已删 | `evidence_extraction_batch`（V34） |
+| 已删 | `review_task` 等旧 review 表（V20） |
+| 待合并 | 阶段 1 的 preprocess batch 与 rag ingestion batch 仍为两套状态机 |
 
 ---
 
@@ -221,8 +219,8 @@ POST /stages/extract/documents/{documentId}
 | **4** | extract 复用分类 + 单问 / 单篇入口 | 阶段 4 独立；JS 单篇测试归位 | 中 |
 | **5** | `tables.jsonl` 移到阶段 1 + backfill | 表格归位 | 低 |
 | **6** | 过滤 REST + 续跑 + 非破坏化 | 阶段 2 一等公民 | 中 |
-| **7** | cohort / stage_run 统一抽象 | 架构统一 | 高 |
-| **8** | Flyway baseline + 退役旧管线 | 清技术债 | 中 |
+| ~~**7**~~ | ~~cohort / stage_run 统一抽象~~ | — | **已取消**（cohort 已落地；stage_run 已删除） |
+| **8** | Flyway baseline + 退役旧管线 | 清技术债 | 中（部分完成，见 §9） |
 
 说明：步骤 1–2 可立刻止血；步骤 7 是终态，可最后做。前 6 步完成后，四阶段在工程上已可独立运行。
 
@@ -241,36 +239,38 @@ POST /stages/extract/documents/{documentId}
 
 ---
 
-## 9. 实施进度快照（相对本方案）
+## 9. 实施进度快照
 
-| 步骤 / 阶段 | 状态（截至文档编写时） |
-|-------------|------------------------|
-| 步骤 1 拆 hash | 已做 |
-| 步骤 2 去 1000 硬编码 | 已做 |
-| 步骤 3 分类可独立 | 部分（`runExtraction=false`；无独立 classify 端点 / cohort） |
-| 步骤 4 按问提取 + dry-run | 已做（`/admin/evidence/question-extractions`） |
-| 步骤 5 表格归入库 | 未做（仍阶段 4 惰性 `tables.jsonl`） |
-| 步骤 6 过滤非破坏化 + REST | 未做（`apply` 仍可能删向量） |
-| 步骤 7 cohort / stage_run | 未做 |
-| 步骤 8 baseline + 退役旧管线 | 未做 |
-| 全量嵌入 | 维持原样（符合决策） |
-| 过滤只打标 | **决策已定，代码未改** |
+| 步骤 / 阶段 | 状态 |
+|-------------|------|
+| 步骤 1 拆 hash | ✅ 已做 |
+| 步骤 2 去 1000 硬编码 | ✅ 已做 |
+| 步骤 3 分类可独立 | ✅ `/stages/classify/runs` + cohort |
+| 步骤 4 按问提取 + dry-run | ✅ `/stages/extract/*` |
+| 步骤 5 表格归入库 | 部分（`tables.jsonl` + backfill API；按需 LLM 仍在阶段 4） |
+| 步骤 6 过滤 REST + 非破坏化 | ✅ `/stages/filter/runs`；向量 GC 独立 |
+| cohort | ✅ `CohortService` + filter/classify 产出 |
+| stage_run 统一状态机 | ❌ 已废弃并删除（V34） |
+| 旧 review 任务 Java | ❌ 已删除 |
+| 旧单篇 Q1 抽取服务 | ❌ 已删除（`EvidenceExtractionService`） |
+| Flyway baseline | ✅ V1 等已补齐 |
+| 全量嵌入 | 维持 |
 
 ---
 
-## 10. 使用约定（在步骤 1–4 已落地前提下）
+## 10. 使用约定（推荐 API）
 
-只分类：
+**阶段 3 — 只分类：**
 
 ```http
-POST /admin/evidence/multi-profile-batches
-{ "sourceExperimentId": "...", "runExtraction": false }
+POST /api/stages/classify/runs
+{ "pretreatmentRunId": "<runId>" }
 ```
 
-按问题提取（复用分类 batch）：
+**阶段 4 — 按问提取（复用分类 batch）：**
 
 ```http
-POST /admin/evidence/question-extractions
+POST /api/stages/extract/runs
 {
   "questionId": "Q1",
   "sourceType": "CLASSIFICATION_RUN",
@@ -279,14 +279,16 @@ POST /admin/evidence/question-extractions
 }
 ```
 
-单篇调试：
+**单篇调试：**
 
 ```http
-POST /admin/evidence/question-extractions/documents/{documentId}/dry-run
+POST /api/stages/extract/documents/{documentId}/dry-run
 { "questionId": "Q1", "overrides": { "table": { "enabled": true } } }
 ```
 
-运行前需确保 Flyway **V31** 已应用。
+兼容 admin 路径：`/admin/evidence/multi-profile-batches`、`/admin/evidence/question-extractions`（与 stage 等价）。
+
+运行前需确保 Flyway **V31+**（含 V34 清理迁移）已应用。
 
 ---
 
@@ -294,8 +296,12 @@ POST /admin/evidence/question-extractions/documents/{documentId}/dry-run
 
 | 路径 | 说明 |
 |------|------|
-| `src/main/resources/db/migration/V31__decouple_classification_and_extraction.sql` | 分类/提取解耦迁移 |
+| `README.md` | 项目总览与模块地图 |
+| `src/main/resources/db/migration/V31__*.sql` | 分类/提取解耦 |
+| `src/main/resources/db/migration/V32__*.sql` | cohort + pretreatment 关联 |
+| `src/main/resources/db/migration/V34__drop_legacy_stage_run_and_extraction_batch.sql` | 删除 stage_run、extraction_batch |
+| `src/main/java/.../stage/*Controller.java` | 四阶段 REST 入口 |
 | `src/main/java/.../multiprofile/QuestionExtractionService.java` | 按问提取编排 |
-| `src/main/java/.../api/QuestionExtractionAdminController.java` | 按问提取 API |
 | `src/main/java/.../evidence/table/` | 表格按需解析与注入 |
-| `PreTreatment/` | 过滤阶段 CLI（待按本方案改造） |
+| `src/main/java/.../rag/repository/RagChunkRepository.java` | chunk 读取（原 review 仓库中的存活部分） |
+| `PreTreatment/` | 筛选 CLI（REST 见 `/stages/filter/runs`） |

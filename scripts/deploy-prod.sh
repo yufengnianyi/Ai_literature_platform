@@ -26,6 +26,9 @@ git pull --ff-only origin "$branch"
 
 new_head="$(git rev-parse HEAD)"
 
+print_step "Ensuring host data directories exist"
+mkdir -p "${PROJECT_ROOT}/data/rag" "${PROJECT_ROOT}/data/bm25-index" "${PROJECT_ROOT}/Evidence"
+
 print_step "Rebuilding the production stack"
 compose_prod up -d --build
 

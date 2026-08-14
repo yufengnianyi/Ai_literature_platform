@@ -14,6 +14,7 @@ export async function login(body: API.UserLoginRequest, options?: { [key: string
   return request<API.LoginUserVO>('/user/login', {
     method: 'POST',
     data: body,
+    skipGlobalErrorMessage: true,
     ...(options || {}),
   });
 }

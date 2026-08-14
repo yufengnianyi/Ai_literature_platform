@@ -1,0 +1,28 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q8 disease diagnosis and molecular detection evidence for oomycete pathogens and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve species names, detection targets, technology names, primer/probe names, primer/probe sequences, amplicon sizes, limits of detection, specificity results, sample types, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 12 columns, in this exact order:
+
+| Target oomycete species | Detection target gene | Detection technology | Primer/probe name | Primer/probe sequence (5' to 3') | Amplicon size (bp) | Sensitivity (limit of detection) | Specificity (cross-reaction with other species) | Applicable sample type | Reference | Patent information | Notes |
+
+One row represents one detection target-technology combination.
+Create separate rows for different detection technologies targeting the same gene or species.
+Copy primer and probe sequences exactly when provided.
+
+Field guidance:
+- Copy primer and probe sequences in the 5' to 3' direction exactly as provided.
+- Preserve limit of detection, amplicon size, specificity, cross-reactions with related species, and applicable sample type.
+- Detection technologies may include PCR, qPCR, real-time PCR, nested PCR, LAMP, RPA, ddPCR, sequencing, probe-based assays, immunoassays, or biosensors when explicitly reported.
+- Sensitivity should preserve DNA amount, spore count, pathogen concentration, dilution, Ct threshold, or other limits exactly as supplied.
+- Specificity should list tested non-target species and cross-reaction outcomes when supplied.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q8.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations for primers, probes, target genes, species, technologies, sample types, and specificity panels only when explicitly defined in supplied chunks.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q8 evidence, return only the required header row and separator row with no data rows.

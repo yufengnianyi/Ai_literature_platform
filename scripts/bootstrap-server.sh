@@ -21,6 +21,9 @@ fi
 print_step "Validating repository remote"
 ensure_git_remote
 
+print_step "Ensuring host data directories exist"
+mkdir -p "${PROJECT_ROOT}/data/rag" "${PROJECT_ROOT}/data/bm25-index" "${PROJECT_ROOT}/Evidence"
+
 print_step "Building and starting the production stack"
 compose_prod up -d --build
 

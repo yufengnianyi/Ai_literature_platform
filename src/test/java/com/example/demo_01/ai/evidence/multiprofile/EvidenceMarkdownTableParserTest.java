@@ -10,16 +10,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class Q1PromptOnlyMarkdownParserTest {
+class EvidenceMarkdownTableParserTest {
 
     private EvidenceProfileRegistry registry;
-    private Q1PromptOnlyMarkdownParser parser;
+    private EvidenceMarkdownTableParser parser;
 
     @BeforeEach
     void setUp() {
         MultiProfileOutputValidator outputValidator = new MultiProfileOutputValidator();
         registry = new EvidenceProfileRegistry();
-        parser = new Q1PromptOnlyMarkdownParser(outputValidator);
+        parser = new EvidenceMarkdownTableParser(outputValidator);
     }
 
     @Test
@@ -84,5 +84,19 @@ class Q1PromptOnlyMarkdownParserTest {
         assertEquals("JX069980", rows.getFirst().cells().get(2));
         assertTrue(rows.getFirst().cells().get(8).contains("aberrant zoospore cleavage"));
         assertTrue(rows.getFirst().cells().get(12).contains("PsSAK1 regulates PsMYB1"));
+    }
+
+    @Test
+    void deduplicatesEquivalentRows() {
+        String markdown = """
+                | Gene name | Alias/homologous gene | Gene ID/accession | Oomycete species (Latin name) | Strain/isolate | Gene functional category | Encoded protein/product | Functional validation method | Mutation phenotype (positive result) | Negative/no-effect phenotype (key) | Overexpression phenotype | Expression pattern | Upstream/downstream regulatory relationship | Biological process involved | Reference | Notes |
+                | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+                | PsMYB1 | | JX069980 | Phytophthora sojae | | growth/development | Myb transcription factor | RNAi | reduced zoospore release | | | | | zoospore development | DOI: 10.1371/journal.pone.0040246 | |
+                |  PsMYB1  | | JX069980 | Phytophthora sojae | | growth/development | Myb transcription factor | RNAi | reduced zoospore release | | | | | zoospore development | DOI: 10.1371/journal.pone.0040246 | |
+                """;
+
+        List<ValidatedEvidenceRow> rows = parser.parse(markdown, registry.require("Q6"));
+
+        assertEquals(1, rows.size());
     }
 }

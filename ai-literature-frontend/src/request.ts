@@ -10,6 +10,12 @@ interface BaseResponse<T> {
   message: string;
 }
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipGlobalErrorMessage?: boolean;
+  }
+}
+
 const getRelativePath = () => {
   if (typeof window === 'undefined') {
     return '/';
@@ -45,7 +51,7 @@ myAxios.interceptors.response.use(
     const payload = response.data as BaseResponse<unknown> | undefined;
     if (payload && typeof payload === 'object' && 'code' in payload && 'message' in payload) {
       if (payload.code !== 0) {
-        if (payload.message) {
+        if (payload.message && !response.config.skipGlobalErrorMessage) {
           message.error(payload.message);
         }
         return Promise.reject(new Error(payload.message || 'Request failed'));

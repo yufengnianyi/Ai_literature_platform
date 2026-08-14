@@ -1,0 +1,30 @@
+You will be given the title, metadata, and body/table chunks from one scientific paper. Extract Q2 effector pathogenicity, secretion, transport, host target, recognition, and structure evidence and summarize it as a Markdown table.
+
+Use only the supplied paper content. Do not use outside knowledge. Do not invent missing information. Preserve gene names, effector names, species names, strain names, identifiers, mutations, PDB IDs, numeric values, and DOI values exactly as reported. If a field is absent or uncertain, leave that cell empty. Do not write "N/A", "not reported", "unknown", "未报道", "未知", or similar placeholders.
+
+Output exactly one Markdown table and no explanatory text. The table must have exactly these 24 columns, in this exact order:
+
+| Effector name | Alias/homologous gene | Effector family | Source oomycete species | Strain/isolate | Gene ID/accession | Amino acid length | Signal peptide presence | Conserved domain | Effector type | Host target protein | Target function | Mechanism of action | Subcellular localization | Induced expression condition | Secretion/transport mechanism | Host-cell entry mechanism | Functional validation phenotype | Plant recognition/AVR activity | Structure determination method | PDB ID | Reference | Patent information | Notes |
+
+One row represents one effector-oomycete species-host target combination.
+Create separate rows for multiple host targets or oomycete species.
+For reviews, extract only concrete effector information that explicitly cites original studies and mark it as review-cited in Notes.
+
+Field guidance:
+- Effector families include RXLR, CRN, NLPP, GP15, elicitin, and similar families.
+- Effector type must be cytoplasmic or apoplastic when stated.
+- Treat a protein as Q2 when the source provides host-directed effector evidence: secretion or host translocation, AVR recognition, host target interaction, immune suppression or activation, induced host cell death, or direct manipulation of host processes.
+- Do not use pathogenicity or virulence impact alone as sufficient effector evidence; general virulence genes without host-directed effector evidence belong in Q6.
+- Functional validation phenotype must describe how overexpression, silencing, knockout, mutation, transient expression, host-induced gene silencing, or complementation affects pathogenicity, immunity, cell death, recognition, secretion, or host manipulation.
+- AVR activity records recognition by the corresponding R gene.
+- Record secretion or transport mechanism, host-cell entry mechanism, structure determination method, and PDB ID only when the paper provides evidence.
+- Reference should use current-paper metadata and DOI when available; do not cite bibliography-only claims as current-paper evidence.
+
+Tables and codes:
+- Table captions, headers, footnotes, body rows, and nearby body explanations may all contain key information.
+- Chunks whose section starts with "Table" contain a Markdown table rendered from the paper. Read each data row as candidate evidence when it matches Q2.
+- Chunks labeled as Recovered Table or table_body_recovered are synthetic Markdown reconstructions of table bodies that were flattened in the paper text. Treat them as table evidence and cross-check captions, notes, and nearby text.
+- Resolve abbreviations, family codes, host target codes, locus IDs, strain abbreviations, and species abbreviations using table notes, legends, captions, nearby text, or methods/results text when explicitly provided.
+- If a code cannot be resolved from the supplied chunks, keep the original code rather than inventing an expansion.
+
+If the supplied paper contains no qualifying Q2 evidence, return only the required header row and separator row with no data rows.

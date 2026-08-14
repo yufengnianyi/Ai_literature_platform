@@ -5,6 +5,9 @@ import com.example.demo_01.ai.evidence.model.EvidenceModels.NameKind;
 import com.example.demo_01.ai.evidence.model.EvidenceModels.NormalizedEvidenceRow;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -18,12 +21,21 @@ public class CompoundNormalizationService {
             "^(?:compound|deriv(?:ative)?|analog(?:ue)?|化合物|衍生物|类似物)\\s*"
                     + "(?:no\\.?|#|number)?\\s*[0-9]+[a-zA-Z]?$",
             Pattern.CASE_INSENSITIVE);
+    /**
+     * Chemistry papers overwhelmingly reference SAR-series compounds by a bare in-text
+     * label (e.g. "3b", "12", "7h") with no leading word such as "compound"/"衍生物" at
+     * all — {@link #LOCAL_LABEL_PATTERN} alone misses these entirely, leaving them
+     * classified as PURE_COMPOUND even though they carry no resolvable subject on their own.
+     */
+    private static final Pattern BARE_LOCAL_LABEL_PATTERN = Pattern.compile("^[0-9]{1,3}[a-zA-Z]{0,2}$");
     private static final Pattern TRAILING_LOCAL_NUMBER = Pattern.compile(
             "\\s*\\(\\s*\\d+\\s*\\)\\s*$");
     private static final Pattern EXTRACT_INDICATOR = Pattern.compile(
             "(?i)(extract|fraction|提取物|精油|essential\\s+oil|crude|tincture|decoction|infusion)");
     private static final Pattern MIXTURE_INDICATOR = Pattern.compile(
             "(?i)(混合物|mixture|精油|essential\\s+oil|crude)");
+
+    private static final int MAX_DEDUP_KEY_LENGTH = 256;
 
     private final MarkdownEvidenceTableParser tableParser;
 
@@ -57,11 +69,33 @@ public class CompoundNormalizationService {
     }
 
     String dedupKey(UUID documentId, CompoundEvidenceRow row, NameKind nameKind) {
-        return switch (nameKind) {
+        String key = switch (nameKind) {
             case LOCAL_LABEL -> "local:" + documentId + ":" + normalizeKey(localLabelKey(row));
             case NATURAL_EXTRACT -> "extract:" + normalizeKey(extractKey(row));
             case PURE_COMPOUND -> "compound:" + normalizeKey(compoundKey(row));
         };
+        return boundedDedupKey(key);
+    }
+
+    private String boundedDedupKey(String key) {
+        if (key.length() <= MAX_DEDUP_KEY_LENGTH) {
+            return key;
+        }
+        return key.substring(0, 32) + ":" + sha256Hex(key);
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     boolean isLocalLabel(CompoundEvidenceRow row) {
@@ -72,7 +106,9 @@ public class CompoundNormalizationService {
         if (original.isBlank()) {
             return false;
         }
-        return LOCAL_LABEL_PATTERN.matcher(original.trim()).matches();
+        String trimmed = original.trim();
+        return LOCAL_LABEL_PATTERN.matcher(trimmed).matches()
+                || BARE_LOCAL_LABEL_PATTERN.matcher(trimmed).matches();
     }
 
     boolean isNaturalExtract(CompoundEvidenceRow row) {
