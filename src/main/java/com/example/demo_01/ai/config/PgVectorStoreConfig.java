@@ -3,6 +3,7 @@ package com.example.demo_01.ai.config;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.TokenCountEstimator;
 import dev.langchain4j.store.embedding.EmbeddingStore;
+import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -17,8 +18,12 @@ public class PgVectorStoreConfig {
     public EmbeddingStore<TextSegment> embeddingStore(
             DataSource dataSource,
             AiPersistenceProperties properties,
+            @Value("${app.ai.rag.vector-store-enabled:true}") boolean vectorStoreEnabled,
             @Value("${spring.flyway.placeholders.embeddingDimension}") int flywayEmbeddingDimension,
             @Value("${spring.flyway.placeholders.vectorTable}") String flywayVectorTable) {
+        if (!vectorStoreEnabled) {
+            return new InMemoryEmbeddingStore<>();
+        }
         if (properties.getRag().getEmbeddingDimension() != flywayEmbeddingDimension) {
             throw new IllegalStateException("app.ai.rag.embedding-dimension must match spring.flyway.placeholders.embeddingDimension");
         }
