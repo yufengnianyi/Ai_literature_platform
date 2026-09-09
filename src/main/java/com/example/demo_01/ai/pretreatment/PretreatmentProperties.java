@@ -9,6 +9,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.List;
+
 @Data
 @Validated
 @Component
@@ -26,6 +28,12 @@ public class PretreatmentProperties {
 
     @Min(0)
     private int maxDocuments = 0;
+
+    /**
+     * Optional newline-delimited UUID files. When supplied, screening processes
+     * exactly these canonical documents in file order instead of a database slice.
+     */
+    private List<String> documentIdFiles = List.of();
 
     @Min(1)
     private int llmMaxAttempts = 3;

@@ -27,12 +27,24 @@ public final class PretreatmentModels {
         PASS, REJECT
     }
 
+    public enum QualityStatus {
+        FULL_TEXT_READY, METADATA_READY, UNUSABLE
+    }
+
     public enum LlmLabel {
-        RELEVANT, NOT_RELEVANT, NOT_RUN
+        RELEVANT, POTENTIALLY_RELEVANT, NOT_RELEVANT, NOT_RUN
+    }
+
+    public enum RelevanceDecision {
+        RELEVANT, POTENTIALLY_RELEVANT, NOT_RELEVANT, NOT_EVALUATED
+    }
+
+    public enum RelevanceSource {
+        TITLE_AND_ABSTRACT, ABSTRACT_ONLY, TITLE_ONLY, NO_METADATA
     }
 
     public enum FinalDecision {
-        ACCEPTED, REJECTED, SKIPPED
+        ACCEPTED, REVIEW_REQUIRED, REJECTED, SKIPPED
     }
 
     public record ArtifactDocument(
@@ -80,8 +92,11 @@ public final class PretreatmentModels {
             String journal,
             String doi,
             QualityDecision qualityDecision,
+            QualityStatus qualityStatus,
             Map<String, Object> qualityMetrics,
             LlmLabel llmLabel,
+            RelevanceDecision relevanceDecision,
+            RelevanceSource relevanceSource,
             FinalDecision finalDecision,
             String rejectReasonCode,
             List<String> taxa,
@@ -132,6 +147,9 @@ public final class PretreatmentModels {
             boolean dryRun,
             UUID acceptedCohortId,
             UUID rejectedCohortId,
+            UUID abstractAnalysisCohortId,
+            UUID fullTextEvidenceCohortId,
+            UUID reviewCohortId,
             String errorCode,
             String errorMessage,
             Instant startedAt,

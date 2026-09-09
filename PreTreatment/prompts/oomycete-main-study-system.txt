@@ -3,7 +3,7 @@ oomycete Q1-Q10 classification.
 
 Return only one strict JSON object:
 {
-  "label": "RELEVANT | NOT_RELEVANT",
+  "label": "RELEVANT | POTENTIALLY_RELEVANT | NOT_RELEVANT",
   "taxa": ["exact oomycete organism, genus, disease, or group names from the supplied text"],
   "researchFocus": "brief focus of the paper",
   "evidenceChunkIds": [],
@@ -11,15 +11,17 @@ Return only one strict JSON object:
 }
 
 Core rule:
-This is a recall-oriented screening step, not the final Q1-Q10 decision.
+This is a maximum-recall screening step, not the final Q1-Q10 decision.
 Classify the paper as RELEVANT when the supplied title or abstract gives either:
 1. direct evidence of oomycete-related research, or
 2. a plausible candidate signal that the paper may contain anti-oomycete, plant-pathogen,
    plant-disease-control, fungicide/oomyceticide, biological-control, diagnostic, host-resistance,
    or pathogen-population evidence that should be reviewed by downstream Q1-Q10 classification.
 
-Classify NOT_RELEVANT only when the supplied title and abstract make the paper clearly unrelated
-to oomycetes and clearly outside the downstream Q1-Q10 evidence scope.
+Classify POTENTIALLY_RELEVANT when the supplied metadata is incomplete, ambiguous, or contains
+any plausible Q1-Q10 candidate signal. Classify NOT_RELEVANT only when both the supplied title
+and abstract clearly establish that the paper is unrelated to oomycetes and outside the downstream
+Q1-Q10 evidence scope.
 
 Oomycete boundary:
 - Core oomycete taxa include, but are not limited to: Phytophthora, Pythium, Phytopythium,
@@ -61,9 +63,8 @@ Not relevant criteria:
   control or oomycete candidate signal.
 - Oomycetes appear only as examples, background, comparison context, future work, or passing
   mentions, while the real subject is clearly another organism or topic.
-- The title and abstract are too generic and do not mention plant pathogens, plant diseases,
-  antimicrobial/fungicidal activity, fungicides, diagnostics, host resistance, pathogen
-  populations, genomes, or any other Q1-Q10 candidate signal.
+- Missing abstracts, generic titles, incomplete metadata, and uncertain boundaries are
+  POTENTIALLY_RELEVANT rather than NOT_RELEVANT.
 
 Examples:
 - Title: "Sensitivity Profiles of Mycosphaerella graminicola and Phytophthora infestans
@@ -101,5 +102,6 @@ Evidence discipline:
   recall-oriented candidate signal. Cite the organism, disease, method, target, result, or
   candidate phrase from the supplied text.
 - For NOT_RELEVANT, state whether the paper is unrelated or only mentions oomycetes incidentally.
+- For POTENTIALLY_RELEVANT, state which missing or candidate signal requires later review.
 - evidenceChunkIds must be an empty array when no chunks are supplied.
 - Do not output Markdown fences or any text outside the JSON object.

@@ -3,7 +3,8 @@ package com.example.demo_01.ai.pretreatment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentResult;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceDecision;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
@@ -28,6 +29,7 @@ public class PretreatmentReportWriter {
             writeCsv(outputDir.resolve("results.csv"), results);
             writeIds(outputDir.resolve("accepted-document-ids.txt"), results, FinalDecision.ACCEPTED);
             writeIds(outputDir.resolve("rejected-document-ids.txt"), results, FinalDecision.REJECTED);
+            writeIds(outputDir.resolve("skipped-document-ids.txt"), results, FinalDecision.SKIPPED);
             writeSummary(outputDir.resolve("summary.md"), summary, results);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write PreTreatment report: " + outputDir, e);
@@ -79,13 +81,16 @@ public class PretreatmentReportWriter {
 
     private void writeCsv(Path path, List<PretreatmentDocumentResult> results) throws IOException {
         StringBuilder builder = new StringBuilder();
-        builder.append("document_id,title,journal,doi,quality_decision,reject_reason_code,quality_metrics,llm_label,final_decision,reason\n");
+        builder.append("document_id,title,journal,doi,quality_decision,quality_status,relevance_decision,relevance_source,reject_reason_code,quality_metrics,llm_label,final_decision,reason\n");
         for (PretreatmentDocumentResult result : results) {
             builder.append(csv(result.documentId() == null ? "" : result.documentId().toString())).append(',')
                     .append(csv(result.title())).append(',')
                     .append(csv(result.journal())).append(',')
                     .append(csv(result.doi())).append(',')
                     .append(csv(name(result.qualityDecision()))).append(',')
+                    .append(csv(name(result.qualityStatus()))).append(',')
+                    .append(csv(name(result.relevanceDecision()))).append(',')
+                    .append(csv(name(result.relevanceSource()))).append(',')
                     .append(csv(result.rejectReasonCode())).append(',')
                     .append(csv(json(result.qualityMetrics()))).append(',')
                     .append(csv(name(result.llmLabel()))).append(',')
@@ -119,7 +124,7 @@ public class PretreatmentReportWriter {
 
                 | Metric | Count |
                 | --- | ---: |
-                | Total artifacts | %d |
+                | Total documents | %d |
                 | Processed documents | %d |
                 | Accepted | %d |
                 | Rejected | %d |
@@ -130,8 +135,8 @@ public class PretreatmentReportWriter {
 
                 | Layer | Pass | Reject/Stop |
                 | --- | ---: | ---: |
-                | Quality gate | %d | %d |
-                | Title + abstract LLM | %d | %d |
+                | Full text ready | %d | %d |
+                | Relevance decision | %d | %d |
                 """.formatted(
                 summary.runId(),
                 summary.mode(),
@@ -143,8 +148,8 @@ public class PretreatmentReportWriter {
                 summary.rejectedDocuments(),
                 summary.skippedDocuments(),
                 summary.vectorsRemoved(),
-                countQuality(results, QualityDecision.PASS),
-                countQuality(results, QualityDecision.REJECT),
+                countQuality(results, QualityStatus.FULL_TEXT_READY),
+                countNotQuality(results, QualityStatus.FULL_TEXT_READY),
                 count(results, FinalDecision.ACCEPTED),
                 countPostQualityNotAccepted(results));
         Files.writeString(path, markdown);
@@ -171,13 +176,17 @@ public class PretreatmentReportWriter {
         return (int) results.stream().filter(result -> result.finalDecision() == decision).count();
     }
 
-    private int countQuality(List<PretreatmentDocumentResult> results, QualityDecision decision) {
-        return (int) results.stream().filter(result -> result.qualityDecision() == decision).count();
+    private int countQuality(List<PretreatmentDocumentResult> results, QualityStatus status) {
+        return (int) results.stream().filter(result -> result.qualityStatus() == status).count();
+    }
+
+    private int countNotQuality(List<PretreatmentDocumentResult> results, QualityStatus status) {
+        return (int) results.stream().filter(result -> result.qualityStatus() != status).count();
     }
 
     private int countPostQualityNotAccepted(List<PretreatmentDocumentResult> results) {
         return (int) results.stream()
-                .filter(result -> result.qualityDecision() == QualityDecision.PASS)
+                .filter(result -> result.relevanceDecision() != RelevanceDecision.NOT_EVALUATED)
                 .filter(result -> result.finalDecision() != FinalDecision.ACCEPTED)
                 .count();
     }

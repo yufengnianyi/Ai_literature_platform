@@ -9,6 +9,9 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunRec
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunStatus;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceSource;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -84,14 +87,23 @@ public class PretreatmentRepository {
                 summary.runId());
     }
 
-    public void setCohorts(UUID runId, UUID acceptedCohortId, UUID rejectedCohortId) {
+    public void setCohorts(UUID runId,
+                           UUID acceptedCohortId,
+                           UUID rejectedCohortId,
+                           UUID abstractAnalysisCohortId,
+                           UUID fullTextEvidenceCohortId,
+                           UUID reviewCohortId) {
         jdbcTemplate.update("""
                 update pretreatment_run
                 set accepted_cohort_id = ?,
                     rejected_cohort_id = ?,
+                    abstract_analysis_cohort_id = ?,
+                    full_text_evidence_cohort_id = ?,
+                    review_cohort_id = ?,
                     updated_at = ?
                 where run_id = ?
-                """, acceptedCohortId, rejectedCohortId,
+                """, acceptedCohortId, rejectedCohortId, abstractAnalysisCohortId,
+                fullTextEvidenceCohortId, reviewCohortId,
                 Timestamp.from(Instant.now()), runId);
     }
 
@@ -119,9 +131,10 @@ public class PretreatmentRepository {
                 insert into pretreatment_document_result (
                     run_id, document_id, storage_dir, title, journal, doi,
                     quality_decision, quality_metrics_json,
-                    llm_label, final_decision, reject_reason_code,
+                    quality_status, llm_label, relevance_decision, relevance_source,
+                    final_decision, reject_reason_code,
                     taxa_json, research_focus, evidence_chunk_ids_json, reason, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?,
+                ) values (?, ?, ?, ?, ?, ?, ?, cast(? as jsonb), ?, ?, ?, ?, ?, ?,
                     cast(? as jsonb), ?, cast(? as jsonb), ?, ?)
                 """,
                 result.runId(),
@@ -132,7 +145,10 @@ public class PretreatmentRepository {
                 result.doi(),
                 name(result.qualityDecision()),
                 toJson(result.qualityMetrics()),
+                name(result.qualityStatus()),
                 name(result.llmLabel()),
+                name(result.relevanceDecision()),
+                name(result.relevanceSource()),
                 name(result.finalDecision()),
                 result.rejectReasonCode(),
                 toJson(result.taxa()),
@@ -150,7 +166,10 @@ public class PretreatmentRepository {
                 """, this::mapRun, runId).stream().findFirst().orElse(null);
     }
 
-    public PretreatmentDocumentPage findDocuments(UUID runId, FinalDecision finalDecision,
+    public PretreatmentDocumentPage findDocuments(UUID runId,
+                                                  FinalDecision finalDecision,
+                                                  QualityStatus qualityStatus,
+                                                  RelevanceDecision relevanceDecision,
                                                   int requestedPage, int requestedSize) {
         int page = Math.max(0, requestedPage);
         int size = Math.min(Math.max(1, requestedSize), 200);
@@ -160,6 +179,14 @@ public class PretreatmentRepository {
         if (finalDecision != null) {
             where += " and final_decision = ?";
             args.add(finalDecision.name());
+        }
+        if (qualityStatus != null) {
+            where += " and quality_status = ?";
+            args.add(qualityStatus.name());
+        }
+        if (relevanceDecision != null) {
+            where += " and relevance_decision = ?";
+            args.add(relevanceDecision.name());
         }
         Long total = jdbcTemplate.queryForObject(
                 "select count(*) from pretreatment_document_result" + where,
@@ -189,6 +216,18 @@ public class PretreatmentRepository {
                 runId, finalDecision.name());
     }
 
+    public List<UUID> findExplicitlyNotRelevantDocumentIds(UUID runId) {
+        return jdbcTemplate.query("""
+                select document_id
+                from pretreatment_document_result
+                where run_id = ?
+                  and final_decision = 'REJECTED'
+                  and relevance_decision = 'NOT_RELEVANT'
+                  and document_id is not null
+                order by id
+                """, (rs, rowNum) -> rs.getObject("document_id", UUID.class), runId);
+    }
+
     private PretreatmentRunRecord mapRun(java.sql.ResultSet rs, int rowNum)
             throws java.sql.SQLException {
         return new PretreatmentRunRecord(
@@ -206,6 +245,9 @@ public class PretreatmentRepository {
                 rs.getBoolean("dry_run"),
                 rs.getObject("accepted_cohort_id", UUID.class),
                 rs.getObject("rejected_cohort_id", UUID.class),
+                rs.getObject("abstract_analysis_cohort_id", UUID.class),
+                rs.getObject("full_text_evidence_cohort_id", UUID.class),
+                rs.getObject("review_cohort_id", UUID.class),
                 rs.getString("error_code"),
                 rs.getString("error_message"),
                 instant(rs.getTimestamp("started_at")),
@@ -218,7 +260,10 @@ public class PretreatmentRepository {
     private PretreatmentDocumentResult mapDocument(java.sql.ResultSet rs, int rowNum)
             throws java.sql.SQLException {
         String quality = rs.getString("quality_decision");
+        String qualityStatus = rs.getString("quality_status");
         String llm = rs.getString("llm_label");
+        String relevance = rs.getString("relevance_decision");
+        String relevanceSource = rs.getString("relevance_source");
         return new PretreatmentDocumentResult(
                 rs.getObject("run_id", UUID.class),
                 rs.getObject("document_id", UUID.class),
@@ -227,8 +272,11 @@ public class PretreatmentRepository {
                 rs.getString("journal"),
                 rs.getString("doi"),
                 quality == null ? null : QualityDecision.valueOf(quality),
+                qualityStatus == null ? null : QualityStatus.valueOf(qualityStatus),
                 fromJsonMap(rs.getString("quality_metrics_json")),
                 llm == null ? null : LlmLabel.valueOf(llm),
+                relevance == null ? null : RelevanceDecision.valueOf(relevance),
+                relevanceSource == null ? null : RelevanceSource.valueOf(relevanceSource),
                 FinalDecision.valueOf(rs.getString("final_decision")),
                 rs.getString("reject_reason_code"),
                 fromJsonList(rs.getString("taxa_json")),
@@ -245,6 +293,7 @@ public class PretreatmentRepository {
             config.put("outputRoot", properties.getOutputRoot());
             config.put("promptPath", properties.getPromptPath());
             config.put("maxDocuments", properties.getMaxDocuments());
+            config.put("documentIdFiles", properties.getDocumentIdFiles());
             config.put("llmMaxAttempts", properties.getLlmMaxAttempts());
             config.put("qualityMinChunks", properties.getQuality().getMinChunks());
             config.put("qualityMinTotalTextChars", properties.getQuality().getMinTotalTextChars());

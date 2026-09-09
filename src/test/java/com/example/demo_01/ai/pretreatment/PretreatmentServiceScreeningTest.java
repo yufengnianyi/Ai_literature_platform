@@ -5,9 +5,13 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactDocument;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmJudgment;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmLabel;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagChunk;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
+import com.example.demo_01.ai.rag.repository.RagDocumentRepository;
 import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,16 +37,19 @@ class PretreatmentServiceScreeningTest {
     Path tempDir;
 
     @Test
-    void qualityFailureShortCircuitsBeforeLlm() {
+    void potentiallyRelevantAbstractIsAccepted() {
         PretreatmentLlmJudge llmJudge = mock(PretreatmentLlmJudge.class);
         PretreatmentService service = service(llmJudge);
 
+        when(llmJudge.judgeAbstract(any(), any(), anyInt()))
+                .thenReturn(new LlmJudgment(LlmLabel.POTENTIALLY_RELEVANT, List.of(), "", List.of(), "Needs review."));
+
         var result = service.screenDocument(UUID.randomUUID(), document(metadata("", "abstract"), goodChunks()));
 
-        assertThat(result.finalDecision()).isEqualTo(FinalDecision.REJECTED);
-        assertThat(result.rejectReasonCode()).isEqualTo("MISSING_TITLE");
-        assertThat(result.llmLabel()).isEqualTo(LlmLabel.NOT_RUN);
-        verify(llmJudge, never()).judgeAbstract(any(), any(), anyInt());
+        assertThat(result.finalDecision()).isEqualTo(FinalDecision.ACCEPTED);
+        assertThat(result.relevanceDecision()).isEqualTo(RelevanceDecision.POTENTIALLY_RELEVANT);
+        assertThat(result.qualityStatus()).isEqualTo(QualityStatus.FULL_TEXT_READY);
+        verify(llmJudge).judgeAbstract(any(), any(), anyInt());
     }
 
     @Test
@@ -74,6 +81,7 @@ class PretreatmentServiceScreeningTest {
                 document(metadata("A new disease caused by Pythium", "The abstract focuses on Pythium biology."), goodChunks()));
 
         assertThat(result.finalDecision()).isEqualTo(FinalDecision.ACCEPTED);
+        assertThat(result.relevanceDecision()).isEqualTo(RelevanceDecision.RELEVANT);
         assertThat(result.rejectReasonCode()).isBlank();
     }
 
@@ -90,6 +98,64 @@ class PretreatmentServiceScreeningTest {
 
         assertThat(result.finalDecision()).isEqualTo(FinalDecision.REJECTED);
         assertThat(result.rejectReasonCode()).isEqualTo("LLM_NOT_RELEVANT");
+    }
+
+    @Test
+    void lowQualityArtifactStillUsesAbstractScreening() {
+        PretreatmentLlmJudge llmJudge = mock(PretreatmentLlmJudge.class);
+        when(llmJudge.judgeAbstract(any(), any(), anyInt()))
+                .thenReturn(new LlmJudgment(LlmLabel.RELEVANT, List.of("Pythium"),
+                        "Pythium biology", List.of(), "Relevant oomycete focus."));
+        PretreatmentService service = service(llmJudge);
+
+        var result = service.screenDocument(UUID.randomUUID(),
+                document(metadata("Pythium study", "The abstract focuses on Pythium biology."),
+                        List.of(chunk(0, "short text"))));
+
+        assertThat(result.qualityStatus()).isEqualTo(QualityStatus.METADATA_READY);
+        assertThat(result.finalDecision()).isEqualTo(FinalDecision.ACCEPTED);
+        verify(llmJudge).judgeAbstract(any(), any(), anyInt());
+    }
+
+    @Test
+    void missingAbstractIsAcceptedAsPotentiallyRelevantWithoutLlm() {
+        PretreatmentLlmJudge llmJudge = mock(PretreatmentLlmJudge.class);
+        PretreatmentService service = service(llmJudge);
+
+        var result = service.screenDocument(UUID.randomUUID(),
+                document(metadata("Antifungal compounds against plant pathogens", ""), goodChunks()));
+
+        assertThat(result.finalDecision()).isEqualTo(FinalDecision.ACCEPTED);
+        assertThat(result.relevanceDecision()).isEqualTo(RelevanceDecision.POTENTIALLY_RELEVANT);
+        verify(llmJudge, never()).judgeAbstract(any(), any(), anyInt());
+    }
+
+    @Test
+    void llmFailureIsAcceptedAsPotentiallyRelevant() {
+        PretreatmentLlmJudge llmJudge = mock(PretreatmentLlmJudge.class);
+        when(llmJudge.judgeAbstract(any(), any(), anyInt()))
+                .thenThrow(new IllegalStateException("Configured LLM is unavailable"));
+        PretreatmentService service = service(llmJudge);
+
+        var result = service.screenDocument(UUID.randomUUID(),
+                document(metadata("Plant pathogen control", "This abstract is long enough."), goodChunks()));
+
+        assertThat(result.finalDecision()).isEqualTo(FinalDecision.ACCEPTED);
+        assertThat(result.relevanceDecision()).isEqualTo(RelevanceDecision.POTENTIALLY_RELEVANT);
+        assertThat(result.llmLabel()).isEqualTo(LlmLabel.NOT_RUN);
+    }
+
+    @Test
+    void noMetadataOrReadableTextIsSkippedRatherThanRejected() {
+        PretreatmentLlmJudge llmJudge = mock(PretreatmentLlmJudge.class);
+        PretreatmentService service = service(llmJudge);
+
+        var result = service.screenDocument(UUID.randomUUID(), document(metadata("", ""), List.of()));
+
+        assertThat(result.qualityStatus()).isEqualTo(QualityStatus.UNUSABLE);
+        assertThat(result.finalDecision()).isEqualTo(FinalDecision.SKIPPED);
+        assertThat(result.relevanceDecision()).isEqualTo(RelevanceDecision.NOT_EVALUATED);
+        verify(llmJudge, never()).judgeAbstract(any(), any(), anyInt());
     }
 
     @Test
@@ -116,6 +182,31 @@ class PretreatmentServiceScreeningTest {
         assertThat(summary.mode()).isEqualTo(PretreatmentMode.apply);
         assertThat(summary.vectorsRemoved()).isZero();
         verifyNoInteractions(vectorIngestionService);
+    }
+
+    @Test
+    void documentIdFilesSelectExactlyTheRequestedCanonicalDocuments() throws Exception {
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        RagDocumentRecord first = mock(RagDocumentRecord.class);
+        RagDocumentRecord second = mock(RagDocumentRecord.class);
+        RagDocumentRecord extra = mock(RagDocumentRecord.class);
+        when(first.documentId()).thenReturn(firstId);
+        when(second.documentId()).thenReturn(secondId);
+        when(extra.documentId()).thenReturn(UUID.randomUUID());
+
+        Path idsFile = tempDir.resolve("previous-test-ids.txt");
+        Files.writeString(idsFile, secondId + "\n" + firstId + "\n" + secondId + "\n");
+        PretreatmentProperties properties = properties();
+        properties.setDocumentIdFiles(List.of(idsFile.toString()));
+        RagDocumentRepository ragDocumentRepository = mock(RagDocumentRepository.class);
+        when(ragDocumentRepository.findAllCanonical()).thenReturn(List.of(first, extra, second));
+
+        PretreatmentService service = new PretreatmentService();
+        ReflectionTestUtils.setField(service, "properties", properties);
+        ReflectionTestUtils.setField(service, "ragDocumentRepository", ragDocumentRepository);
+
+        assertThat(service.selectDocuments()).containsExactly(second, first);
     }
 
     private PretreatmentService service(PretreatmentLlmJudge llmJudge) {

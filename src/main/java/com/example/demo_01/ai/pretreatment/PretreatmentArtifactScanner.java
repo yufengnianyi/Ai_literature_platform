@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -62,6 +63,27 @@ public class PretreatmentArtifactScanner {
             return new ArtifactScan(documents, skipped);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to scan artifact root: " + artifactRoot, e);
+        }
+    }
+
+    public Optional<ArtifactDocument> load(UUID documentId, String storageDir) {
+        if (documentId == null) {
+            return Optional.empty();
+        }
+        Path dir = storageDir == null || storageDir.isBlank() ? null : Path.of(storageDir);
+        if (dir == null || !Files.isDirectory(dir)) {
+            return Optional.empty();
+        }
+        Path manifestPath = dir.resolve("artifact-manifest.json");
+        Path jsonlPath = dir.resolve("document.jsonl");
+        if (!Files.isRegularFile(manifestPath) || !Files.isRegularFile(jsonlPath)) {
+            return Optional.empty();
+        }
+        try {
+            PreprocessArtifact manifest = objectMapper.readValue(Files.readString(manifestPath), PreprocessArtifact.class);
+            return Optional.of(new ArtifactDocument(documentId, dir.toString(), manifest, loadChunks(jsonlPath)));
+        } catch (Exception ignored) {
+            return Optional.empty();
         }
     }
 

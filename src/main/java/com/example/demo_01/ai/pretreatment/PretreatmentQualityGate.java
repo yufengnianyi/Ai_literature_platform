@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagChunk;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
 import org.springframework.stereotype.Component;
@@ -16,31 +17,31 @@ public class PretreatmentQualityGate {
                                   List<RagChunk> chunks,
                                   PretreatmentProperties.Quality properties) {
         String title = metadata == null ? null : metadata.title();
+        String abstractText = metadata == null ? null : metadata.abstractText();
         Map<String, Object> metrics = metrics(chunks);
-        if (isBlank(title)) {
-            return new QualityResult(QualityDecision.REJECT, metrics, "MISSING_TITLE", "Missing title.");
-        }
         int chunkCount = intMetric(metrics, "chunkCount");
         int totalTextChars = intMetric(metrics, "totalTextChars");
         double replacementCharRatio = doubleMetric(metrics, "replacementCharRatio");
         double shortLineRatio = doubleMetric(metrics, "shortLineRatio");
-        if (chunkCount < properties.getMinChunks()) {
-            return new QualityResult(QualityDecision.REJECT, metrics, "LOW_CHUNK_COUNT",
-                    "PDF conversion quality is too low: chunk count below threshold.");
+        if (chunkCount >= properties.getMinChunks()
+                && totalTextChars >= properties.getMinTotalTextChars()
+                && replacementCharRatio <= properties.getMaxReplacementCharRatio()
+                && shortLineRatio <= properties.getMaxShortLineRatio()) {
+            return new QualityResult(QualityDecision.PASS, QualityStatus.FULL_TEXT_READY, metrics,
+                    "", "Full text is ready for evidence extraction.");
         }
-        if (totalTextChars < properties.getMinTotalTextChars()) {
-            return new QualityResult(QualityDecision.REJECT, metrics, "LOW_TEXT_COVERAGE",
-                    "PDF conversion quality is too low: extracted text below threshold.");
+        if (!isBlank(title) || !isBlank(abstractText)) {
+            return new QualityResult(QualityDecision.REJECT, QualityStatus.METADATA_READY, metrics,
+                    fullTextReason(chunkCount, totalTextChars, replacementCharRatio, shortLineRatio, properties),
+                    "Metadata is available; full text needs recovery before evidence extraction.");
         }
-        if (replacementCharRatio > properties.getMaxReplacementCharRatio()) {
-            return new QualityResult(QualityDecision.REJECT, metrics, "HIGH_GARBLED_TEXT_RATIO",
-                    "PDF conversion quality is too low: replacement/garbled character ratio above threshold.");
+        if (totalTextChars > 0) {
+            return new QualityResult(QualityDecision.REJECT, QualityStatus.METADATA_READY, metrics,
+                    fullTextReason(chunkCount, totalTextChars, replacementCharRatio, shortLineRatio, properties),
+                    "Readable text is available; metadata needs recovery before relevance review.");
         }
-        if (shortLineRatio > properties.getMaxShortLineRatio()) {
-            return new QualityResult(QualityDecision.REJECT, metrics, "HIGH_SHORT_LINE_RATIO",
-                    "PDF conversion quality is too low: abnormal short line ratio above threshold.");
-        }
-        return new QualityResult(QualityDecision.PASS, metrics, "", "Quality gate passed.");
+        return new QualityResult(QualityDecision.REJECT, QualityStatus.UNUSABLE, metrics,
+                "MISSING_USABLE_CONTENT", "Title, abstract, and readable text are unavailable.");
     }
 
     Map<String, Object> metrics(List<RagChunk> chunks) {
@@ -97,6 +98,26 @@ public class PretreatmentQualityGate {
         return value == null || value.isBlank();
     }
 
+    private String fullTextReason(int chunkCount,
+                                  int totalTextChars,
+                                  double replacementCharRatio,
+                                  double shortLineRatio,
+                                  PretreatmentProperties.Quality properties) {
+        if (chunkCount < properties.getMinChunks()) {
+            return "LOW_CHUNK_COUNT";
+        }
+        if (totalTextChars < properties.getMinTotalTextChars()) {
+            return "LOW_TEXT_COVERAGE";
+        }
+        if (replacementCharRatio > properties.getMaxReplacementCharRatio()) {
+            return "HIGH_GARBLED_TEXT_RATIO";
+        }
+        if (shortLineRatio > properties.getMaxShortLineRatio()) {
+            return "HIGH_SHORT_LINE_RATIO";
+        }
+        return "FULL_TEXT_NOT_READY";
+    }
+
     private int intMetric(Map<String, Object> metrics, String key) {
         Object value = metrics.get(key);
         return value instanceof Number number ? number.intValue() : 0;
@@ -113,6 +134,7 @@ public class PretreatmentQualityGate {
 
     public record QualityResult(
             QualityDecision decision,
+            QualityStatus status,
             Map<String, Object> metrics,
             String rejectReasonCode,
             String reason

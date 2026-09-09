@@ -6,6 +6,8 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.FilterRunRequest;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentDocumentPage;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunRecord;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentService;
 import com.example.demo_01.annotation.AuthCheck;
 import com.example.demo_01.common.BaseResponse;
@@ -47,10 +49,12 @@ public class FilterStageController {
     public BaseResponse<PretreatmentDocumentPage> getDocuments(
             @PathVariable UUID runId,
             @RequestParam(required = false) FinalDecision finalDecision,
+            @RequestParam(required = false) QualityStatus qualityStatus,
+            @RequestParam(required = false) RelevanceDecision relevanceDecision,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         return ResultUtils.success(pretreatmentService.findDocuments(
-                runId, finalDecision, page, size));
+                runId, finalDecision, qualityStatus, relevanceDecision, page, size));
     }
 
     @PostMapping("/{runId}/vector-gc")

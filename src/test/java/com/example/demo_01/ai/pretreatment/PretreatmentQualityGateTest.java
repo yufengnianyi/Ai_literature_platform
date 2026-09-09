@@ -1,6 +1,7 @@
 package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagChunk;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
 import org.junit.jupiter.api.Test;
@@ -16,11 +17,10 @@ class PretreatmentQualityGateTest {
     private final PretreatmentProperties.Quality properties = new PretreatmentProperties.Quality();
 
     @Test
-    void rejectsMissingTitle() {
+    void acceptsAbstractOnlyMetadataForScreening() {
         var result = gate.evaluate(metadata("", "abstract"), goodChunks(), properties);
 
-        assertThat(result.decision()).isEqualTo(QualityDecision.REJECT);
-        assertThat(result.rejectReasonCode()).isEqualTo("MISSING_TITLE");
+        assertThat(result.status()).isEqualTo(QualityStatus.FULL_TEXT_READY);
     }
 
     @Test
@@ -28,23 +28,26 @@ class PretreatmentQualityGateTest {
         var result = gate.evaluate(metadata("A title", ""), goodChunks(), properties);
 
         assertThat(result.decision()).isEqualTo(QualityDecision.PASS);
+        assertThat(result.status()).isEqualTo(QualityStatus.FULL_TEXT_READY);
         assertThat(result.rejectReasonCode()).isBlank();
     }
 
     @Test
-    void rejectsLowChunkCount() {
+    void marksLowChunkCountMetadataReady() {
         var result = gate.evaluate(metadata("A title", "abstract"), List.of(chunk(0, "long enough text")), properties);
 
         assertThat(result.decision()).isEqualTo(QualityDecision.REJECT);
+        assertThat(result.status()).isEqualTo(QualityStatus.METADATA_READY);
         assertThat(result.rejectReasonCode()).isEqualTo("LOW_CHUNK_COUNT");
     }
 
     @Test
-    void rejectsLowTextCoverage() {
+    void marksLowTextCoverageMetadataReady() {
         var result = gate.evaluate(metadata("A title", "abstract"),
                 List.of(chunk(0, "short text"), chunk(1, "short text"), chunk(2, "short text")), properties);
 
         assertThat(result.decision()).isEqualTo(QualityDecision.REJECT);
+        assertThat(result.status()).isEqualTo(QualityStatus.METADATA_READY);
         assertThat(result.rejectReasonCode()).isEqualTo("LOW_TEXT_COVERAGE");
     }
 
@@ -55,6 +58,7 @@ class PretreatmentQualityGateTest {
                 List.of(chunk(0, noisy), chunk(1, noisy), chunk(2, noisy.repeat(20))), properties);
 
         assertThat(result.decision()).isEqualTo(QualityDecision.REJECT);
+        assertThat(result.status()).isEqualTo(QualityStatus.METADATA_READY);
         assertThat(result.rejectReasonCode()).isEqualTo("HIGH_GARBLED_TEXT_RATIO");
     }
 
@@ -63,6 +67,7 @@ class PretreatmentQualityGateTest {
         var result = gate.evaluate(metadata("A title", "abstract"), goodChunks(), properties);
 
         assertThat(result.decision()).isEqualTo(QualityDecision.PASS);
+        assertThat(result.status()).isEqualTo(QualityStatus.FULL_TEXT_READY);
         assertThat(result.metrics()).containsEntry("chunkCount", 3);
     }
 

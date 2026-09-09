@@ -1,7 +1,6 @@
 package com.example.demo_01.ai.pretreatment;
 
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactDocument;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.ArtifactScan;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FilterRunAccepted;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.FinalDecision;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.LlmJudgment;
@@ -12,10 +11,13 @@ import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentMode;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunRecord;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunStatus;
 import com.example.demo_01.ai.pretreatment.PretreatmentModels.PretreatmentRunSummary;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityDecision;
-import com.example.demo_01.ai.pretreatment.PretreatmentModels.SkippedArtifact;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.QualityStatus;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceDecision;
+import com.example.demo_01.ai.pretreatment.PretreatmentModels.RelevanceSource;
 import com.example.demo_01.ai.pretreatment.PretreatmentQualityGate.QualityResult;
 import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentMetadata;
+import com.example.demo_01.ai.rag.model.RagPipelineModels.RagDocumentRecord;
+import com.example.demo_01.ai.rag.repository.RagDocumentRepository;
 import com.example.demo_01.ai.rag.service.RagVectorIngestionService;
 import com.example.demo_01.ai.stage.CohortService;
 import jakarta.annotation.Resource;
@@ -24,11 +26,16 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Slf4j
@@ -49,6 +56,9 @@ public class PretreatmentService {
 
     @Resource
     private PretreatmentRepository repository;
+
+    @Resource
+    private RagDocumentRepository ragDocumentRepository;
 
     @Resource
     private PretreatmentReportWriter reportWriter;
@@ -101,13 +111,21 @@ public class PretreatmentService {
 
     public PretreatmentDocumentPage findDocuments(UUID runId, FinalDecision finalDecision,
                                                   int page, int size) {
+        return findDocuments(runId, finalDecision, null, null, page, size);
+    }
+
+    public PretreatmentDocumentPage findDocuments(UUID runId,
+                                                  FinalDecision finalDecision,
+                                                  QualityStatus qualityStatus,
+                                                  RelevanceDecision relevanceDecision,
+                                                  int page, int size) {
         requireRun(runId);
-        return repository.findDocuments(runId, finalDecision, page, size);
+        return repository.findDocuments(runId, finalDecision, qualityStatus, relevanceDecision, page, size);
     }
 
     public PretreatmentRunSummary garbageCollectRejectedVectors(UUID runId, boolean dryRun) {
         PretreatmentRunRecord run = requireRun(runId);
-        List<UUID> rejectedIds = repository.findDocumentIds(runId, FinalDecision.REJECTED);
+        List<UUID> rejectedIds = repository.findExplicitlyNotRelevantDocumentIds(runId);
         int removed = 0;
         if (!dryRun) {
             for (UUID documentId : rejectedIds) {
@@ -142,23 +160,16 @@ public class PretreatmentService {
                     actualOutputDir.toString(), actualStartedAt);
         }
         try {
-            ArtifactScan scan = artifactScanner.scan(Path.of(properties.getArtifactRoot()), properties.getMaxDocuments());
+            List<RagDocumentRecord> documents = selectDocuments();
             List<PretreatmentDocumentResult> results = new ArrayList<>();
-            for (SkippedArtifact skipped : scan.skipped()) {
-                results.add(skippedResult(runId, skipped));
-            }
-            for (ArtifactDocument document : scan.documents()) {
-                PretreatmentDocumentResult result = screenDocument(runId, document);
+            for (RagDocumentRecord document : documents) {
+                ArtifactDocument artifact = artifactScanner.load(document.documentId(), artifactStorageDir(document)).orElse(null);
+                PretreatmentDocumentResult result = screenDocument(runId, document, artifact);
                 results.add(result);
                 repository.insertResult(result);
             }
-            for (PretreatmentDocumentResult result : results) {
-                if (result.finalDecision() == FinalDecision.SKIPPED) {
-                    repository.insertResult(result);
-                }
-            }
             PretreatmentRunSummary summary = summary(runId, PretreatmentMode.scan, actualOutputDir,
-                    scan, results, 0, actualStartedAt);
+                    results, 0, actualStartedAt);
             reportWriter.write(actualOutputDir, summary, results);
             repository.completeRun(summary);
             publishFilterCohorts(runId, results);
@@ -203,11 +214,96 @@ public class PretreatmentService {
 
     PretreatmentDocumentResult screenDocument(UUID runId,
                                               ArtifactDocument document) {
-        RagDocumentMetadata metadata = document.metadata();
-        QualityResult qualityResult = qualityGate.evaluate(metadata, document.chunks(), properties.getQuality());
-        if (qualityResult.decision() == QualityDecision.REJECT) {
-            return result(runId, document, metadata, qualityResult,
-                    LlmJudgment.notRun(qualityResult.reason()), qualityResult.rejectReasonCode());
+        return screenDocument(runId, document.documentId(), document.storageDir(), document.metadata(), document.chunks());
+    }
+
+    List<RagDocumentRecord> selectDocuments() {
+        List<RagDocumentRecord> canonicalDocuments = ragDocumentRepository.findAllCanonical();
+        if (properties.getDocumentIdFiles() == null || properties.getDocumentIdFiles().isEmpty()) {
+            return properties.getMaxDocuments() > 0
+                    ? canonicalDocuments.stream().limit(properties.getMaxDocuments()).toList()
+                    : canonicalDocuments;
+        }
+
+        LinkedHashSet<UUID> requestedIds = new LinkedHashSet<>();
+        for (String file : properties.getDocumentIdFiles()) {
+            if (file == null || file.isBlank()) {
+                continue;
+            }
+            try {
+                for (String line : Files.readAllLines(Path.of(file))) {
+                    String value = line.trim();
+                    if (!value.isEmpty()) {
+                        requestedIds.add(UUID.fromString(value));
+                    }
+                }
+            } catch (IOException | IllegalArgumentException e) {
+                throw new IllegalStateException("Failed to read pretreatment document ID file: " + file, e);
+            }
+        }
+        if (requestedIds.isEmpty()) {
+            throw new IllegalStateException("Pretreatment document ID files did not contain any document IDs");
+        }
+
+        Map<UUID, RagDocumentRecord> canonicalById = new LinkedHashMap<>();
+        Map<String, RagDocumentRecord> canonicalByPdfSha = new LinkedHashMap<>();
+        for (RagDocumentRecord document : canonicalDocuments) {
+            canonicalById.put(document.documentId(), document);
+            if (document.pdfSha256() != null && !document.pdfSha256().isBlank()) {
+                canonicalByPdfSha.put(document.pdfSha256(), document);
+            }
+        }
+        Map<UUID, RagDocumentRecord> selectedById = new LinkedHashMap<>();
+        List<UUID> missingIds = new ArrayList<>();
+        for (UUID requestedId : requestedIds) {
+            RagDocumentRecord document = canonicalById.get(requestedId);
+            if (document == null) {
+                document = artifactScanner.load(requestedId,
+                                Path.of(properties.getArtifactRoot()).resolve(requestedId.toString()).toString())
+                        .map(ArtifactDocument::manifest)
+                        .map(manifest -> canonicalByPdfSha.get(manifest.pdfSha256()))
+                        .orElse(null);
+            }
+            if (document == null) {
+                missingIds.add(requestedId);
+            } else {
+                selectedById.put(document.documentId(), document);
+            }
+        }
+        if (!missingIds.isEmpty()) {
+            throw new IllegalStateException("Pretreatment document ID file includes documents that cannot be resolved to a canonical record: " + missingIds);
+        }
+        log.info("Selected {} canonical documents from {} requested document IDs", selectedById.size(), requestedIds.size());
+        return List.copyOf(selectedById.values());
+    }
+
+    private PretreatmentDocumentResult screenDocument(UUID runId,
+                                                      RagDocumentRecord document,
+                                                      ArtifactDocument artifact) {
+        RagDocumentMetadata metadata = new RagDocumentMetadata(
+                document.doiRaw(), document.doiNormalized(), document.title(), document.authors(),
+                document.affiliations(), document.abstractText(), document.journal(),
+                document.publicationDate(), document.publicationYear());
+        return screenDocument(runId, document.documentId(), document.storageRoot(), metadata,
+                artifact == null ? List.of() : artifact.chunks());
+    }
+
+    private PretreatmentDocumentResult screenDocument(UUID runId,
+                                                      UUID documentId,
+                                                      String storageDir,
+                                                      RagDocumentMetadata metadata,
+                                                      List<com.example.demo_01.ai.rag.model.RagPipelineModels.RagChunk> chunks) {
+        QualityResult qualityResult = qualityGate.evaluate(metadata, chunks, properties.getQuality());
+        if (qualityResult.status() == QualityStatus.UNUSABLE) {
+            return result(runId, documentId, storageDir, metadata, qualityResult,
+                    LlmJudgment.notRun(qualityResult.reason()), RelevanceDecision.NOT_EVALUATED,
+                    RelevanceSource.NO_METADATA, "");
+        }
+        if (isBlank(metadata == null ? null : metadata.abstractText())) {
+            return result(runId, documentId, storageDir, metadata, qualityResult,
+                    new LlmJudgment(LlmLabel.POTENTIALLY_RELEVANT, List.of(), "", List.of(),
+                            "Abstract is missing; retained as potentially relevant."),
+                    RelevanceDecision.POTENTIALLY_RELEVANT, RelevanceSource.TITLE_ONLY, "");
         }
         LlmJudgment judgment;
         try {
@@ -217,32 +313,41 @@ public class PretreatmentService {
                     properties.getLlmMaxAttempts());
         } catch (Exception ex) {
             judgment = new LlmJudgment(LlmLabel.NOT_RUN, List.of(), "", List.of(),
-                    "LLM judgment failed; manual review required: " + rootMessage(ex));
-            log.warn("PreTreatment LLM judgment failed for document {}: {}", document.documentId(), rootMessage(ex));
+                    "LLM judgment failed; retained as potentially relevant: " + rootMessage(ex));
+            log.warn("PreTreatment LLM judgment failed for document {}: {}", documentId, rootMessage(ex));
         }
-        return result(runId, document, metadata, qualityResult, judgment, "");
+        RelevanceSource source = isBlank(metadata == null ? null : metadata.title())
+                ? RelevanceSource.ABSTRACT_ONLY : RelevanceSource.TITLE_AND_ABSTRACT;
+        RelevanceDecision relevance = relevanceDecision(judgment, source);
+        return result(runId, documentId, storageDir, metadata, qualityResult, judgment, relevance, source, "");
     }
 
     private PretreatmentDocumentResult result(UUID runId,
-                                              ArtifactDocument document,
+                                              UUID documentId,
+                                              String storageDir,
                                               RagDocumentMetadata metadata,
                                               QualityResult qualityResult,
                                               LlmJudgment judgment,
+                                              RelevanceDecision relevanceDecision,
+                                              RelevanceSource relevanceSource,
                                               String rejectReasonCode) {
-        FinalDecision finalDecision = finalDecision(qualityResult, judgment);
+        FinalDecision finalDecision = finalDecision(qualityResult, relevanceDecision);
         String finalRejectReasonCode = finalDecision == FinalDecision.REJECTED && (rejectReasonCode == null || rejectReasonCode.isBlank())
                 ? reasonCode(judgment)
                 : rejectReasonCode;
         return new PretreatmentDocumentResult(
                 runId,
-                document.documentId(),
-                document.storageDir(),
+                documentId,
+                storageDir,
                 metadata == null ? null : metadata.title(),
                 metadata == null ? null : metadata.journal(),
                 metadata == null ? null : metadata.doiNormalized(),
                 qualityResult == null ? null : qualityResult.decision(),
+                qualityResult == null ? null : qualityResult.status(),
                 qualityResult == null ? Map.of() : qualityResult.metrics(),
                 judgment.label(),
+                relevanceDecision,
+                relevanceSource,
                 finalDecision,
                 finalRejectReasonCode,
                 judgment.taxa(),
@@ -253,44 +358,19 @@ public class PretreatmentService {
     }
 
     private FinalDecision finalDecision(QualityResult qualityResult,
-                                        LlmJudgment judgment) {
-        if (qualityResult != null && qualityResult.decision() == QualityDecision.REJECT) {
+                                        RelevanceDecision relevanceDecision) {
+        if (qualityResult != null && qualityResult.status() == QualityStatus.UNUSABLE) {
+            return FinalDecision.SKIPPED;
+        }
+        if (relevanceDecision == RelevanceDecision.NOT_RELEVANT) {
             return FinalDecision.REJECTED;
         }
-        if (judgment.label() == LlmLabel.RELEVANT) {
-            return FinalDecision.ACCEPTED;
-        }
-        if (judgment.label() == LlmLabel.NOT_RELEVANT) {
-            return FinalDecision.REJECTED;
-        }
-        return FinalDecision.REJECTED;
-    }
-
-    private PretreatmentDocumentResult skippedResult(UUID runId, SkippedArtifact skipped) {
-        return new PretreatmentDocumentResult(
-                runId,
-                skipped.documentId(),
-                skipped.storageDir(),
-                null,
-                null,
-                null,
-                QualityDecision.REJECT,
-                Map.of("chunkCount", 0, "totalTextChars", 0, "averageChunkChars", 0.0,
-                        "replacementCharRatio", 0.0, "shortLineRatio", 0.0),
-                LlmLabel.NOT_RUN,
-                FinalDecision.REJECTED,
-                "MISSING_ARTIFACT",
-                List.of(),
-                "",
-                List.of(),
-                skipped.reason()
-        );
+        return FinalDecision.ACCEPTED;
     }
 
     private PretreatmentRunSummary summary(UUID runId,
                                            PretreatmentMode mode,
                                            Path outputDir,
-                                           ArtifactScan scan,
                                            List<PretreatmentDocumentResult> results,
                                            int vectorsRemoved,
                                            Instant startedAt) {
@@ -298,8 +378,8 @@ public class PretreatmentService {
                 runId,
                 mode,
                 outputDir.toString(),
-                scan.documents().size() + scan.skipped().size(),
-                scan.documents().size(),
+                results.size(),
+                results.size(),
                 count(results, FinalDecision.ACCEPTED),
                 count(results, FinalDecision.REJECTED),
                 0,
@@ -317,20 +397,46 @@ public class PretreatmentService {
 
     private void publishFilterCohorts(UUID runId, List<PretreatmentDocumentResult> results) {
         List<UUID> accepted = ids(results, FinalDecision.ACCEPTED);
+        List<UUID> fullTextEvidence = results.stream()
+                .filter(result -> result.finalDecision() == FinalDecision.ACCEPTED)
+                .filter(result -> result.qualityStatus() == QualityStatus.FULL_TEXT_READY)
+                .map(PretreatmentDocumentResult::documentId)
+                .filter(Objects::nonNull)
+                .toList();
+        List<UUID> abstractAnalysis = results.stream()
+                .filter(result -> result.finalDecision() == FinalDecision.ACCEPTED)
+                .filter(result -> result.relevanceSource() == RelevanceSource.TITLE_AND_ABSTRACT
+                        || result.relevanceSource() == RelevanceSource.ABSTRACT_ONLY)
+                .map(PretreatmentDocumentResult::documentId)
+                .filter(Objects::nonNull)
+                .toList();
         List<UUID> rejected = ids(results, FinalDecision.REJECTED);
         UUID acceptedCohortId = cohortService.create(
                 "filter-accepted-" + runId,
                 "PRETREATMENT",
                 runId,
                 accepted,
-                "accepted by pretreatment");
+                "retained as relevant or potentially relevant");
         UUID rejectedCohortId = cohortService.create(
                 "filter-rejected-" + runId,
                 "PRETREATMENT",
                 runId,
                 rejected,
-                "rejected by pretreatment");
-        repository.setCohorts(runId, acceptedCohortId, rejectedCohortId);
+                "explicitly not relevant");
+        UUID abstractAnalysisCohortId = cohortService.create(
+                "filter-abstract-analysis-" + runId,
+                "PRETREATMENT",
+                runId,
+                abstractAnalysis,
+                "accepted with abstract");
+        UUID fullTextEvidenceCohortId = cohortService.create(
+                "filter-full-text-evidence-" + runId,
+                "PRETREATMENT",
+                runId,
+                fullTextEvidence,
+                "accepted and full-text ready");
+        repository.setCohorts(runId, acceptedCohortId, rejectedCohortId,
+                abstractAnalysisCohortId, fullTextEvidenceCohortId, null);
     }
 
     private List<UUID> ids(List<PretreatmentDocumentResult> results, FinalDecision decision) {
@@ -366,5 +472,31 @@ public class PretreatmentService {
             case NOT_RUN -> "LLM_NOT_RUN";
             default -> "";
         };
+    }
+
+    private RelevanceDecision relevanceDecision(LlmJudgment judgment, RelevanceSource source) {
+        if (judgment == null || judgment.label() == null || judgment.label() == LlmLabel.NOT_RUN) {
+            return RelevanceDecision.POTENTIALLY_RELEVANT;
+        }
+        if (judgment.label() == LlmLabel.RELEVANT) {
+            return RelevanceDecision.RELEVANT;
+        }
+        if (judgment.label() == LlmLabel.POTENTIALLY_RELEVANT) {
+            return RelevanceDecision.POTENTIALLY_RELEVANT;
+        }
+        return source == RelevanceSource.TITLE_AND_ABSTRACT
+                ? RelevanceDecision.NOT_RELEVANT
+                : RelevanceDecision.POTENTIALLY_RELEVANT;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String artifactStorageDir(RagDocumentRecord document) {
+        if (document.storageRoot() != null && !document.storageRoot().isBlank()) {
+            return document.storageRoot();
+        }
+        return Path.of(properties.getArtifactRoot(), document.documentId().toString()).toString();
     }
 }

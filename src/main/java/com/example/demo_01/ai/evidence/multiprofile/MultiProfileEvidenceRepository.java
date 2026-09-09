@@ -69,6 +69,7 @@ public class MultiProfileEvidenceRepository {
                 JOIN rag_document d ON d.document_id = r.document_id
                 WHERE r.run_id = ?
                   AND r.final_decision = 'ACCEPTED'
+                  AND (r.quality_status IS NULL OR r.quality_status = 'FULL_TEXT_READY')
                   AND d.status = 'COMPLETED'
                   AND d.duplicate_of_document_id IS NULL
                 ORDER BY r.id

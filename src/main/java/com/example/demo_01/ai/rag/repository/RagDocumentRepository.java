@@ -141,6 +141,13 @@ public class RagDocumentRepository {
                 """, this::mapRow);
     }
 
+    public List<RagDocumentRecord> findAllCanonical() {
+        return jdbcTemplate.query(selectSql() + """
+                 where d.duplicate_of_document_id is null
+                 order by d.updated_at, d.document_id
+                """, this::mapRow);
+    }
+
     public void updateSynopsis(UUID documentId, RagDocumentSynopsis synopsis) {
         jdbcTemplate.update("""
                 update rag_document
@@ -153,6 +160,18 @@ public class RagDocumentRepository {
                 synopsis == null ? null : synopsis.searchableText(),
                 Timestamp.from(Instant.now()),
                 documentId);
+    }
+
+    public boolean updateMissingAbstract(UUID documentId, String abstractText) {
+        if (abstractText == null || abstractText.isBlank()) {
+            return false;
+        }
+        return jdbcTemplate.update("""
+                update rag_document
+                set abstract_text = ?, updated_at = ?
+                where document_id = ?
+                  and (abstract_text is null or btrim(abstract_text) = '')
+                """, abstractText.trim(), Timestamp.from(Instant.now()), documentId) > 0;
     }
 
     public boolean isPreprocessCompleted(UUID documentId) {
