@@ -24,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.nio.file.Path;
 
 /**
  * Phase B orchestrator: on demand, turns the tables a profile needs into anchorable evidence
@@ -69,6 +70,9 @@ public class TableContextService {
     @Resource
     private ObjectMapper objectMapper;
 
+    @Resource
+    private PatentQ1EvidenceSupport patentQ1EvidenceSupport;
+
     /** Honours a per-run configuration override when an extraction run pinned one. */
     private EvidenceProperties config() {
         return configScope == null ? properties : configScope.current();
@@ -91,6 +95,21 @@ public class TableContextService {
                                        UUID documentId,
                                        EvidenceProfile profile,
                                        List<EvidenceChunk> baseChunks) {
+        return augment(scopeId, documentId, profile, baseChunks, null);
+    }
+
+    public List<EvidenceChunk> augment(UUID scopeId,
+                                       UUID documentId,
+                                       EvidenceProfile profile,
+                                       List<EvidenceChunk> baseChunks,
+                                       Path artifactRoot) {
+        if (artifactRoot != null) {
+            var patent = patentQ1EvidenceSupport.load(profile, artifactRoot);
+            if (patent.isPresent()) {
+                return patentQ1EvidenceSupport.augment(patent.get(), baseChunks,
+                        documentId == null ? "doc" : documentId.toString(), legendResolver);
+            }
+        }
         if (!isEnabledFor(profile) || baseChunks == null || baseChunks.isEmpty()) {
             return baseChunks;
         }

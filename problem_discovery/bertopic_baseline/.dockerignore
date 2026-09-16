@@ -1,0 +1,5 @@
+.git
+.venv
+.venv-py310
+__pycache__
+outputs

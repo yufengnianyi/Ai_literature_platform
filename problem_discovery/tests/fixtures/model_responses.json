@@ -1,0 +1,47 @@
+{
+  "fixture_only": true,
+  "description": "Invented records and deterministic simulated responses for software tests only.",
+  "dimensions": 3,
+  "documents": [
+    {
+      "document_id": "sim-001",
+      "title": "SIMULATED: Assay A detection limits",
+      "abstract": "This simulated study investigates whether assay A detects lower DNA concentrations than assay B.",
+      "topic": "detection sensitivity",
+      "vector": [1, 0.01, 0],
+      "extraction": {"status":"EXTRACTED","overflow":false,"questions":[{"question":"Does assay A detect lower DNA concentrations than assay B?","research_object":"detection assays","question_origin":"INFERRED_FROM_OBJECTIVE","evidence_quote":"This simulated study investigates whether assay A detects lower DNA concentrations than assay B."}]}
+    },
+    {
+      "document_id": "sim-002",
+      "title": "SIMULATED: Assay sensitivity in water",
+      "abstract": "This simulated study compares the detection sensitivity of assay A and assay B in water samples.",
+      "topic": "detection sensitivity",
+      "vector": [1, 0.02, 0],
+      "extraction": {"status":"EXTRACTED","overflow":false,"questions":[{"question":"How do assays A and B differ in detection sensitivity in water?","research_object":"detection assays","question_origin":"INFERRED_FROM_OBJECTIVE","evidence_quote":"This simulated study compares the detection sensitivity of assay A and assay B in water samples."}]}
+    },
+    {
+      "document_id": "sim-003",
+      "title": "SIMULATED: Drought and growth",
+      "abstract": "This simulated study investigates how water availability changes seedling growth.",
+      "topic": "water availability and growth",
+      "vector": [0.01, 1, 0],
+      "extraction": {"status":"EXTRACTED","overflow":false,"questions":[{"question":"How does water availability affect seedling growth?","research_object":"water availability and growth","question_origin":"INFERRED_FROM_OBJECTIVE","evidence_quote":"This simulated study investigates how water availability changes seedling growth."}]}
+    },
+    {
+      "document_id": "sim-004",
+      "title": "SIMULATED: Irrigation and biomass",
+      "abstract": "This simulated study tests whether irrigation frequency changes plant biomass.",
+      "topic": "water availability and growth",
+      "vector": [0.02, 1, 0],
+      "extraction": {"status":"EXTRACTED","overflow":false,"questions":[{"question":"Does irrigation frequency affect plant biomass?","research_object":"water availability and growth","question_origin":"INFERRED_FROM_OBJECTIVE","evidence_quote":"This simulated study tests whether irrigation frequency changes plant biomass."}]}
+    },
+    {
+      "document_id": "sim-005",
+      "title": "SIMULATED: Editorial notice",
+      "abstract": "This is a simulated editorial notice without a research objective.",
+      "topic": "editorial notice",
+      "vector": [0, 0, 1],
+      "extraction": {"status":"INSUFFICIENT_INFORMATION","overflow":false,"questions":[]}
+    }
+  ]
+}

@@ -283,7 +283,7 @@ public class QuestionExtractionRepository {
                 LEFT JOIN evidence_question_extraction_document d
                   ON d.run_id = e.extraction_run_id AND d.document_id = e.document_id
                 LEFT JOIN rag_document rd ON rd.document_id = e.document_id
-                """ + where + """
+                """ + where + "\n" + """
                 ORDER BY e.document_id, e.row_index
                 LIMIT ? OFFSET ?
                 """, this::mapEvidence, queryArgs.toArray());

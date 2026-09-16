@@ -6,6 +6,7 @@ import com.example.demo_01.ai.evidence.multiprofile.EvidenceProfileRegistry.Evid
 import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.*;
 import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceRepository.SourceDocument;
 import com.example.demo_01.ai.evidence.repository.EvidenceRepository;
+import com.example.demo_01.ai.evidence.table.PatentQ1EvidenceSupport;
 import com.example.demo_01.ai.model.DashScopeModelProperties;
 import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
@@ -84,6 +85,9 @@ public class MultiProfileEvidenceService {
 
     @Resource
     private com.example.demo_01.ai.evidence.table.TableContextService tableContextService;
+
+    @Resource
+    private PatentQ1EvidenceSupport patentQ1EvidenceSupport;
 
     @Resource
     private EvidenceAgentTelemetryService telemetryService;
@@ -387,22 +391,27 @@ public class MultiProfileEvidenceService {
                                                       String questionId) {
         EvidenceProperties active = configScope.current();
         EvidenceProfile profile = profileRegistry.require(questionId);
+        Path artifactRoot = document.storageRoot() == null || document.storageRoot().isBlank()
+                ? null : Path.of(document.storageRoot());
+        var patent = patentQ1EvidenceSupport.load(profile, artifactRoot);
         List<EvidenceChunk> profileChunks = tableContextService.augment(
-                scopeId, document.documentId(), profile, chunks);
+                scopeId, document.documentId(), profile, chunks, artifactRoot);
         Map<String, ValidatedEvidenceRow> unique = new LinkedHashMap<>();
         List<List<EvidenceChunk>> batches = telemetryService.timed(
                 scopeId, document.documentId(), questionId, "retriever",
                 1, active.getAgents().getRetriever().isOnDemandEnabled() ? 1 : 0, 0,
                 telemetryService.detail("onDemand",
                         active.getAgents().getRetriever().isOnDemandEnabled()),
-                () -> retrievalAgent.modelBatches(profile, profileChunks));
+                () -> patent.isPresent() ? List.of(patentQ1EvidenceSupport.extractionChunks(patent.get(), profileChunks))
+                        : retrievalAgent.modelBatches(profile, profileChunks));
 
         for (List<EvidenceChunk> modelChunks : batches) {
             List<ValidatedEvidenceRow> extracted = telemetryService.timed(
                     scopeId, document.documentId(), questionId, "extractor",
                     1, 1, 0,
                     telemetryService.detail("chunkCount", modelChunks.size()),
-                    () -> extractionAgent.extract(document, profile, modelChunks));
+                    () -> patent.isPresent() ? extractionAgent.extract(scopeId, document, profile, modelChunks)
+                            : extractionAgent.extract(document, profile, modelChunks));
             for (ValidatedEvidenceRow row : extracted) {
                 unique.putIfAbsent(row.fingerprint(), row);
             }
@@ -410,24 +419,36 @@ public class MultiProfileEvidenceService {
 
         List<ValidatedEvidenceRow> extractedRows = List.copyOf(unique.values());
         final List<ValidatedEvidenceRow> toVerify = extractedRows;
+        EvidenceProperties verificationConfig = patent.isPresent()
+                ? objectMapper.convertValue(active, EvidenceProperties.class) : active;
+        if (patent.isPresent()) verificationConfig.getAgents().getVerifier().setDropInvalidRows(false);
         List<ValidatedEvidenceRow> verifiedRows = telemetryService.timed(
                 scopeId, document.documentId(), questionId, "verifier",
                 1, active.getAgents().getVerifier().isEnabled() ? 1 : 0, 0,
                 telemetryService.detail("rowCount", toVerify.size()),
-                () -> verifierAgent.verify(profile, toVerify, profileChunks));
+                () -> configScope.call(verificationConfig, () -> verifierAgent.verify(profile, toVerify, profileChunks)));
+        if (patent.isPresent()) {
+            verifiedRows = patentQ1EvidenceSupport.guard(patent.get(), profileChunks, verifiedRows);
+        }
         final List<ValidatedEvidenceRow> toCover = verifiedRows;
         List<ValidatedEvidenceRow> coveredRows = telemetryService.timed(
                 scopeId, document.documentId(), questionId, "coverage",
                 1, active.getAgents().getCoverage().isEnabled() ? 1 : 0, 0,
                 telemetryService.detail("rowCountBefore", toCover.size()),
-                () -> coverageAgent.recover(
+                () -> patent.isPresent() ? toCover : coverageAgent.recover(
                         scopeId, document, profile, profileChunks, toCover));
         final List<ValidatedEvidenceRow> toReconcile = coveredRows;
-        return telemetryService.timed(
+        List<ValidatedEvidenceRow> reconciled = telemetryService.timed(
                 scopeId, document.documentId(), questionId, "reconciler",
                 1, 0, 0,
                 telemetryService.detail("rowCount", toReconcile.size()),
                 () -> reconcilerAgent.reconcile(document, profile, toReconcile));
+        if (patent.isPresent()) {
+            reconciled = patentQ1EvidenceSupport.guard(patent.get(), profileChunks, reconciled);
+            patentQ1EvidenceSupport.writeAudit(patent.get(), scopeId, profileChunks, reconciled,
+                    "post-validation", 0, null);
+        }
+        return reconciled;
     }
 
     private List<List<EvidenceChunk>> modelBatches(List<EvidenceChunk> chunks) {

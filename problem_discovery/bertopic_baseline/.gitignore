@@ -1,0 +1,7 @@
+.venv/
+.venv*/
+.numba_cache/
+__pycache__/
+.pytest_cache/
+outputs/*
+!outputs/.gitkeep

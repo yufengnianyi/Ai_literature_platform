@@ -1,0 +1,15 @@
+FROM docker.m.daocloud.io/library/python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    NUMBA_CACHE_DIR=/tmp/numba-cache \
+    NUMBA_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1
+
+WORKDIR /work
+COPY requirements-umap-linux.txt /tmp/requirements-umap-linux.txt
+RUN python -m pip install --no-cache-dir --no-deps bertopic==0.17.4 \
+    && python -m pip install --no-cache-dir -r /tmp/requirements-umap-linux.txt
+
+ENTRYPOINT ["python", "run.py"]

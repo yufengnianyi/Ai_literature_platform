@@ -1,0 +1,23 @@
+{
+  "publicationNumber": "CN106857590B",
+  "sourcePage": 4,
+  "sourceTable": "表1",
+  "annotationMethod": "Manual visual transcription of the original PDF table before automated recognition",
+  "metric": "EC50",
+  "unit": "mg/L",
+  "tableTime": "72h",
+  "methodTime": "2d",
+  "pathogenOriginal": "马铃薯晚疫病",
+  "pathogenLatin": "",
+  "rows": [
+    {"treatment": "噻菌灵", "ratio": null, "ec50": "0.881", "ctc": null},
+    {"treatment": "苯噻菌胺", "ratio": null, "ec50": "0.198", "ctc": null},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "20:1", "ec50": "0.629", "ctc": "120.57"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "10:1", "ec50": "0.459", "ctc": "146.04"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "5:1", "ec50": "0.378", "ctc": "147.97"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "1:1", "ec50": "0.233", "ctc": "138.67"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "1:5", "ec50": "0.184", "ctc": "123.82"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "1:10", "ec50": "0.170", "ctc": "124.94"},
+    {"treatment": "噻菌灵:苯噻菌胺", "ratio": "1:20", "ec50": "0.164", "ctc": "125.01"}
+  ]
+}

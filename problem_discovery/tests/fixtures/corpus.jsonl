@@ -1,0 +1,6 @@
+{"document_id":"sim-001","title":"SIMULATED: Assay A detection limits","abstract":"This simulated study investigates whether assay A detects lower DNA concentrations than assay B.","doi":"10.example/sim-001","year":2024}
+{"document_id":"sim-002","title":"SIMULATED: Assay sensitivity in water","abstract":"This simulated study compares the detection sensitivity of assay A and assay B in water samples.","doi":"10.example/sim-002","year":2025}
+{"document_id":"sim-003","title":"SIMULATED: Drought and growth","abstract":"This simulated study investigates how water availability changes seedling growth.","doi":"10.example/sim-003","year":2024}
+{"document_id":"sim-004","title":"SIMULATED: Irrigation and biomass","abstract":"This simulated study tests whether irrigation frequency changes plant biomass.","doi":"10.example/sim-004","year":2025}
+{"document_id":"sim-005","title":"SIMULATED: Editorial notice","abstract":"This is a simulated editorial notice without a research objective.","doi":"10.example/sim-005","year":2025}
+{"document_id":"sim-missing","title":"SIMULATED: Missing abstract","abstract":"","year":2025}

@@ -8,6 +8,7 @@ import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.V
 import com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceRepository.SourceDocument;
 import com.example.demo_01.ai.prompt.PromptCatalog;
 import com.example.demo_01.ai.prompt.PromptResources;
+import com.example.demo_01.ai.evidence.table.PatentQ1EvidenceSupport;
 import com.example.demo_01.ai.review.service.ReviewReasoningChatClient;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -35,6 +37,9 @@ public class EvidenceExtractionAgent {
     @Autowired(required = false)
     private EvidenceConfigScope configScope;
 
+    @Resource
+    private PatentQ1EvidenceSupport patentQ1EvidenceSupport;
+
     /** Honours a per-run configuration override when an extraction run pinned one. */
     private EvidenceProperties config() {
         return configScope == null ? properties : configScope.current();
@@ -43,16 +48,41 @@ public class EvidenceExtractionAgent {
     public List<ValidatedEvidenceRow> extract(SourceDocument document,
                                               EvidenceProfile profile,
                                               List<EvidenceChunk> chunks) {
+        return extract(null, document, profile, chunks);
+    }
+
+    public List<ValidatedEvidenceRow> extract(UUID scopeId, SourceDocument document,
+                                              EvidenceProfile profile,
+                                              List<EvidenceChunk> chunks) {
+        var patent = patentQ1EvidenceSupport == null ? java.util.Optional.<PatentQ1EvidenceSupport.PatentInput>empty()
+                : patentQ1EvidenceSupport.load(profile, document);
         String systemPrompt = PromptResources.load(
                 PromptCatalog.evidenceQuestionExtractionSystem(profile.questionId()));
+        if (patent.isPresent()) {
+            systemPrompt += "\n" + PromptResources.load(PatentQ1EvidenceSupport.EXTRACTION_INSTRUCTION);
+        }
         String baseUserMessage = extractionInput(document, profile, chunks);
+        if (patent.isPresent()) {
+            baseUserMessage += "\n\n" + PromptResources.load(PatentQ1EvidenceSupport.EXTRACTION_INSTRUCTION);
+        }
         Exception lastError = null;
         for (int attempt = 1; attempt <= config().getMaxAttempts(); attempt++) {
             String userMessage = markdownRetryMessage(baseUserMessage, lastError, profile);
             try {
                 String raw = responseText(chatClient.chatCore(
                         SystemMessage.from(systemPrompt), UserMessage.from(userMessage)));
-                return markdownTableParser.parse(raw, profile);
+                List<ValidatedEvidenceRow> rows = markdownTableParser.parse(raw, profile);
+                if (patent.isPresent()) {
+                    var assessment = patentQ1EvidenceSupport.assess(patent.get(), chunks, rows);
+                    rows = patentQ1EvidenceSupport.attachAnchors(rows, assessment);
+                    patentQ1EvidenceSupport.writeAudit(patent.get(), scopeId, chunks, rows,
+                            "extraction", attempt, null);
+                    if (!assessment.mismatches().isEmpty()) {
+                        throw new IllegalArgumentException("Patent native row validation failed: "
+                                + String.join("; ", assessment.mismatches()));
+                    }
+                }
+                return rows;
             } catch (Exception e) {
                 lastError = e;
                 log.warn("Evidence profile {} prompt-only Markdown attempt {}/{} failed for document {}: {}",

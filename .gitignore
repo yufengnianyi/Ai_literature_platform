@@ -47,6 +47,10 @@ ai-literature-frontend/dist/
 .env.local
 *.local
 *.log
+.venv/
+.venv*/
+**/.venv/
+**/.venv*/
 *-deploy-*.zip
 
 # Local helper scripts and run artifacts

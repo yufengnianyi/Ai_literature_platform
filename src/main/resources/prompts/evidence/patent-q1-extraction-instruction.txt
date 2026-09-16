@@ -1,0 +1,36 @@
+
+Additional instructions for the validated PATENT_Q1 artifact supplied in this request:
+Extract one row per experimentally tested treatment group in the VERIFIED native tables.
+Enumerate EVERY native data row, including single agents and each individual mixture ratio.
+Copy the native treatment name verbatim, including ingredient punctuation. A mixture's
+original name MUST also include its exact ratio (do not duplicate an already included
+ratio). Do not combine different ratios or borrow EC50 or CTC from another treatment row.
+Copy EC50 values and units into Activity data and co-toxicity coefficients (CTC) into
+Synergy, attached to the corresponding mixture. Do not assign synergy to single agents.
+Metric labels are mandatory: write EC50=<original value> <unit> in Activity data and
+CTC=<original value> in Synergy. A bare number in Synergy is not a complete result.
+Use the literal CTC label even though the output column is named Synergy.
+Native table rows, captions, headers, and notes are the source of table values; METHOD
+chunks supply assay context. Preserve contradictory method and table-header time labels
+and explicitly mark the conflict; do not reconcile, replace, or silently omit either
+source statement. Obtain all time values exclusively from the supplied source.
+Leave the tested Latin name EMPTY unless explicitly written in the supplied original
+content. Do not translate a disease or common name into a species using external knowledge.
+Keep the original disease wording as assay background in Activity data. A missing Latin
+name does not authorize dropping an otherwise observed treatment group from the output.
+Activity data MUST name the original experimental target/disease from METHOD, not only
+the number. Include explicit temperature, repetitions, medium and other reported conditions.
+When body and table give different durations, label them separately and explicitly state
+that the original source is inconsistent. Do not output missing-condition placeholders.
+Do not assume commercialized origin merely because an ingredient is a pesticide; the
+source category must have explicit source support, otherwise leave it empty.
+Do not put negative/blank CK, water, or solvent controls in Positive control. Populate that
+field only when the original explicitly identifies a positive control.
+BACKGROUND, CLAIM, and UNKNOWN contexts are not demonstrated experimental evidence.
+Do not turn background target/mechanism or resistance assertions into demonstrated fields.
+Even an explicitly stated known mechanism belongs in an empty Target/mechanism cell when
+this patent's METHOD/RESULT paragraphs do not experimentally demonstrate that mechanism.
+Only populate mechanism, target validation, resistance, cytotoxicity, or synergy when the
+supplied METHOD/RESULT evidence demonstrates the field for this particular treatment.
+Use the exact original disease and assay context; preserve uncertainties and empty cells.
+Never invent rows, names, ratios, measurements, species, or missing table contents.

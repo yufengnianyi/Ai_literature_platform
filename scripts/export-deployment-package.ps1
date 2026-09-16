@@ -106,7 +106,6 @@ function Copy-SourceTree {
   )
   $excludeDirs = @(
     ".git",
-    ".gitnexus",
     ".idea",
     ".vscode",
     ".m2",

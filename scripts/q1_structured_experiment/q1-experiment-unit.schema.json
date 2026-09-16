@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.demo/q1-experiment-unit.schema.json",
+  "title": "Q1 experiment-centric evidence bundle",
+  "type": "object",
+  "required": ["schema_version", "extraction_path", "document", "materials", "experiments", "evidence_assessment"],
+  "properties": {
+    "schema_version": {"const": "q1-experiment-unit.v0.2"},
+    "extraction_path": {"enum": ["DIRECT_SOURCE", "LEGACY_TRANSFORM"]},
+    "document": {
+      "type": "object",
+      "required": ["document_id", "title"],
+      "properties": {
+        "document_id": {"type": "string"},
+        "title": {"type": "string"},
+        "source_pdf": {"type": ["string", "null"]}
+      }
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["material_id", "display_name", "material_type", "source"],
+        "properties": {
+          "material_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "material_type": {"enum": ["PURE_COMPOUND", "EXTRACT", "CONTROL"]},
+          "structure_family": {"type": ["string", "null"]},
+          "structure_subunit": {"type": ["string", "null"]},
+          "source": {"type": "object"}
+        }
+      }
+    },
+    "experiments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["experiment_id", "domain", "target", "assay", "conditions", "groups"],
+        "properties": {
+          "experiment_id": {"type": "string"},
+          "domain": {"enum": ["EFFICACY", "SAFETY"]},
+          "target": {"type": "object"},
+          "assay": {"type": "object"},
+          "conditions": {"type": "array", "items": {"type": "object"}},
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["group_id", "role", "material_id", "observations"],
+              "properties": {
+                "group_id": {"type": "string"},
+                "role": {"enum": ["TEST", "POSITIVE_CONTROL", "NEGATIVE_CONTROL"]},
+                "material_id": {"type": "string"},
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["observation_id", "endpoint", "value_raw", "relation", "unit", "evidence"],
+                    "properties": {
+                      "observation_id": {"type": "string"},
+                      "endpoint": {"type": "string"},
+                      "value_raw": {"type": "string"},
+                      "value_numeric": {"type": ["number", "null"]},
+                      "relation": {"enum": ["EQ", "GT", "ND"]},
+                      "unit": {
+                        "type": "object",
+                        "required": ["raw", "normalized", "status"],
+                        "properties": {
+                          "raw": {"type": ["string", "null"]},
+                          "normalized": {"type": ["string", "null"]},
+                          "status": {"enum": ["AS_REPORTED", "PDF_GLYPH_AUDITED", "UNRESOLVED"]}
+                        }
+                      },
+                      "evidence": {"type": "array", "items": {"type": "object"}}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "evidence_assessment": {"type": "object"}
+  }
+}
