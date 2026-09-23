@@ -119,18 +119,12 @@ public class MultiProfileEvidenceService {
     private TaskExecutor batchExecutor;
 
     public BatchAcceptedResponse submit(BatchRequest request) {
+        String version = profileRegistry.resolveVersion(request == null ? null : request.profileVersion());
         SourceSelection source = resolveSource(request);
         UUID sourceExperimentId = source.sourceExperimentId();
         boolean force = request != null && request.force();
         boolean runExtraction = request == null || request.resolvedRunExtraction();
         Integer expectedDocuments = request == null ? null : request.expectedDocuments();
-        BatchRecord active = sourceExperimentId == null
-                ? null : repository.findActiveBatch(sourceExperimentId).orElse(null);
-        if (active != null) {
-            return new BatchAcceptedResponse(
-                    active.batchId(), active.status(), active.totalDocuments(), true);
-        }
-
         List<SourceDocument> documents = source.documents();
         if (documents.isEmpty()) {
             throw new IllegalStateException("Multi-profile source has no completed canonical documents");
@@ -141,17 +135,23 @@ public class MultiProfileEvidenceService {
                     + sourceExperimentId + " returned " + documents.size());
         }
         String sourceHash = sourceHash(documents);
-        String classificationConfigHash = classificationConfigHash();
-        String extractionConfigHash = extractionConfigHash();
+        String classificationConfigHash = classificationConfigHash(version);
+        String extractionConfigHash = extractionConfigHash(version);
         String legacyPromptHash = legacyPromptHash(classificationConfigHash, extractionConfigHash);
         String modelName = modelName();
+        BatchRecord active = sourceExperimentId == null ? null : repository.findActiveBatch(
+                sourceExperimentId, sourceHash, version, legacyPromptHash, modelName, runExtraction).orElse(null);
+        if (active != null) {
+            return new BatchAcceptedResponse(active.batchId(), active.status(), active.totalDocuments(), true);
+        }
         if (!force) {
             BatchRecord reusable = repository.findReusableBatch(
-                    sourceExperimentId, sourceHash, MultiProfileEvidenceModels.PROFILE_VERSION,
+                    sourceExperimentId, sourceHash, version,
                     classificationConfigHash, legacyPromptHash, modelName)
                     .orElse(null);
             if (reusable != null
-                    && (!runExtraction || reusable.runExtraction())) {
+                    && (!runExtraction || (reusable.runExtraction()
+                    && extractionConfigHash.equals(reusable.extractionConfigHash())))) {
                 return new BatchAcceptedResponse(
                         reusable.batchId(), reusable.status(), reusable.totalDocuments(), true);
             }
@@ -160,7 +160,7 @@ public class MultiProfileEvidenceService {
         UUID batchId = UUID.randomUUID();
         BatchRecord batch = new BatchRecord(
                 batchId, source.sourceType(), sourceExperimentId, source.sourcePretreatmentRunId(),
-                sourceHash, MultiProfileEvidenceModels.PROFILE_VERSION,
+                sourceHash, version,
                 legacyPromptHash, classificationConfigHash, extractionConfigHash, runExtraction,
                 modelName, force, BatchStatus.QUEUED, documents.size(),
                 0, 0, 0, 0, 0, 0,
@@ -198,9 +198,9 @@ public class MultiProfileEvidenceService {
                                       ClassificationStatus classificationStatus,
                                       ProfileExtractionStatus extractionStatus,
                                       int page, int size) {
-        requireBatch(batchId);
+        BatchRecord batch = requireBatch(batchId);
         if (questionId != null && !questionId.isBlank()) {
-            profileRegistry.require(questionId);
+            profileRegistry.require(batch.profileVersion(), questionId);
         }
         return repository.findDocuments(
                 batchId, questionId, classificationStatus, extractionStatus, page, size);
@@ -208,9 +208,9 @@ public class MultiProfileEvidenceService {
 
     public EvidencePage findEvidence(UUID batchId, String questionId, UUID documentId,
                                      ReviewStatus reviewStatus, int page, int size) {
-        requireBatch(batchId);
+        BatchRecord batch = requireBatch(batchId);
         if (questionId != null && !questionId.isBlank()) {
-            profileRegistry.require(questionId);
+            profileRegistry.require(batch.profileVersion(), questionId);
         }
         return repository.findEvidence(batchId, questionId, documentId, reviewStatus, page, size);
     }
@@ -277,7 +277,7 @@ public class MultiProfileEvidenceService {
 
         List<ClassifiedQuestion> classifications;
         try {
-            classifications = classify(document, chunks);
+            classifications = classify(document, chunks, batch.profileVersion());
             for (ClassifiedQuestion classification : classifications) {
                 repository.upsertMatch(
                         batch.batchId(), document.documentId(), classification,
@@ -313,26 +313,26 @@ public class MultiProfileEvidenceService {
                 || status == ClassificationStatus.UNCERTAIN;
     }
 
-    private List<ClassifiedQuestion> classify(SourceDocument document, List<EvidenceChunk> chunks) {
+    private List<ClassifiedQuestion> classify(SourceDocument document, List<EvidenceChunk> chunks,
+                                             String version) {
         List<List<ClassifiedQuestion>> outputs = new ArrayList<>();
         for (List<EvidenceChunk> modelChunks : modelBatches(chunks)) {
-            outputs.add(callClassificationModel(document, modelChunks));
+            outputs.add(callClassificationModel(document, modelChunks, version));
         }
-        return outputValidator.mergeClassifications(profileRegistry, outputs);
+        return outputValidator.mergeClassifications(profileRegistry.forVersion(version), outputs);
     }
 
     private List<ClassifiedQuestion> callClassificationModel(
-            SourceDocument document, List<EvidenceChunk> chunks) {
-        String systemPrompt = PromptResources.load(
-                PromptCatalog.EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM);
-        String baseUserMessage = classificationInput(document, chunks);
+            SourceDocument document, List<EvidenceChunk> chunks, String version) {
+        String systemPrompt = classificationSystemPrompt(version);
+        String baseUserMessage = classificationInput(document, chunks, version);
         Exception lastError = null;
         for (int attempt = 1; attempt <= properties.getMaxAttempts(); attempt++) {
             String userMessage = retryMessage(baseUserMessage, lastError);
             try {
                 String raw = responseText(chatClient.chatStandard(
                         SystemMessage.from(systemPrompt), UserMessage.from(userMessage)));
-                return outputValidator.parseClassification(raw, profileRegistry, chunks);
+                return outputValidator.parseClassification(raw, profileRegistry.forVersion(version), chunks);
             } catch (Exception e) {
                 lastError = e;
                 log.warn("Multi-profile classification attempt {}/{} failed for document {}: {}",
@@ -351,20 +351,20 @@ public class MultiProfileEvidenceService {
         repository.markExtractionRunning(batch.batchId(), document.documentId(), questionId);
         try {
             List<ValidatedEvidenceRow> rows = extractQuestion(
-                    batch.batchId(), document, chunks, questionId);
+                    batch.batchId(), document, chunks, questionId, batch.profileVersion());
             Path outputPath = documentOutputPath(batch.batchId(), document.documentId(), questionId);
             if (rows.isEmpty()) {
                 Files.deleteIfExists(outputPath);
             } else {
-                EvidenceProfile profile = profileRegistry.require(questionId);
+                EvidenceProfile profile = profileRegistry.require(batch.profileVersion(), questionId);
                 writeAtomically(outputPath, outputValidator.renderMarkdown(profile, rows));
             }
             persistenceService.replaceEvidence(
-                    batch.batchId(), document.documentId(), questionId,
+                    batch.batchId(), null, document.documentId(), questionId,
                     classification.status(), rows, batch.sourceHash(),
                     batch.extractionConfigHash() == null
                             ? batch.promptHash() : batch.extractionConfigHash(),
-                    batch.modelName());
+                    batch.modelName(), batch.profileVersion());
             repository.finishExtraction(
                     batch.batchId(), document.documentId(), questionId,
                     rows.isEmpty()
@@ -389,8 +389,14 @@ public class MultiProfileEvidenceService {
                                                       SourceDocument document,
                                                       List<EvidenceChunk> chunks,
                                                       String questionId) {
+        return extractQuestion(scopeId, document, chunks, questionId, MultiProfileEvidenceModels.PROFILE_VERSION);
+    }
+
+    public List<ValidatedEvidenceRow> extractQuestion(UUID scopeId, SourceDocument document,
+                                                      List<EvidenceChunk> chunks, String questionId,
+                                                      String version) {
         EvidenceProperties active = configScope.current();
-        EvidenceProfile profile = profileRegistry.require(questionId);
+        EvidenceProfile profile = profileRegistry.require(version, questionId);
         Path artifactRoot = document.storageRoot() == null || document.storageRoot().isBlank()
                 ? null : Path.of(document.storageRoot());
         var patent = patentQ1EvidenceSupport.load(profile, artifactRoot);
@@ -495,9 +501,9 @@ public class MultiProfileEvidenceService {
         return List.copyOf(merged.values());
     }
 
-    private String classificationInput(SourceDocument document, List<EvidenceChunk> chunks) {
+    String classificationInput(SourceDocument document, List<EvidenceChunk> chunks, String version) {
         StringBuilder questions = new StringBuilder();
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        for (EvidenceProfile profile : profileRegistry.all(version)) {
             questions.append("- ").append(profile.questionId()).append(" ")
                     .append(profile.title()).append(": ").append(profile.scope()).append('\n');
         }
@@ -510,6 +516,35 @@ public class MultiProfileEvidenceService {
                 Supplied chunks:
                 %s
                 """.formatted(questions, documentMetadata(document), renderChunks(chunks));
+    }
+
+    /**
+     * Builds the exact classification instruction sent to the model.
+     *
+     * <p>The expert question extraction templates are the canonical source for each question's
+     * scientific boundary. Including them here prevents the classifier and extractor from
+     * silently drifting apart when the latest question template is revised.</p>
+     */
+    String classificationSystemPrompt(String version) {
+        String resolvedVersion = profileRegistry.resolveVersion(version);
+        StringBuilder prompt = new StringBuilder(PromptResources.load(
+                PromptCatalog.evidenceClassificationSystem(resolvedVersion)));
+        if (!MultiProfileEvidenceModels.EXPERT_PROFILE_VERSION.equals(resolvedVersion)) {
+            return prompt.toString();
+        }
+        prompt.append("""
+
+
+                Canonical question templates follow. Use them only to decide classification scope
+                and whether the supplied chunks can support at least one record. Do not perform the
+                extraction in this classification response.
+                """);
+        for (EvidenceProfile profile : profileRegistry.all(resolvedVersion)) {
+            prompt.append("\n--- ").append(profile.questionId()).append(" template ---\n")
+                    .append(PromptResources.load(PromptCatalog.evidenceQuestionExtractionSystem(
+                            resolvedVersion, profile.questionId())));
+        }
+        return prompt.toString();
     }
 
     private String documentMetadata(SourceDocument document) {
@@ -539,7 +574,7 @@ public class MultiProfileEvidenceService {
     }
 
     private void failClassification(UUID batchId, SourceDocument document, String error) {
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        for (EvidenceProfile profile : profileRegistry.all(requireBatch(batchId).profileVersion())) {
             repository.upsertMatch(batchId, document.documentId(), new ClassifiedQuestion(
                     profile.questionId(), ClassificationStatus.FAILED, 0, error, List.of()));
         }
@@ -586,22 +621,22 @@ public class MultiProfileEvidenceService {
         }
     }
 
-    private String classificationConfigHash() {
+    private String classificationConfigHash(String version) {
         return sha256(
-                PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM)
-                        + "\n" + profileRegistry.all());
+                classificationSystemPrompt(version)
+                        + "\n" + profileRegistry.all(version));
     }
 
-    private String extractionConfigHash() {
+    private String extractionConfigHash(String version) {
         return sha256(
-                questionExtractionPrompts()
+                questionExtractionPrompts(version)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_RETRIEVAL_SYSTEM)
-                        + "\n" + profileRegistry.all()
+                        + "\n" + profileRegistry.all(version)
                         + "\nagents="
                         + "constrained=" + properties.getAgents().getConstrainedDecoding().isEnabled()
                         + ";verifier=" + properties.getAgents().getVerifier().isEnabled()
@@ -610,6 +645,7 @@ public class MultiProfileEvidenceService {
                         + ";reconciler=" + properties.getAgents().getReconciler().isEntityLinkingEnabled()
                         + ";table=" + properties.getTable().isEnabled()
                         + ":enabledQuestionIds=" + properties.getTable().getEnabledQuestionIds()
+                        + ":expertEnabledQuestionIds=" + properties.getTable().getExpertEnabledQuestionIds()
                         + ":llmSelect=" + properties.getTable().isLlmSelect()
                         + ":maxTables=" + properties.getTable().getMaxTables());
     }
@@ -621,38 +657,50 @@ public class MultiProfileEvidenceService {
 
     /** Exposed for stage-4 runs that hash a resolved {@link EvidenceProperties} snapshot. */
     public String hashExtractionConfig(String configSnapshotJson) {
+        return hashExtractionConfig(configSnapshotJson, MultiProfileEvidenceModels.PROFILE_VERSION);
+    }
+
+    public String hashExtractionConfig(String configSnapshotJson, String version) {
         return sha256(
-                questionExtractionPrompts()
+                questionExtractionPrompts(version)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_VERIFY_SYSTEM)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_COVERAGE_SYSTEM)
                         + "\n"
                         + PromptResources.load(PromptCatalog.EVIDENCE_MULTI_PROFILE_RETRIEVAL_SYSTEM)
-                        + "\n" + profileRegistry.all()
+                        + "\n" + profileRegistry.all(version)
                         + "\n" + configSnapshotJson);
     }
 
-    private String questionExtractionPrompts() {
+    private String questionExtractionPrompts(String version) {
         StringBuilder builder = new StringBuilder();
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        if (MultiProfileEvidenceModels.EXPERT_PROFILE_VERSION.equals(version)) {
+            builder.append(PromptResources.load(PromptCatalog.EXPERT_Q8_COMMON));
+        }
+        for (EvidenceProfile profile : profileRegistry.all(version)) {
             if (builder.length() > 0) {
                 builder.append('\n');
             }
             builder.append(profile.questionId()).append('=')
                     .append(PromptResources.load(
-                            PromptCatalog.evidenceQuestionExtractionSystem(profile.questionId())));
+                            PromptCatalog.evidenceQuestionExtractionSystem(version, profile.questionId())));
         }
         return builder.toString();
     }
 
     public void writeEvidenceMarkdown(Path outputPath, String questionId,
                                       List<ValidatedEvidenceRow> rows) throws IOException {
+        writeEvidenceMarkdown(outputPath, questionId, rows, MultiProfileEvidenceModels.PROFILE_VERSION);
+    }
+
+    public void writeEvidenceMarkdown(Path outputPath, String questionId,
+                                      List<ValidatedEvidenceRow> rows, String version) throws IOException {
         if (rows == null || rows.isEmpty()) {
             Files.deleteIfExists(outputPath);
             return;
         }
-        EvidenceProfile profile = profileRegistry.require(questionId);
+        EvidenceProfile profile = profileRegistry.require(version, questionId);
         writeAtomically(outputPath, outputValidator.renderMarkdown(profile, rows));
     }
 
@@ -706,7 +754,9 @@ public class MultiProfileEvidenceService {
         return switch (batch.sourceType()) {
             case PRETREATMENT -> repository.findSourceDocumentsFromPretreatment(
                     batch.sourcePretreatmentRunId());
-            case COHORT, EXPERIMENT -> {
+            case COHORT -> repository.findDocumentsByIds(repository.findAllDocuments(batch.batchId())
+                    .stream().map(DocumentRecord::documentId).toList());
+            case EXPERIMENT -> {
                 if (batch.sourceExperimentId() == null) {
                     yield List.of();
                 }
@@ -716,7 +766,7 @@ public class MultiProfileEvidenceService {
     }
 
     private void publishClassificationCohorts(UUID batchId) {
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        for (EvidenceProfile profile : profileRegistry.all(requireBatch(batchId).profileVersion())) {
             List<UUID> supported = repository.findMatchesForQuestion(
                             batchId, profile.questionId(), List.of(ClassificationStatus.SUPPORTED))
                     .stream()
@@ -727,7 +777,7 @@ public class MultiProfileEvidenceService {
                     "CLASSIFICATION",
                     batchId,
                     supported,
-                    profile.questionId() + " supported by classification");
+                    profile.profileVersion() + ": " + profile.questionId() + " supported by classification");
         }
     }
 

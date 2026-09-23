@@ -14,7 +14,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,12 +25,17 @@ public class MultiProfileEvidenceRepository {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
+    private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {
+    };
 
     @Resource
     private JdbcTemplate jdbcTemplate;
 
     @Resource
     private ObjectMapper objectMapper;
+
+    @Resource
+    private EvidenceProfileRegistry profileRegistry;
 
     public List<SourceDocument> findSourceDocuments(UUID sourceExperimentId) {
         return jdbcTemplate.query("""
@@ -96,15 +103,21 @@ public class MultiProfileEvidenceRepository {
                 .stream().findFirst();
     }
 
-    public Optional<BatchRecord> findActiveBatch(UUID sourceExperimentId) {
+    public Optional<BatchRecord> findActiveBatch(UUID sourceExperimentId, String sourceHash,
+                                                String profileVersion, String promptHash,
+                                                String modelName, boolean runExtraction) {
         return jdbcTemplate.query("""
                 SELECT *
                 FROM evidence_multi_profile_batch
                 WHERE source_experiment_id = ?
+                  AND source_hash = ? AND profile_version = ? AND prompt_hash = ?
+                  AND coalesce(model_name, '') = coalesce(?, '')
+                  AND run_extraction = ?
                   AND status IN ('QUEUED', 'RUNNING')
                 ORDER BY created_at DESC
                 LIMIT 1
-                """, this::mapBatch, sourceExperimentId).stream().findFirst();
+                """, this::mapBatch, sourceExperimentId, sourceHash, profileVersion,
+                promptHash, modelName, runExtraction).stream().findFirst();
     }
 
     public List<BatchRecord> findRecoverableBatches() {
@@ -379,31 +392,50 @@ public class MultiProfileEvidenceRepository {
             jdbcTemplate.update("""
                     DELETE FROM generic_evidence_record
                     WHERE extraction_run_id = ? AND document_id = ? AND question_id = ?
-                    """, extractionRunId, documentId, questionId);
+                      AND profile_version = ?
+                    """, extractionRunId, documentId, questionId, profileVersion);
         } else {
             jdbcTemplate.update("""
                     DELETE FROM generic_evidence_record
                     WHERE batch_id = ? AND document_id = ? AND question_id = ?
-                      AND extraction_run_id IS NULL
-                    """, batchId, documentId, questionId);
+                      AND extraction_run_id IS NULL AND profile_version = ?
+                    """, batchId, documentId, questionId, profileVersion);
         }
+        Map<String, UUID> supersededByFingerprint = new LinkedHashMap<>();
+        List<SupersededRecord> supersededRecords = jdbcTemplate.query("""
+                SELECT row_fingerprint, record_id
+                FROM generic_evidence_record
+                WHERE document_id = ? AND question_id = ? AND is_current = TRUE
+                  AND profile_version = ?
+                ORDER BY updated_at DESC
+                """, (rs, rowNum) -> new SupersededRecord(
+                rs.getString("row_fingerprint"), rs.getObject("record_id", UUID.class)),
+                documentId, questionId, profileVersion);
+        supersededRecords.forEach(record ->
+                supersededByFingerprint.putIfAbsent(record.fingerprint(), record.recordId()));
         jdbcTemplate.update("""
                 UPDATE generic_evidence_record
                 SET is_current = FALSE, updated_at = CURRENT_TIMESTAMP
                 WHERE document_id = ? AND question_id = ? AND is_current = TRUE
-                """, documentId, questionId);
+                  AND profile_version = ?
+                """, documentId, questionId, profileVersion);
         int rowIndex = 0;
         for (ValidatedEvidenceRow row : rows) {
             rowIndex++;
+            Map<String, String> payload = profileRegistry.toPayload(
+                    profileVersion, questionId, row.cells());
             jdbcTemplate.update("""
                     INSERT INTO generic_evidence_record (
                         record_id, batch_id, extraction_run_id, document_id, question_id,
-                        profile_version, row_index, cells_json, row_fingerprint,
+                        profile_version, row_index, cells_json, payload_json, row_fingerprint,
+                        supersedes_record_id,
                         classification_status, validation_status, verification_note,
                         review_status, is_current
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, 'PENDING', TRUE)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?,
+                              'PENDING', TRUE)
                     """, row.recordId(), batchId, extractionRunId, documentId, questionId,
-                    profileVersion, rowIndex, toJson(row.cells()), row.fingerprint(),
+                    profileVersion, rowIndex, toJson(row.cells()), toJson(payload),
+                    row.fingerprint(), supersededByFingerprint.get(row.fingerprint()),
                     classificationStatus.name(),
                     (row.validationStatus() == null
                             ? ValidationStatus.VALID : row.validationStatus()).name(),
@@ -634,6 +666,12 @@ public class MultiProfileEvidenceRepository {
 
     private GenericEvidenceRecord mapEvidence(ResultSet rs, int rowNum) throws SQLException {
         UUID recordId = rs.getObject("record_id", UUID.class);
+        List<String> cells = fromJsonList(rs.getString("cells_json"));
+        Map<String, String> payload = fromJsonMap(rs.getString("payload_json"));
+        if (payload.isEmpty()) {
+            payload = profileRegistry.toPayload(
+                    rs.getString("profile_version"), rs.getString("question_id"), cells);
+        }
         return new GenericEvidenceRecord(
                 recordId,
                 rs.getObject("batch_id", UUID.class),
@@ -643,8 +681,10 @@ public class MultiProfileEvidenceRepository {
                 rs.getString("question_id"),
                 rs.getString("profile_version"),
                 rs.getInt("row_index"),
-                fromJsonList(rs.getString("cells_json")),
+                cells,
+                payload,
                 rs.getString("row_fingerprint"),
+                rs.getObject("supersedes_record_id", UUID.class),
                 ClassificationStatus.valueOf(rs.getString("classification_status")),
                 ValidationStatus.valueOf(rs.getString("validation_status")),
                 rs.getString("verification_note"),
@@ -769,6 +809,17 @@ public class MultiProfileEvidenceRepository {
         }
     }
 
+    private Map<String, String> fromJsonMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_MAP);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse evidence payload JSON", e);
+        }
+    }
+
     private Instant instant(Timestamp value) {
         return value == null ? null : value.toInstant();
     }
@@ -789,5 +840,8 @@ public class MultiProfileEvidenceRepository {
             String doi,
             String storageRoot
     ) {
+    }
+
+    private record SupersededRecord(String fingerprint, UUID recordId) {
     }
 }

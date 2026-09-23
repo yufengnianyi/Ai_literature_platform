@@ -38,6 +38,21 @@ public class EvidenceExtractionScorer {
     public EvalReport score(String runId,
                             List<GoldDocumentQuestion> gold,
                             List<PredictedDocumentQuestion> predicted) {
+        return score(runId, gold, predicted,
+                com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.PROFILE_VERSION);
+    }
+
+    public EvalReport score(String runId, List<GoldDocumentQuestion> gold,
+                            List<PredictedDocumentQuestion> predicted, String version) {
+        var registry = profileRegistry.forVersion(version);
+        for (GoldDocumentQuestion item : gold) {
+            String goldVersion = item.profileVersion() == null
+                    ? com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.PROFILE_VERSION
+                    : item.profileVersion();
+            if (!version.equals(goldVersion)) {
+                throw new IllegalArgumentException("Gold data profileVersion does not match the evaluated batch");
+            }
+        }
         Map<String, List<GoldDocumentQuestion>> goldByQ = groupGold(gold);
         Map<String, List<PredictedDocumentQuestion>> predByQ = groupPredicted(predicted);
 
@@ -50,14 +65,14 @@ public class EvidenceExtractionScorer {
         Set<String> questionIds = new HashSet<>();
         questionIds.addAll(goldByQ.keySet());
         questionIds.addAll(predByQ.keySet());
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        for (EvidenceProfile profile : registry.all()) {
             questionIds.add(profile.questionId());
         }
 
         for (String questionId : questionIds.stream().sorted().toList()) {
             List<GoldDocumentQuestion> g = goldByQ.getOrDefault(questionId, List.of());
             List<PredictedDocumentQuestion> p = predByQ.getOrDefault(questionId, List.of());
-            QuestionMetrics metrics = scoreQuestion(questionId, g, p);
+            QuestionMetrics metrics = scoreQuestion(registry.require(questionId), questionId, g, p);
             questionMetrics.add(metrics);
             routing.add(metrics.routing());
             rowStrict.add(metrics.rowStrict());
@@ -74,10 +89,9 @@ public class EvidenceExtractionScorer {
                 aggregate("anchor@all", anchors));
     }
 
-    private QuestionMetrics scoreQuestion(String questionId,
+    private QuestionMetrics scoreQuestion(EvidenceProfile profile, String questionId,
                                           List<GoldDocumentQuestion> gold,
                                           List<PredictedDocumentQuestion> predicted) {
-        EvidenceProfile profile = profileRegistry.require(questionId);
         MetricSlice routing = scoreRouting(questionId, gold, predicted);
 
         int tpStrict = 0;

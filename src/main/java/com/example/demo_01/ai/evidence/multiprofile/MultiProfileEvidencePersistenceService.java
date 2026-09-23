@@ -49,10 +49,20 @@ public class MultiProfileEvidencePersistenceService {
                                 String sourceHash,
                                 String promptHash,
                                 String modelName) {
+        replaceEvidence(batchId, extractionRunId, documentId, questionId, classificationStatus,
+                rows, sourceHash, promptHash, modelName, MultiProfileEvidenceModels.PROFILE_VERSION);
+    }
+
+    @Transactional
+    public void replaceEvidence(UUID batchId, UUID extractionRunId, UUID documentId,
+                                String questionId, ClassificationStatus classificationStatus,
+                                List<ValidatedEvidenceRow> rows, String sourceHash,
+                                String promptHash, String modelName, String profileVersion) {
         multiProfileRepository.replaceEvidence(
                 batchId, extractionRunId, documentId, questionId,
-                MultiProfileEvidenceModels.PROFILE_VERSION, classificationStatus, rows);
-        if (!"Q1".equals(questionId)) {
+                profileVersion, classificationStatus, rows);
+        if (!MultiProfileEvidenceModels.PROFILE_VERSION.equals(profileVersion)
+                || !"Q1".equals(questionId)) {
             return;
         }
 

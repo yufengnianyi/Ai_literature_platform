@@ -44,7 +44,8 @@ public class EvidenceEvalHarnessService {
     public EvalReport evaluateBatch(UUID batchId, Path goldJsonl, Path outputDir) throws Exception {
         List<GoldDocumentQuestion> gold = loadGold(goldJsonl);
         List<PredictedDocumentQuestion> predicted = loadPredicted(batchId);
-        EvalReport report = scorer.score(batchId.toString(), gold, predicted);
+        String version = repository.findBatch(batchId).orElseThrow().profileVersion();
+        EvalReport report = scorer.score(batchId.toString(), gold, predicted, version);
         Files.createDirectories(outputDir);
         reportService.writeJson(outputDir.resolve("eval-report.json"), report);
         reportService.writeMarkdown(outputDir.resolve("eval-report.md"), report);
@@ -69,6 +70,7 @@ public class EvidenceEvalHarnessService {
     }
 
     public List<PredictedDocumentQuestion> loadPredicted(UUID batchId) {
+        String version = repository.findBatch(batchId).orElseThrow().profileVersion();
         List<QuestionMatchRecord> matches = repository.findAllMatches(batchId);
         List<GenericEvidenceRecord> evidence = repository.findAllEvidence(batchId);
         Map<String, PredictedDocumentQuestion> byKey = new LinkedHashMap<>();
@@ -81,6 +83,9 @@ public class EvidenceEvalHarnessService {
                     new ArrayList<>()));
         }
         for (GenericEvidenceRecord record : evidence) {
+            if (!version.equals(record.profileVersion())) {
+                throw new IllegalStateException("Mixed profile versions in evaluation batch");
+            }
             String key = record.documentId() + "\u001f" + record.questionId();
             PredictedDocumentQuestion existing = byKey.computeIfAbsent(key, ignored ->
                     new PredictedDocumentQuestion(

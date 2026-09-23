@@ -14,8 +14,13 @@ public final class EvidenceEvalModels {
             String classification,
             List<GoldRow> goldRows,
             String annotator,
-            String version
+            String version,
+            String profileVersion
     ) {
+        public GoldDocumentQuestion(UUID documentId, String questionId, String classification,
+                                    List<GoldRow> goldRows, String annotator, String version) {
+            this(documentId, questionId, classification, goldRows, annotator, version, null);
+        }
     }
 
     public record GoldRow(

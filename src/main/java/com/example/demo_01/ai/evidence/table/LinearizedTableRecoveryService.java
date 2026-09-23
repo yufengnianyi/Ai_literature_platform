@@ -56,7 +56,7 @@ public class LinearizedTableRecoveryService {
                                       List<EvidenceChunk> baseChunks,
                                       List<ParsedTable> parsedTables,
                                       List<ParsedTable> selectedTables) {
-        if (!"Q1".equals(profile.questionId())) {
+        if (!profile.compound()) {
             return RecoveryInspection.noop("PROFILE_NOT_SUPPORTED");
         }
         boolean noParsedTables = parsedTables == null || parsedTables.isEmpty();

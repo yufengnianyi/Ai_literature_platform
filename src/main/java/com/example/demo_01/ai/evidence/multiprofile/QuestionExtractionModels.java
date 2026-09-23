@@ -49,8 +49,16 @@ public final class QuestionExtractionModels {
             List<UUID> documentIds,
             List<ClassificationStatus> includeStatuses,
             JsonNode overrides,
-            boolean force
+            boolean force,
+            String profileVersion
     ) {
+        public ExtractionRunRequest(String questionId, String label, ExtractionSourceType sourceType,
+                                    UUID classificationBatchId, UUID sourceExperimentId, UUID cohortId,
+                                    List<UUID> documentIds, List<ClassificationStatus> includeStatuses,
+                                    JsonNode overrides, boolean force) {
+            this(questionId, label, sourceType, classificationBatchId, sourceExperimentId,
+                    cohortId, documentIds, includeStatuses, overrides, force, null);
+        }
         public ExtractionRunRequest(String questionId,
                                     String label,
                                     ExtractionSourceType sourceType,
@@ -143,8 +151,12 @@ public final class QuestionExtractionModels {
 
     public record DryRunRequest(
             String questionId,
-            JsonNode overrides
+            JsonNode overrides,
+            String profileVersion
     ) {
+        public DryRunRequest(String questionId, JsonNode overrides) {
+            this(questionId, overrides, null);
+        }
     }
 
     public record DryRunResult(

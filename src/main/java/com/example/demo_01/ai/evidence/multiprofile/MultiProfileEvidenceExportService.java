@@ -35,6 +35,9 @@ public class MultiProfileEvidenceExportService {
     private EvidenceProfileRegistry profileRegistry;
 
     public Path generate(UUID batchId, Path outputPath) {
+        String version = repository.findBatch(batchId).orElseThrow(
+                () -> new IllegalArgumentException("Batch not found: " + batchId)).profileVersion();
+        List<EvidenceProfile> profiles = profileRegistry.all(version);
         List<DocumentRecord> documents = repository.findAllDocuments(batchId);
         List<QuestionMatchRecord> matches = repository.findAllMatches(batchId);
         List<GenericEvidenceRecord> evidence = repository.findAllEvidence(batchId);
@@ -44,9 +47,9 @@ public class MultiProfileEvidenceExportService {
                  OutputStream output = Files.newOutputStream(outputPath)) {
                 workbook.setCompressTempFiles(true);
                 CellStyle headerStyle = headerStyle(workbook);
-                writeClassificationSheet(workbook, headerStyle, documents, matches);
+                writeClassificationSheet(workbook, headerStyle, documents, matches, profiles);
                 writeFailureSheet(workbook, headerStyle, documents, matches);
-                for (EvidenceProfile profile : profileRegistry.all()) {
+                for (EvidenceProfile profile : profiles) {
                     writeEvidenceSheet(workbook, headerStyle, profile, evidence);
                 }
                 workbook.write(output);
@@ -60,11 +63,12 @@ public class MultiProfileEvidenceExportService {
     private void writeClassificationSheet(SXSSFWorkbook workbook,
                                           CellStyle headerStyle,
                                           List<DocumentRecord> documents,
-                                          List<QuestionMatchRecord> matches) {
+                                          List<QuestionMatchRecord> matches,
+                                          List<EvidenceProfile> profiles) {
         Sheet sheet = workbook.createSheet("分类矩阵");
         sheet.createFreezePane(2, 1);
         List<String> headers = new ArrayList<>(List.of("文献ID", "文献标题", "文献状态"));
-        for (EvidenceProfile profile : profileRegistry.all()) {
+        for (EvidenceProfile profile : profiles) {
             headers.add(profile.questionId() + "状态");
             headers.add(profile.questionId() + "置信度");
             headers.add(profile.questionId() + "证据数");
@@ -81,7 +85,7 @@ public class MultiProfileEvidenceExportService {
                     document.documentId().toString(),
                     value(document.documentTitle()),
                     document.status().name()));
-            for (EvidenceProfile profile : profileRegistry.all()) {
+            for (EvidenceProfile profile : profiles) {
                 QuestionMatchRecord match = byDocumentQuestion.get(
                         document.documentId() + "\u001f" + profile.questionId());
                 cells.add(match == null ? "" : match.classificationStatus().name());
@@ -154,7 +158,8 @@ public class MultiProfileEvidenceExportService {
         writeHeader(sheet, headerStyle, headers);
         int rowIndex = 1;
         for (GenericEvidenceRecord record : allEvidence) {
-            if (!profile.questionId().equals(record.questionId())) {
+            if (!profile.questionId().equals(record.questionId())
+                    || !profile.profileVersion().equals(record.profileVersion())) {
                 continue;
             }
             List<String> cells = new ArrayList<>(record.cells());

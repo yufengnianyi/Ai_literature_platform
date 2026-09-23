@@ -26,6 +26,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,8 @@ import java.util.UUID;
 public class QuestionExtractionRepository {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
+    };
+    private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {
     };
     private static final TypeReference<List<ClassificationStatus>> STATUS_LIST =
             new TypeReference<>() {
@@ -44,33 +47,43 @@ public class QuestionExtractionRepository {
     @Resource
     private ObjectMapper objectMapper;
 
-    public Optional<ExtractionRunRecord> findActiveRun(String questionId, String inputHash) {
+    @Resource
+    private EvidenceProfileRegistry profileRegistry;
+
+    public Optional<ExtractionRunRecord> findActiveRun(String questionId, String inputHash,
+                                                      String profileVersion, String configHash,
+                                                      String modelName) {
         return jdbcTemplate.query("""
                 SELECT *
                 FROM evidence_question_extraction_run
                 WHERE question_id = ?
                   AND input_hash = ?
+                  AND profile_version = ? AND config_hash = ?
+                  AND coalesce(model_name, '') = coalesce(?, '')
                   AND status IN ('QUEUED', 'RUNNING')
                 ORDER BY created_at DESC
                 LIMIT 1
-                """, this::mapRun, questionId, inputHash).stream().findFirst();
+                """, this::mapRun, questionId, inputHash, profileVersion, configHash, modelName)
+                .stream().findFirst();
     }
 
     public Optional<ExtractionRunRecord> findReusableRun(String questionId,
                                                          String inputHash,
                                                          String configHash,
-                                                         String modelName) {
+                                                         String modelName,
+                                                         String profileVersion) {
         return jdbcTemplate.query("""
                 SELECT *
                 FROM evidence_question_extraction_run
                 WHERE question_id = ?
                   AND input_hash = ?
                   AND config_hash = ?
+                  AND profile_version = ?
                   AND coalesce(model_name, '') = coalesce(?, '')
                   AND status = 'COMPLETED'
                 ORDER BY created_at DESC
                 LIMIT 1
-                """, this::mapRun, questionId, inputHash, configHash, modelName)
+                """, this::mapRun, questionId, inputHash, configHash, profileVersion, modelName)
                 .stream().findFirst();
     }
 
@@ -343,6 +356,12 @@ public class QuestionExtractionRepository {
 
     private GenericEvidenceRecord mapEvidence(ResultSet rs, int rowNum) throws SQLException {
         UUID recordId = rs.getObject("record_id", UUID.class);
+        List<String> cells = fromJsonList(rs.getString("cells_json"));
+        Map<String, String> payload = fromJsonMap(rs.getString("payload_json"));
+        if (payload.isEmpty()) {
+            payload = profileRegistry.toPayload(
+                    rs.getString("profile_version"), rs.getString("question_id"), cells);
+        }
         return new GenericEvidenceRecord(
                 recordId,
                 rs.getObject("batch_id", UUID.class),
@@ -352,8 +371,10 @@ public class QuestionExtractionRepository {
                 rs.getString("question_id"),
                 rs.getString("profile_version"),
                 rs.getInt("row_index"),
-                fromJsonList(rs.getString("cells_json")),
+                cells,
+                payload,
                 rs.getString("row_fingerprint"),
+                rs.getObject("supersedes_record_id", UUID.class),
                 ClassificationStatus.valueOf(rs.getString("classification_status")),
                 ValidationStatus.valueOf(rs.getString("validation_status")),
                 rs.getString("verification_note"),
@@ -415,6 +436,17 @@ public class QuestionExtractionRepository {
             return objectMapper.readValue(json, STRING_LIST);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to parse evidence JSON", e);
+        }
+    }
+
+    private Map<String, String> fromJsonMap(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, STRING_MAP);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to parse evidence payload JSON", e);
         }
     }
 

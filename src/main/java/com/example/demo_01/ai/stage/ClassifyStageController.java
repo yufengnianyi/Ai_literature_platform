@@ -41,7 +41,7 @@ public class ClassifyStageController {
                         request.cohortId(),
                         request.force(),
                         request.expectedDocuments(),
-                        false);
+                        false, request.profileVersion());
         return ResultUtils.success(service.submit(classifyOnly));
     }
 

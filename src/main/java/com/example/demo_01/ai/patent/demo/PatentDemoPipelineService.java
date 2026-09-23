@@ -313,7 +313,8 @@ public class PatentDemoPipelineService {
                 null,
                 null,
                 extractionOverrides(),
-                force
+                force,
+                com.example.demo_01.ai.evidence.multiprofile.MultiProfileEvidenceModels.PROFILE_VERSION
         );
     }
 

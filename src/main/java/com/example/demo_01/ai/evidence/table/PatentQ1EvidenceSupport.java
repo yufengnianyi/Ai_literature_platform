@@ -55,7 +55,13 @@ public class PatentQ1EvidenceSupport {
 
     /** No TEI lookup or negative cache: a later successful recovery must be visible immediately. */
     public Optional<PatentInput> load(EvidenceProfile profile, Path root) {
-        if (profile == null || !"Q1".equals(profile.questionId()) || root == null
+        if (profile == null || !profile.legacyCompound()) return Optional.empty();
+        return loadTables(root);
+    }
+
+    /** Raw verified tables are reusable across schemas; the 16-column row guard is legacy-only. */
+    public Optional<PatentInput> loadTables(Path root) {
+        if (root == null
                 || !Files.isRegularFile(root.resolve("patent-table-manifest.json"))) {
             return Optional.empty();
         }

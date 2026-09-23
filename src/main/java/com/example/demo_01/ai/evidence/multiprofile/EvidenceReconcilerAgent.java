@@ -53,6 +53,10 @@ public class EvidenceReconcilerAgent {
             return rows == null ? List.of() : List.copyOf(rows);
         }
 
+        // Legacy linking overwrites cells and uses ten-question field indexes. Keep expert
+        // source names intact until typed, species-scoped entity links are implemented.
+        if (profile.expert()) return List.copyOf(rows);
+
         List<ValidatedEvidenceRow> linked = new ArrayList<>();
         for (ValidatedEvidenceRow row : rows) {
             linked.add(linkRow(document, profile, row));

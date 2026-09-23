@@ -161,6 +161,7 @@ public class MultiProfileOutputValidator {
                         + " must contain exactly " + profile.headers().size() + " cells");
             }
             List<String> cells = input.cells().stream().map(this::value).toList();
+            EvidenceMarkdownTableParser.validateExpertRecordType(profile, cells);
             for (Integer index : profile.primaryFieldIndexes()) {
                 if (index == null || index < 0 || index >= cells.size()
                         || !hasText(cells.get(index))) {
@@ -198,7 +199,7 @@ public class MultiProfileOutputValidator {
                         anchor.chunkId(), chunk.sectionPath(), chunk.paragraphIndex(),
                         chunk.sentenceStart(), chunk.sentenceEnd(), anchor.exactQuote().trim(), quoteHash));
             }
-            String fingerprint = fingerprint(profile.questionId(), cells);
+            String fingerprint = fingerprint(profile.fingerprintScope(), cells);
             unique.putIfAbsent(fingerprint, new ValidatedEvidenceRow(
                     UUID.randomUUID(), cells, fingerprint, List.copyOf(anchors)));
         }

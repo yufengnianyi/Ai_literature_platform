@@ -97,7 +97,8 @@ public class QuestionExtractionService {
         if (request.sourceType() == null) {
             throw new IllegalArgumentException("sourceType is required");
         }
-        profileRegistry.require(request.questionId());
+        String version = resolveVersion(request);
+        profileRegistry.require(version, request.questionId());
 
         List<ClassificationStatus> includeStatuses = resolveIncludeStatuses(request);
         List<ExtractionCandidate> candidates = resolveCandidates(request, includeStatuses);
@@ -108,11 +109,12 @@ public class QuestionExtractionService {
 
         EvidenceProperties resolved = configScope.resolve(request.overrides());
         String configSnapshot = configScope.snapshot(resolved);
-        String configHash = multiProfileEvidenceService.hashExtractionConfig(configSnapshot);
+        String configHash = multiProfileEvidenceService.hashExtractionConfig(configSnapshot, version);
         String inputHash = inputHash(candidates);
         String modelName = modelName();
 
-        ExtractionRunRecord active = repository.findActiveRun(request.questionId(), inputHash)
+        ExtractionRunRecord active = repository.findActiveRun(request.questionId(), inputHash,
+                version, configHash, modelName)
                 .orElse(null);
         if (active != null) {
             return new ExtractionRunAccepted(
@@ -121,7 +123,7 @@ public class QuestionExtractionService {
         }
         if (!request.force()) {
             ExtractionRunRecord reusable = repository.findReusableRun(
-                    request.questionId(), inputHash, configHash, modelName).orElse(null);
+                    request.questionId(), inputHash, configHash, modelName, version).orElse(null);
             if (reusable != null) {
                 return new ExtractionRunAccepted(
                         reusable.runId(), reusable.questionId(), reusable.status(),
@@ -139,7 +141,7 @@ public class QuestionExtractionService {
                 request.sourceExperimentId(),
                 request.cohortId(),
                 includeStatuses,
-                MultiProfileEvidenceModels.PROFILE_VERSION,
+                version,
                 inputHash,
                 configHash,
                 configSnapshot,
@@ -205,7 +207,8 @@ public class QuestionExtractionService {
         if (request == null || request.questionId() == null || request.questionId().isBlank()) {
             throw new IllegalArgumentException("questionId is required");
         }
-        var profile = profileRegistry.require(request.questionId());
+        String version = profileRegistry.resolveVersion(request.profileVersion());
+        var profile = profileRegistry.require(version, request.questionId());
         SourceDocument document = multiProfileRepository.findDocument(documentId)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.NOT_FOUND_ERROR, "Document not found: " + documentId));
@@ -216,7 +219,7 @@ public class QuestionExtractionService {
             List<EvidenceChunk> chunks = evidenceRepository.findDocumentChunks(documentId);
             List<ValidatedEvidenceRow> rows = configScope.call(resolved, () ->
                     multiProfileEvidenceService.extractQuestion(
-                            UUID.randomUUID(), document, chunks, request.questionId()));
+                            UUID.randomUUID(), document, chunks, request.questionId(), version));
             List<List<String>> cells = rows.stream().map(ValidatedEvidenceRow::cells).toList();
             List<List<String>> anchors = rows.stream()
                     .map(row -> row.anchors().stream()
@@ -291,12 +294,12 @@ public class QuestionExtractionService {
             }
             try {
                 List<ValidatedEvidenceRow> rows = multiProfileEvidenceService.extractQuestion(
-                        run.runId(), document, chunks, run.questionId());
+                        run.runId(), document, chunks, run.questionId(), run.profileVersion());
                 Path outputPath = runRoot(run.runId()).resolve("papers")
                         .resolve(document.documentId().toString())
                         .resolve(run.questionId() + ".md");
                 multiProfileEvidenceService.writeEvidenceMarkdown(
-                        outputPath, run.questionId(), rows);
+                        outputPath, run.questionId(), rows, run.profileVersion());
                 ClassificationStatus classificationStatus =
                         candidate.classificationStatus() == null
                                 ? ClassificationStatus.NOT_CLASSIFIED
@@ -304,7 +307,7 @@ public class QuestionExtractionService {
                 persistenceService.replaceEvidence(
                         run.classificationBatchId(), run.runId(), document.documentId(),
                         run.questionId(), classificationStatus, rows,
-                        run.inputHash(), run.configHash(), run.modelName());
+                        run.inputHash(), run.configHash(), run.modelName(), run.profileVersion());
                 repository.finishDocument(
                         run.runId(), document.documentId(),
                         rows.isEmpty()
@@ -395,7 +398,7 @@ public class QuestionExtractionService {
         ExtractionRunRequest synthetic = new ExtractionRunRequest(
                 run.questionId(), run.label(), run.sourceType(),
                 run.classificationBatchId(), run.sourceExperimentId(),
-                run.cohortId(), null, run.includeStatuses(), null, true);
+                run.cohortId(), null, run.includeStatuses(), null, true, run.profileVersion());
         if (run.sourceType() == ExtractionSourceType.DOCUMENT_IDS) {
             List<UUID> ids = repository.findDocuments(run.runId(), null, 0, 10_000)
                     .items().stream()
@@ -404,7 +407,7 @@ public class QuestionExtractionService {
             synthetic = new ExtractionRunRequest(
                     run.questionId(), run.label(), run.sourceType(),
                     run.classificationBatchId(), run.sourceExperimentId(),
-                    run.cohortId(), ids, run.includeStatuses(), null, true);
+                    run.cohortId(), ids, run.includeStatuses(), null, true, run.profileVersion());
         }
         return resolveCandidates(synthetic, resolveIncludeStatuses(synthetic));
     }
@@ -414,6 +417,27 @@ public class QuestionExtractionService {
             return DEFAULT_INCLUDE_STATUSES;
         }
         return List.copyOf(request.includeStatuses());
+    }
+
+    String resolveVersion(ExtractionRunRequest request) {
+        if (request.sourceType() == ExtractionSourceType.CLASSIFICATION_RUN) {
+            if (request.classificationBatchId() == null) {
+                throw new IllegalArgumentException("classificationBatchId is required for CLASSIFICATION_RUN");
+            }
+            var batch = multiProfileRepository.findBatch(request.classificationBatchId())
+                    .orElseThrow(() -> new IllegalArgumentException("Classification batch not found"));
+            String version = profileRegistry.resolveVersion(batch.profileVersion());
+            if (request.profileVersion() != null && !request.profileVersion().isBlank()
+                    && !version.equals(profileRegistry.resolveVersion(request.profileVersion()))) {
+                throw new IllegalArgumentException("Extraction profileVersion must match classification batch; "
+                        + "reclassify the documents to use another question set");
+            }
+            return version;
+        }
+        if (request.classificationBatchId() != null) {
+            throw new IllegalArgumentException("classificationBatchId requires sourceType CLASSIFICATION_RUN");
+        }
+        return profileRegistry.resolveVersion(request.profileVersion());
     }
 
     private Path runRoot(UUID runId) {

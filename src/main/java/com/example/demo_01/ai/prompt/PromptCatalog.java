@@ -9,6 +9,28 @@ package com.example.demo_01.ai.prompt;
  */
 public final class PromptCatalog {
 
+    public static final String EXPERT_Q8_COMMON = "prompts/evidence/expert-q8/common-extraction-system.txt";
+
+    public static String evidenceClassificationSystem(String version) {
+        return isExpertVersion(version) ? "prompts/evidence/expert-q8/classification-system.txt"
+                : EVIDENCE_MULTI_PROFILE_CLASSIFICATION_SYSTEM;
+    }
+
+    public static String evidenceQuestionExtractionSystem(String version, String questionId) {
+        if (!isExpertVersion(version)) return evidenceQuestionExtractionSystem(questionId);
+        if (questionId == null || !questionId.matches("Q[1-8]")) {
+            throw new IllegalArgumentException("Unknown expert question: " + questionId);
+        }
+        return "prompts/evidence/expert-q8/" + questionId.toLowerCase(java.util.Locale.ROOT)
+                + "-extraction-system.txt";
+    }
+
+    private static boolean isExpertVersion(String version) {
+        if ("expert_q8_20260921_v1".equals(version)) return true;
+        if ("oomycete_questions_v2".equals(version)) return false;
+        throw new IllegalArgumentException("Unknown evidence prompt version: " + version);
+    }
+
     public static final String AI_CODE_HELPER_SYSTEM = "prompts/ai/ai-code-helper-system.txt";
     public static final String AI_CODE_HELPER_SERVICE_SYSTEM = "prompts/ai/ai-code-helper-service-system.txt";
     public static final String AI_RAG_CHAT_SYSTEM = "prompts/ai/rag-chat-system.txt";

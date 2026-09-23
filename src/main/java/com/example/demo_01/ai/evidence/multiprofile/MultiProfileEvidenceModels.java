@@ -2,11 +2,14 @@ package com.example.demo_01.ai.evidence.multiprofile;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public final class MultiProfileEvidenceModels {
 
     public static final String PROFILE_VERSION = "oomycete_questions_v2";
+    public static final String EXPERT_PROFILE_VERSION = "expert_q8_20260921_v1";
+    public static final String DEFAULT_PROFILE_VERSION = EXPERT_PROFILE_VERSION;
     public static final UUID DEFAULT_SOURCE_EXPERIMENT_ID =
             UUID.fromString("9038d6bc-6213-4009-ae5e-d1bd45e0c4b8");
 
@@ -43,6 +46,10 @@ public final class MultiProfileEvidenceModels {
         PENDING, APPROVED, REJECTED
     }
 
+    public enum TranslationStatus {
+        PENDING, COMPLETED, FAILED
+    }
+
     public enum ClassificationSourceType {
         EXPERIMENT, PRETREATMENT, COHORT
     }
@@ -60,7 +67,14 @@ public final class MultiProfileEvidenceModels {
                                UUID cohortId,
                                boolean force,
                                Integer expectedDocuments,
-                               Boolean runExtraction) {
+                               Boolean runExtraction,
+                               String profileVersion) {
+
+        public BatchRequest(UUID sourceExperimentId, UUID pretreatmentRunId, UUID cohortId,
+                            boolean force, Integer expectedDocuments, Boolean runExtraction) {
+            this(sourceExperimentId, pretreatmentRunId, cohortId, force,
+                    expectedDocuments, runExtraction, null);
+        }
 
         public BatchRequest(UUID sourceExperimentId, boolean force) {
             this(sourceExperimentId, null, null, force, null, null);
@@ -202,7 +216,9 @@ public final class MultiProfileEvidenceModels {
             String profileVersion,
             int rowIndex,
             List<String> cells,
+            Map<String, String> payload,
             String rowFingerprint,
+            UUID supersedesRecordId,
             ClassificationStatus classificationStatus,
             ValidationStatus validationStatus,
             String verificationNote,
@@ -216,6 +232,21 @@ public final class MultiProfileEvidenceModels {
     }
 
     public record EvidencePage(List<GenericEvidenceRecord> items, int page, int size, long total) {
+    }
+
+    public record EvidenceRecordTranslation(
+            UUID translationId,
+            UUID recordId,
+            String languageCode,
+            String profileVersion,
+            String translatorModel,
+            String promptHash,
+            Map<String, String> payload,
+            TranslationStatus status,
+            String errorMessage,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
     }
 
     public record RawQuestionClassification(

@@ -104,7 +104,9 @@ public class TableContextService {
                                        List<EvidenceChunk> baseChunks,
                                        Path artifactRoot) {
         if (artifactRoot != null) {
-            var patent = patentQ1EvidenceSupport.load(profile, artifactRoot);
+            var patent = profile != null && profile.expert() && profile.compound() && isEnabledFor(profile)
+                    ? patentQ1EvidenceSupport.loadTables(artifactRoot)
+                    : patentQ1EvidenceSupport.load(profile, artifactRoot);
             if (patent.isPresent()) {
                 return patentQ1EvidenceSupport.augment(patent.get(), baseChunks,
                         documentId == null ? "doc" : documentId.toString(), legendResolver);
@@ -347,7 +349,9 @@ public class TableContextService {
         if (!config().getTable().isEnabled() || profile == null) {
             return false;
         }
-        List<String> enabledQuestionIds = config().getTable().getEnabledQuestionIds();
+        List<String> enabledQuestionIds = profile.expert()
+                ? config().getTable().getExpertEnabledQuestionIds()
+                : config().getTable().getEnabledQuestionIds();
         if (enabledQuestionIds == null || enabledQuestionIds.isEmpty()) {
             return false;
         }

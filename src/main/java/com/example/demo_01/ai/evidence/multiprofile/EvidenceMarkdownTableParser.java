@@ -58,6 +58,10 @@ public class EvidenceMarkdownTableParser {
             if (header.headers().equals(cells) || isSeparator(cells, header.headers().size())) {
                 continue;
             }
+            if (profile.expert() && cells.size() != header.headers().size()) {
+                throw new IllegalArgumentException("Expert row must contain exactly "
+                        + header.headers().size() + " cells for " + profile.questionId());
+            }
             if (cells.size() > header.headers().size()) {
                 log.warn("Skipping {} prompt-only Markdown row {} because it has {} cells; expected at most {}",
                         profile.questionId(), index + 1, cells.size(), header.headers().size());
@@ -76,7 +80,8 @@ public class EvidenceMarkdownTableParser {
             if (normalized.stream().allMatch(String::isBlank)) {
                 continue;
             }
-            String fingerprint = outputValidator.fingerprint(profile.questionId(), normalized);
+            validateExpertRecordType(profile, normalized);
+            String fingerprint = outputValidator.fingerprint(profile.fingerprintScope(), normalized);
             uniqueRows.putIfAbsent(fingerprint, new ValidatedEvidenceRow(
                     UUID.randomUUID(), normalized, fingerprint, Collections.emptyList(),
                     ValidationStatus.UNVERIFIED, "Parsed from prompt-only Markdown output"));
@@ -102,10 +107,18 @@ public class EvidenceMarkdownTableParser {
     }
 
     private List<List<String>> acceptedHeaders(EvidenceProfile profile) {
-        if ("Q1".equals(profile.questionId())) {
+        if (profile.legacyCompound()) {
             return List.of(Q1_MARKDOWN_HEADERS, profile.headers());
         }
         return List.of(profile.headers());
+    }
+
+    static void validateExpertRecordType(EvidenceProfile profile, List<String> cells) {
+        if (profile.expert() && "Q8".equals(profile.questionId())
+                && !List.of("分子诊断", "病原检测", "病害监测", "流行病学", "风险预测", "预警模型")
+                .contains(cells.getFirst())) {
+            throw new IllegalArgumentException("Q8 requires a single valid record_type per row");
+        }
     }
 
     private boolean isSeparator(List<String> cells, int expectedSize) {

@@ -173,6 +173,7 @@ def start_extraction(session: requests.Session, cohort_id: uuid.UUID) -> str:
         f"{API_BASE}/stages/extract/runs",
         json={
             "questionId": "Q1",
+            "profileVersion": "oomycete_questions_v2",
             "label": "Q1 extraction for 500-doc Q1-supported cohort",
             "sourceType": "COHORT",
             "cohortId": str(cohort_id),

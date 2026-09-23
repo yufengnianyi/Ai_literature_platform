@@ -108,6 +108,61 @@ public class EvidenceProfileRegistry {
         return profiles.values().stream().toList();
     }
 
+    private EvidenceProfileRegistry(Map<String, EvidenceProfile> profiles) {
+        this.profiles = profiles;
+    }
+
+    public String resolveVersion(String version) {
+        String resolved = version == null || version.isBlank()
+                ? MultiProfileEvidenceModels.DEFAULT_PROFILE_VERSION : version;
+        if (!MultiProfileEvidenceModels.PROFILE_VERSION.equals(resolved)
+                && !MultiProfileEvidenceModels.EXPERT_PROFILE_VERSION.equals(resolved)) {
+            throw new IllegalArgumentException("Unknown evidence profile version: " + resolved);
+        }
+        return resolved;
+    }
+
+    public EvidenceProfileRegistry forVersion(String version) {
+        return MultiProfileEvidenceModels.PROFILE_VERSION.equals(resolveVersion(version))
+                ? new EvidenceProfileRegistry(LegacyProfiles.ALL)
+                : new EvidenceProfileRegistry(ExpertProfiles.ALL);
+    }
+
+    public List<EvidenceProfile> all(String version) {
+        return forVersion(version).all();
+    }
+
+    public EvidenceProfile require(String version, String questionId) {
+        return forVersion(version).require(questionId);
+    }
+
+    /**
+     * Converts the positional model output into a stable keyed payload. Expert profiles use
+     * their source field keys; legacy profiles fall back to their persisted header labels.
+     */
+    public Map<String, String> toPayload(String version, String questionId, List<String> cells) {
+        EvidenceProfile profile = require(version, questionId);
+        List<String> keys = profile.fieldKeys().size() == profile.headers().size()
+                ? profile.fieldKeys() : profile.headers();
+        if (cells == null || cells.size() != keys.size()) {
+            throw new IllegalArgumentException("Evidence cell count does not match profile "
+                    + version + ":" + questionId);
+        }
+        Map<String, String> payload = new LinkedHashMap<>();
+        for (int index = 0; index < keys.size(); index++) {
+            payload.put(keys.get(index), cells.get(index));
+        }
+        return Collections.unmodifiableMap(payload);
+    }
+
+    private static final class LegacyProfiles {
+        private static final Map<String, EvidenceProfile> ALL = new EvidenceProfileRegistry().profiles;
+    }
+
+    private static final class ExpertProfiles {
+        private static final Map<String, EvidenceProfile> ALL = ExpertQuestionDefinitions.load();
+    }
+
     public EvidenceProfile require(String questionId) {
         EvidenceProfile profile = profiles.get(questionId);
         if (profile == null) {
@@ -189,7 +244,32 @@ public class EvidenceProfileRegistry {
             String scope,
             String rowUnit,
             String splitRules,
-            String guidance
+            String guidance,
+            String profileVersion,
+            String profileKey,
+            List<String> fieldKeys
     ) {
+        public EvidenceProfile(String questionId, String title, List<String> headers,
+                               List<Integer> primaryFieldIndexes, String scope,
+                               String rowUnit, String splitRules, String guidance) {
+            this(questionId, title, headers, primaryFieldIndexes, scope, rowUnit, splitRules,
+                    guidance, MultiProfileEvidenceModels.PROFILE_VERSION, questionId, List.of());
+        }
+
+        public boolean expert() {
+            return MultiProfileEvidenceModels.EXPERT_PROFILE_VERSION.equals(profileVersion);
+        }
+
+        public boolean legacyCompound() {
+            return !expert() && "Q1".equals(questionId);
+        }
+
+        public boolean compound() {
+            return legacyCompound() || "compound_activity".equals(profileKey);
+        }
+
+        public String fingerprintScope() {
+            return expert() ? profileVersion + ":" + questionId : questionId;
+        }
     }
 }

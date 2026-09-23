@@ -57,7 +57,10 @@ public class EvidenceExtractionAgent {
         var patent = patentQ1EvidenceSupport == null ? java.util.Optional.<PatentQ1EvidenceSupport.PatentInput>empty()
                 : patentQ1EvidenceSupport.load(profile, document);
         String systemPrompt = PromptResources.load(
-                PromptCatalog.evidenceQuestionExtractionSystem(profile.questionId()));
+                PromptCatalog.evidenceQuestionExtractionSystem(profile.profileVersion(), profile.questionId()));
+        if (profile.expert()) {
+            systemPrompt = PromptResources.load(PromptCatalog.EXPERT_Q8_COMMON) + "\n" + systemPrompt;
+        }
         if (patent.isPresent()) {
             systemPrompt += "\n" + PromptResources.load(PatentQ1EvidenceSupport.EXTRACTION_INSTRUCTION);
         }
@@ -98,7 +101,11 @@ public class EvidenceExtractionAgent {
     private String extractionInput(SourceDocument document,
                                    EvidenceProfile profile,
                                    List<EvidenceChunk> chunks) {
-        return """
+        String schema = profile.expert() ? "\nProfile version: " + profile.profileVersion()
+                + "\nRecord unit: " + profile.rowUnit() + "\n" + profile.splitRules()
+                + "\nRequired header row:\n| " + String.join(" | ", profile.headers()) + " |\n"
+                + "Field definitions (examples are not facts):\n" + profile.guidance() : "";
+        return schema + """
                 Task: Extract %s evidence (%s) from this paper.
 
                 %s
@@ -150,7 +157,7 @@ public class EvidenceExtractionAgent {
     }
 
     private List<String> expectedMarkdownHeaders(EvidenceProfile profile) {
-        if ("Q1".equals(profile.questionId())) {
+        if (profile.legacyCompound()) {
             return EvidenceMarkdownTableParser.Q1_MARKDOWN_HEADERS;
         }
         return profile.headers();

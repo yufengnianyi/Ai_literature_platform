@@ -52,6 +52,7 @@ public class EvidenceProperties {
     public static class Table {
         private boolean enabled = true;
         private List<String> enabledQuestionIds = List.of("Q1");
+        private List<String> expertEnabledQuestionIds = List.of("Q5");
         /** Use an LLM to pick which table captions are relevant; falls back to keywords on failure. */
         private boolean llmSelect = true;
         @Min(1)

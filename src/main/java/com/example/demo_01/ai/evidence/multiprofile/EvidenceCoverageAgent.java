@@ -173,7 +173,7 @@ public class EvidenceCoverageAgent {
                 keyCells.add(normalize(cell));
             }
         }
-        return outputValidator.fingerprint(profile.questionId() + ":primary", keyCells);
+        return outputValidator.fingerprint(profile.fingerprintScope() + ":primary", keyCells);
     }
 
     private String coverageInput(SourceDocument document,

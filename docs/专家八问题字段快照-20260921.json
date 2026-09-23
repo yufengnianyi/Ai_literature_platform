@@ -1,0 +1,1507 @@
+{
+  "snapshot_id": "expert_q8_20260921_v1",
+  "status": "source_snapshot_not_runtime_configuration",
+  "source_filename": "8个问题.docx",
+  "source_sha256": "c06428b2ec92c51d788108c21857daf89284c645be95e3bba1bb373a131c5dd4",
+  "captured_on": "2026-09-21",
+  "examples_are_not_extracted_facts": true,
+  "source_paragraphs": [
+    "卵菌文献智能体：Q1–Q8逐篇信息抽取表头",
+    "Agent-oriented Literature Extraction Schema with Field Examples",
+    "用途：以论文为单位进行信息抽取。保留8个科学问题；Q8合并为一个表，通过“记录类型”区分诊断、监测、流行病学和预测/预警。",
+    "字段设计原则：主表用于检索、浏览和后续分析；实验细节、多个数值、证据原文和复杂的一对多关系进入Common Evidence或内部结构化记录，避免在同一问题内重复设置字段。",
+    "示例说明：“应抽取的信息示例”用于指导智能体理解字段含义；不要求每篇论文都出现该信息。文献未报告时留空，不根据常识补齐。",
+    "Q1  基因、蛋白与生物学过程",
+    "Gene/Protein × Perturbation × Biological Outcome",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：若一篇论文研究多个独立对象，应拆成多个记录，并通过Common Evidence中的paper_id、record_id等字段关联。",
+    "Q2  卵菌–宿主分子互作与致病机制",
+    "Oomycete Factor × Host Factor × Interaction/Mechanism",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：若一篇论文研究多个独立对象，应拆成多个记录，并通过Common Evidence中的paper_id、record_id等字段关联。",
+    "Q3  宿主抗性、感病性与病原识别",
+    "Host Factor/Locus × Host × Pathogen Context × Outcome",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：若一篇论文研究多个独立对象，应拆成多个记录，并通过Common Evidence中的paper_id、record_id等字段关联。",
+    "Q4  基因组、群体多样性与进化",
+    "Genomic/Population Observation × Genotype–Phenotype Association",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：若一篇论文研究多个独立对象，应拆成多个记录，并通过Common Evidence中的paper_id、record_id等字段关联。",
+    "Q5  抗卵菌化合物、靶标与作用机制",
+    "Compound × Pathogen × Assay × Activity Outcome",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：化合物活性尽量同时保留活性终点、数值和单位；靶标只有在论文提供直接或明确支持的证据时才标为已验证。",
+    "Q6  杀菌剂抗性与抗性机制",
+    "Fungicide × Pathogen/Strain × Resistance Genotype/Phenotype",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：“生长/繁殖/竞争能力变化”专门表达fitness effect，避免只写模糊的“适合度”。",
+    "Q7  卵菌防控与新型干预技术",
+    "Intervention × Pathogen × Application × Efficacy",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：若一篇论文研究多个独立对象，应拆成多个记录，并通过Common Evidence中的paper_id、record_id等字段关联。",
+    "Q8  病害诊断、监测、流行病学与预测预警",
+    "Diagnosis/Surveillance/Epidemiology/Forecasting",
+    "抽取原则：只抽取论文明确报告或可直接从结果读取的信息；没有报告则留空，不推断。一个字段有多个值时，可用“；”分隔，并尽量保留每个值与证据位置的对应关系。",
+    "智能体提示：先判断record_type，再抽取适用字段；同一篇论文可以产生多个Q8记录，但仍归属于Q8，不拆成Q8A/Q8B。",
+    "Common Evidence：通用证据层",
+    "所有Q1–Q8记录共用，用于论文追溯、证据审计、多个对象之间的关系维护以及后续人工复核。",
+    "最终8问题结构"
+  ],
+  "questions": [
+    {
+      "question_id": "Q1",
+      "title_zh": "基因、蛋白与生物学过程",
+      "core_relation": "Gene/Protein × Perturbation × Biological Outcome",
+      "fields": [
+        {
+          "label_zh": "基因/蛋白名称",
+          "field_key": "gene_protein_name",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "PsCRN1；Avr3a；PiNPP1",
+          "extraction_rule": "论文明确研究的基因、蛋白或蛋白产物名称"
+        },
+        {
+          "label_zh": "别名/同源物",
+          "field_key": "alias_homolog",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Avr3a/Avr3aKI；同源蛋白编号",
+          "extraction_rule": "记录论文使用的别名、同源基因或同源蛋白"
+        },
+        {
+          "label_zh": "基因/蛋白ID",
+          "field_key": "gene_protein_id",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PsAvr3a gene ID；XP_XXXXXX",
+          "extraction_rule": "抽取Gene ID、Protein ID、UniProt/NCBI等编号"
+        },
+        {
+          "label_zh": "家族/类型",
+          "field_key": "family_type",
+          "required_in_source": "否",
+          "type_in_source": "枚举+文本",
+          "example_in_source": "RXLR effector；CRN effector；MAPK kinase",
+          "extraction_rule": "按论文定义记录家族、结构类型或功能类型"
+        },
+        {
+          "label_zh": "卵菌种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Phytophthora sojae",
+          "extraction_rule": "研究对象物种"
+        },
+        {
+          "label_zh": "菌株/分离物",
+          "field_key": "strain_isolate",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "P6497；P7064",
+          "extraction_rule": "若论文区分菌株/分离物则记录"
+        },
+        {
+          "label_zh": "生活史阶段/表达条件",
+          "field_key": "life_stage_expression_condition",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "游动孢子；侵染后24 h；缺氮条件",
+          "extraction_rule": "记录功能或表达分析所对应的阶段/条件"
+        },
+        {
+          "label_zh": "功能扰动/验证",
+          "field_key": "functional_perturbation",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "CRISPR敲除；RNAi沉默；过表达；互补",
+          "extraction_rule": "记录作者如何改变或验证该基因/蛋白功能"
+        },
+        {
+          "label_zh": "主要表型",
+          "field_key": "main_phenotype",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "菌落生长受抑；孢子形成下降",
+          "extraction_rule": "概括最直接的生物学表型"
+        },
+        {
+          "label_zh": "生长/发育",
+          "field_key": "growth_development",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "菌落直径下降35%；孢子萌发率下降",
+          "extraction_rule": "仅在论文有相应数据时记录"
+        },
+        {
+          "label_zh": "致病力/毒力",
+          "field_key": "virulence",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "接种后病斑面积下降；毒力增强",
+          "extraction_rule": "记录与宿主致病相关的结果"
+        },
+        {
+          "label_zh": "代谢/营养/胁迫",
+          "field_key": "metabolism_nutrition_stress",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "脂质代谢改变；氧化胁迫敏感",
+          "extraction_rule": "记录代谢、营养利用或胁迫响应"
+        },
+        {
+          "label_zh": "必需性/适应度效应",
+          "field_key": "essentiality_fitness_effect",
+          "required_in_source": "否",
+          "type_in_source": "文本/定量",
+          "example_in_source": "基因敲除致致死；生长速率下降",
+          "extraction_rule": "这里的fitness指生存、繁殖和竞争能力变化"
+        },
+        {
+          "label_zh": "作用机制/通路",
+          "field_key": "mechanism_pathway",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "MAPK通路；细胞壁合成；甾醇代谢",
+          "extraction_rule": "记录作者提出或验证的机制/通路"
+        },
+        {
+          "label_zh": "互补实验",
+          "field_key": "complementation",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "回补后恢复野生型生长表型",
+          "extraction_rule": "若做互补，记录结果"
+        },
+        {
+          "label_zh": "化学验证",
+          "field_key": "chemical_validation",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "抑制剂处理复制敲除表型",
+          "extraction_rule": "记录化学抑制剂/激动剂对功能的验证"
+        },
+        {
+          "label_zh": "跨卵菌保守性",
+          "field_key": "cross_oomycete_conservation",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "在P. infestans与P. sojae中均保守",
+          "extraction_rule": "只有论文有比较时记录"
+        }
+      ]
+    },
+    {
+      "question_id": "Q2",
+      "title_zh": "卵菌–宿主分子互作与致病机制",
+      "core_relation": "Oomycete Factor × Host Factor × Interaction/Mechanism",
+      "fields": [
+        {
+          "label_zh": "卵菌因子",
+          "field_key": "oomycete_factor",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Avr3a；PexRD2；RxLR effector",
+          "extraction_rule": "参与互作的卵菌蛋白/因子"
+        },
+        {
+          "label_zh": "别名/ID",
+          "field_key": "factor_alias_id",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PexRD2/PI18414",
+          "extraction_rule": "别名、基因/蛋白编号"
+        },
+        {
+          "label_zh": "效应子家族/类型",
+          "field_key": "effector_family_type",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "RXLR；CRN；NLP",
+          "extraction_rule": "按论文定义的家族或类型"
+        },
+        {
+          "label_zh": "卵菌种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Phytophthora infestans",
+          "extraction_rule": "研究对象"
+        },
+        {
+          "label_zh": "菌株/分离物",
+          "field_key": "strain_isolate",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "T30-4；88069",
+          "extraction_rule": "菌株信息"
+        },
+        {
+          "label_zh": "宿主种/品种",
+          "field_key": "host_species_cultivar",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Solanum tuberosum cv. Désirée",
+          "extraction_rule": "宿主及品种"
+        },
+        {
+          "label_zh": "宿主靶标",
+          "field_key": "host_target",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "StNPR1；MAPKKK",
+          "extraction_rule": "被互作或调控的宿主因子"
+        },
+        {
+          "label_zh": "靶标功能",
+          "field_key": "target_function",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "免疫信号转导；泛素化",
+          "extraction_rule": "宿主靶标的已知功能"
+        },
+        {
+          "label_zh": "互作类型/直接性",
+          "field_key": "interaction_directness",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "直接蛋白互作；间接调控",
+          "extraction_rule": "区分直接结合、复合物、遗传互作等"
+        },
+        {
+          "label_zh": "定位/作用位点",
+          "field_key": "localization_site",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "细胞核；质膜；haustorium",
+          "extraction_rule": "记录双方或作用发生的细胞区室/位点"
+        },
+        {
+          "label_zh": "分泌/进入机制",
+          "field_key": "secretion_entry",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "RXLR介导；吸器分泌；内吞",
+          "extraction_rule": "若文献研究分泌、转运或进入宿主细胞则记录"
+        },
+        {
+          "label_zh": "验证方法",
+          "field_key": "validation_method",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Co-IP；Y2H；BiFC；pull-down；遗传互补",
+          "extraction_rule": "记录用于证明互作/机制的方法"
+        },
+        {
+          "label_zh": "分子后果",
+          "field_key": "molecular_consequence",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "抑制蛋白磷酸化；改变稳定性",
+          "extraction_rule": "互作产生的直接分子后果"
+        },
+        {
+          "label_zh": "宿主过程/通路",
+          "field_key": "host_process_pathway",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PTI；ETI；ROS；激素信号",
+          "extraction_rule": "受影响的宿主过程"
+        },
+        {
+          "label_zh": "毒力/免疫结果",
+          "field_key": "virulence_immunity_outcome",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "增强侵染；抑制PTI",
+          "extraction_rule": "互作最终对应的致病或免疫表型"
+        },
+        {
+          "label_zh": "AVR/识别关系",
+          "field_key": "avr_recognition",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "被R基因识别；逃逸识别",
+          "extraction_rule": "记录效应子与抗病识别的关系"
+        },
+        {
+          "label_zh": "结构/结合信息",
+          "field_key": "structure_binding",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PDB结构；结合界面残基",
+          "extraction_rule": "有结构、生物物理结合数据时记录"
+        },
+        {
+          "label_zh": "机制模型",
+          "field_key": "mechanistic_model",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "效应子结合宿主蛋白并阻断其核转位",
+          "extraction_rule": "用一句话概括作者支持的机制模型"
+        }
+      ]
+    },
+    {
+      "question_id": "Q3",
+      "title_zh": "宿主抗性、感病性与病原识别",
+      "core_relation": "Host Factor/Locus × Host × Pathogen Context × Outcome",
+      "fields": [
+        {
+          "label_zh": "抗性类型",
+          "field_key": "resistance_type",
+          "required_in_source": "是",
+          "type_in_source": "枚举+文本",
+          "example_in_source": "R基因抗性；QTL；数量抗性",
+          "extraction_rule": "按论文定义记录抗性类型"
+        },
+        {
+          "label_zh": "宿主基因/位点",
+          "field_key": "host_gene_locus",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Rps1k；Rps8；qRps3-1",
+          "extraction_rule": "基因、QTL或定位区间"
+        },
+        {
+          "label_zh": "别名/同源物",
+          "field_key": "alias_homolog",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Rps1k/Rps1K-1",
+          "extraction_rule": "别名、同源基因"
+        },
+        {
+          "label_zh": "基因ID",
+          "field_key": "gene_id",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Glyma.XXGXXXXX",
+          "extraction_rule": "基因数据库编号"
+        },
+        {
+          "label_zh": "基因类型",
+          "field_key": "gene_type",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "NLR；RLK；转录因子",
+          "extraction_rule": "记录分子类型"
+        },
+        {
+          "label_zh": "植物种",
+          "field_key": "plant_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Glycine max",
+          "extraction_rule": "宿主植物"
+        },
+        {
+          "label_zh": "品种/材料",
+          "field_key": "cultivar_accession",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Williams 82；PI 561271",
+          "extraction_rule": "实验材料"
+        },
+        {
+          "label_zh": "抗性靶标/病原背景",
+          "field_key": "resistance_context",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "P. sojae P6497",
+          "extraction_rule": "抗性针对的病原背景"
+        },
+        {
+          "label_zh": "AVR/病原识别因子",
+          "field_key": "avr_factor",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Avr4；Avr6",
+          "extraction_rule": "触发识别的病原因子"
+        },
+        {
+          "label_zh": "识别模式",
+          "field_key": "recognition_mode",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "直接识别；guard/decoy机制",
+          "extraction_rule": "作者提出的识别方式"
+        },
+        {
+          "label_zh": "免疫层级",
+          "field_key": "immune_layer",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PTI；ETI",
+          "extraction_rule": "按论文实验结果记录"
+        },
+        {
+          "label_zh": "信号通路",
+          "field_key": "signaling_pathway",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "SA；MAPK；Ca2+ signaling",
+          "extraction_rule": "抗性相关信号"
+        },
+        {
+          "label_zh": "抗性机制",
+          "field_key": "resistance_mechanism",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "限制吸器形成；增强ROS",
+          "extraction_rule": "机制层面的抗性结果"
+        },
+        {
+          "label_zh": "抗性谱",
+          "field_key": "resistance_spectrum",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对多个P. sojae race有效",
+          "extraction_rule": "记录菌株/生理小种覆盖范围"
+        },
+        {
+          "label_zh": "抗性水平/表型",
+          "field_key": "resistance_level_phenotype",
+          "required_in_source": "是",
+          "type_in_source": "文本/数值",
+          "example_in_source": "病斑面积下降80%；免疫型反应",
+          "extraction_rule": "记录可比较的表型或定量结果"
+        },
+        {
+          "label_zh": "抗性突破/病原逃逸",
+          "field_key": "breakdown_escape",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Avr等位变异导致抗性丧失",
+          "extraction_rule": "记录抗性失效及病原变异"
+        },
+        {
+          "label_zh": "功能验证",
+          "field_key": "functional_validation",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "敲除后抗性丧失；转基因恢复抗性",
+          "extraction_rule": "验证宿主因子功能的实验"
+        },
+        {
+          "label_zh": "克隆/应用状态",
+          "field_key": "cloning_application",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "已克隆；标记辅助育种",
+          "extraction_rule": "记录克隆、编辑、育种应用状态"
+        }
+      ]
+    },
+    {
+      "question_id": "Q4",
+      "title_zh": "基因组、群体多样性与进化",
+      "core_relation": "Genomic/Population Observation × Genotype–Phenotype Association",
+      "fields": [
+        {
+          "label_zh": "研究类型",
+          "field_key": "study_type",
+          "required_in_source": "是",
+          "type_in_source": "枚举",
+          "example_in_source": "参考基因组；泛基因组；群体基因组；比较基因组",
+          "extraction_rule": "论文主要研究设计"
+        },
+        {
+          "label_zh": "卵菌种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "P. infestans",
+          "extraction_rule": "研究对象"
+        },
+        {
+          "label_zh": "菌株/群体",
+          "field_key": "strain_population",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "184个田间分离物",
+          "extraction_rule": "研究样本群体"
+        },
+        {
+          "label_zh": "样本量",
+          "field_key": "sample_size",
+          "required_in_source": "否",
+          "type_in_source": "数值",
+          "example_in_source": "n=184",
+          "extraction_rule": "记录基因组/分离物数量"
+        },
+        {
+          "label_zh": "基因组大小",
+          "field_key": "genome_size",
+          "required_in_source": "否",
+          "type_in_source": "数值+单位",
+          "example_in_source": "~240 Mb",
+          "extraction_rule": "论文报告的基因组大小"
+        },
+        {
+          "label_zh": "基因数量",
+          "field_key": "gene_count",
+          "required_in_source": "否",
+          "type_in_source": "数值",
+          "example_in_source": "17,787 predicted genes",
+          "extraction_rule": "蛋白编码基因或预测基因数量"
+        },
+        {
+          "label_zh": "泛基因组特征",
+          "field_key": "pangenome_features",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "开放型泛基因组；可变基因比例",
+          "extraction_rule": "泛基因组主要结果"
+        },
+        {
+          "label_zh": "核心/可变基因",
+          "field_key": "core_variable_genes",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "12,000 core genes；2,000 accessory genes",
+          "extraction_rule": "核心与可变基因信息"
+        },
+        {
+          "label_zh": "基因组变异",
+          "field_key": "genomic_variation",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "SNP、Indel、CNV",
+          "extraction_rule": "主要变异类型及结果"
+        },
+        {
+          "label_zh": "结构变异",
+          "field_key": "structural_variation",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "大片段缺失；倒位",
+          "extraction_rule": "SV结果"
+        },
+        {
+          "label_zh": "效应子组特征",
+          "field_key": "effectorome_features",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "RXLR数量变化；效应子缺失",
+          "extraction_rule": "效应子谱及其变异"
+        },
+        {
+          "label_zh": "群体遗传结构",
+          "field_key": "population_structure",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "三个遗传群体；ADMIXTURE分群",
+          "extraction_rule": "群体结构结果"
+        },
+        {
+          "label_zh": "遗传多样性",
+          "field_key": "genetic_diversity",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "π值；He；FST",
+          "extraction_rule": "论文使用的多样性指标"
+        },
+        {
+          "label_zh": "重组/基因流",
+          "field_key": "recombination_gene_flow",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "存在基因流；重组率升高",
+          "extraction_rule": "记录重组或群体间基因流"
+        },
+        {
+          "label_zh": "系统发育",
+          "field_key": "phylogeny",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "分为亚洲与欧洲支系",
+          "extraction_rule": "系统发育主要结论"
+        },
+        {
+          "label_zh": "基因型–表型关联",
+          "field_key": "genotype_phenotype_association",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "SNP与甲霜灵抗性显著关联",
+          "extraction_rule": "基因型与毒力/抗性等表型关联"
+        },
+        {
+          "label_zh": "选择/适应信号",
+          "field_key": "selection_adaptation",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "正选择；宿主适应信号",
+          "extraction_rule": "选择压力和适应性证据"
+        },
+        {
+          "label_zh": "进化结论",
+          "field_key": "evolutionary_conclusion",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "群体扩张伴随效应子快速演化",
+          "extraction_rule": "作者的主要进化解释"
+        }
+      ]
+    },
+    {
+      "question_id": "Q5",
+      "title_zh": "抗卵菌化合物、靶标与作用机制",
+      "core_relation": "Compound × Pathogen × Assay × Activity Outcome",
+      "fields": [
+        {
+          "label_zh": "化合物名称",
+          "field_key": "compound_name",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "fluopicolide；oxathiapiprolin",
+          "extraction_rule": "论文中的化合物名称"
+        },
+        {
+          "label_zh": "标准名/编号",
+          "field_key": "standard_name_id",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "CAS号；化合物编号1a",
+          "extraction_rule": "标准名称或论文内部编号"
+        },
+        {
+          "label_zh": "化学类别/骨架",
+          "field_key": "chemical_class_scaffold",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "piperidinyl thiazole isoxazoline",
+          "extraction_rule": "化学分类或核心骨架"
+        },
+        {
+          "label_zh": "来源/开发状态",
+          "field_key": "origin_development_status",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "天然产物；合成先导；商业杀菌剂",
+          "extraction_rule": "来源及开发阶段"
+        },
+        {
+          "label_zh": "卵菌种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "P. capsici",
+          "extraction_rule": "测试病原"
+        },
+        {
+          "label_zh": "菌株/生活史阶段",
+          "field_key": "strain_life_stage",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "P6497；游动孢子",
+          "extraction_rule": "菌株和测试阶段"
+        },
+        {
+          "label_zh": "测定方法",
+          "field_key": "assay_method",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "菌丝生长抑制；孢子萌发；微量肉汤法",
+          "extraction_rule": "活性测试方法"
+        },
+        {
+          "label_zh": "处理条件",
+          "field_key": "treatment_conditions",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "10–100 μM，48 h",
+          "extraction_rule": "浓度、时间、温度等关键条件"
+        },
+        {
+          "label_zh": "活性终点",
+          "field_key": "activity_endpoint",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "EC50；MIC；抑制率",
+          "extraction_rule": "活性指标"
+        },
+        {
+          "label_zh": "活性结果",
+          "field_key": "activity_result",
+          "required_in_source": "是",
+          "type_in_source": "数值+单位",
+          "example_in_source": "EC50=0.12 μg/mL",
+          "extraction_rule": "具体数值及单位"
+        },
+        {
+          "label_zh": "阳性对照",
+          "field_key": "positive_control",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "metalaxyl",
+          "extraction_rule": "论文中的对照药剂"
+        },
+        {
+          "label_zh": "作用靶标",
+          "field_key": "target",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "OS-1；PiAPC3",
+          "extraction_rule": "直接或候选靶标"
+        },
+        {
+          "label_zh": "靶标验证/结合证据",
+          "field_key": "target_validation_binding",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "突变验证；CETSA；SPR；晶体结构",
+          "extraction_rule": "证明靶标关系的证据"
+        },
+        {
+          "label_zh": "作用机制",
+          "field_key": "mechanism_of_action",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "抑制RNA polymerase；破坏甾醇合成",
+          "extraction_rule": "作者提出并有证据支持的机制"
+        },
+        {
+          "label_zh": "抗性/交互抗性",
+          "field_key": "resistance_cross_resistance",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "与甲霜灵存在交互抗性",
+          "extraction_rule": "记录抗性及交互抗性"
+        },
+        {
+          "label_zh": "协同/拮抗",
+          "field_key": "synergy_antagonism",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "FIC index=0.5，协同",
+          "extraction_rule": "联合处理结果"
+        },
+        {
+          "label_zh": "植物毒性/非靶标安全",
+          "field_key": "phytotoxicity_non_target_safety",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对番茄无明显药害",
+          "extraction_rule": "非病原对象的安全性"
+        },
+        {
+          "label_zh": "活体/温室/田间效果",
+          "field_key": "in_planta_greenhouse_field",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "温室防效78%；田间病情指数下降",
+          "extraction_rule": "体内和田间效果"
+        },
+        {
+          "label_zh": "选择性",
+          "field_key": "selectivity",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对P. capsici选择性强",
+          "extraction_rule": "病原与宿主/其他生物的选择性"
+        }
+      ]
+    },
+    {
+      "question_id": "Q6",
+      "title_zh": "杀菌剂抗性与抗性机制",
+      "core_relation": "Fungicide × Pathogen/Strain × Resistance Genotype/Phenotype",
+      "fields": [
+        {
+          "label_zh": "杀菌剂名称",
+          "field_key": "fungicide_name",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "metalaxyl；mandipropamid",
+          "extraction_rule": "药剂名称"
+        },
+        {
+          "label_zh": "类型/FRAC",
+          "field_key": "type_FRAC",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "FRAC 4；苯基酰胺",
+          "extraction_rule": "作用类别或FRAC分类"
+        },
+        {
+          "label_zh": "作用靶标",
+          "field_key": "target",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "RNA polymerase I；cellulose synthase",
+          "extraction_rule": "靶标"
+        },
+        {
+          "label_zh": "卵菌种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "P. infestans",
+          "extraction_rule": "病原"
+        },
+        {
+          "label_zh": "菌株/分离物",
+          "field_key": "strain_isolate",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "EU-13-A2 isolates",
+          "extraction_rule": "抗性研究材料"
+        },
+        {
+          "label_zh": "抗性表型",
+          "field_key": "resistance_phenotype",
+          "required_in_source": "是",
+          "type_in_source": "文本/数值",
+          "example_in_source": "EC50升高；高抗",
+          "extraction_rule": "抗性表型及分级"
+        },
+        {
+          "label_zh": "抗性基因",
+          "field_key": "resistance_gene",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Mefenoxam resistance-associated locus",
+          "extraction_rule": "已验证或候选基因"
+        },
+        {
+          "label_zh": "突变位点/遗传变异",
+          "field_key": "mutation_site_variant",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Gly1107Val；promoter SNP",
+          "extraction_rule": "具体突变或变异"
+        },
+        {
+          "label_zh": "突变类型",
+          "field_key": "mutation_type",
+          "required_in_source": "否",
+          "type_in_source": "枚举+文本",
+          "example_in_source": "错义；缺失；拷贝数变化",
+          "extraction_rule": "遗传变异类型"
+        },
+        {
+          "label_zh": "WT–突变体活性比较",
+          "field_key": "wt_mutant_activity_comparison",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "WT EC50=0.2，突变体=8.4 μg/mL",
+          "extraction_rule": "野生型和突变体对比"
+        },
+        {
+          "label_zh": "抗性因子RF",
+          "field_key": "resistance_factor",
+          "required_in_source": "否",
+          "type_in_source": "数值",
+          "example_in_source": "RF=42",
+          "extraction_rule": "若论文计算RF则记录"
+        },
+        {
+          "label_zh": "抗性机制",
+          "field_key": "resistance_mechanism",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "靶标突变；外排增强；代谢解毒",
+          "extraction_rule": "机制证据"
+        },
+        {
+          "label_zh": "交互抗性",
+          "field_key": "cross_resistance",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对同FRAC药剂交互抗性",
+          "extraction_rule": "同类药剂抗性"
+        },
+        {
+          "label_zh": "负交互抗性",
+          "field_key": "negative_cross_resistance",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "A药抗性伴随B药敏感性增加",
+          "extraction_rule": "仅有证据时记录"
+        },
+        {
+          "label_zh": "生长/繁殖/竞争能力变化",
+          "field_key": "fitness_effect",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "抗性株生长速率下降10%",
+          "extraction_rule": "避免只写“适合度”，明确记录生物学代价"
+        },
+        {
+          "label_zh": "毒力变化",
+          "field_key": "virulence_change",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "抗性株毒力降低",
+          "extraction_rule": "抗性伴随致病力变化"
+        },
+        {
+          "label_zh": "抗性稳定性",
+          "field_key": "resistance_stability",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "无药条件下连续5代仍保持",
+          "extraction_rule": "稳定性实验"
+        },
+        {
+          "label_zh": "田间发生",
+          "field_key": "field_occurrence",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "田间样品中抗性频率18%",
+          "extraction_rule": "田间监测结果"
+        },
+        {
+          "label_zh": "分子检测方法",
+          "field_key": "molecular_detection",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "等位基因特异PCR；qPCR",
+          "extraction_rule": "抗性检测方法"
+        },
+        {
+          "label_zh": "进化来源",
+          "field_key": "evolutionary_origin",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "药剂选择压力驱动；独立起源",
+          "extraction_rule": "作者支持的起源解释"
+        },
+        {
+          "label_zh": "抗性管理",
+          "field_key": "resistance_management",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "轮换不同FRAC；混配",
+          "extraction_rule": "论文提出的管理措施"
+        }
+      ]
+    },
+    {
+      "question_id": "Q7",
+      "title_zh": "卵菌防控与新型干预技术",
+      "core_relation": "Intervention × Pathogen × Application × Efficacy",
+      "fields": [
+        {
+          "label_zh": "干预/防控类型",
+          "field_key": "intervention_type",
+          "required_in_source": "是",
+          "type_in_source": "枚举",
+          "example_in_source": "化学药剂；生防菌；抗体；RNAi；噬菌体/病毒；肽",
+          "extraction_rule": "干预类别"
+        },
+        {
+          "label_zh": "干预名称",
+          "field_key": "intervention_name",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "dsRNA；Trichoderma strain X；peptide P1",
+          "extraction_rule": "具体干预对象"
+        },
+        {
+          "label_zh": "来源/组成",
+          "field_key": "source_composition",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "植物提取物；双链RNA序列；天然产物",
+          "extraction_rule": "来源、主要成分或构成"
+        },
+        {
+          "label_zh": "靶标卵菌",
+          "field_key": "target_oomycete",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "P. sojae",
+          "extraction_rule": "目标病原"
+        },
+        {
+          "label_zh": "作用对象",
+          "field_key": "target_object",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "β-tubulin；甾醇途径；效应子",
+          "extraction_rule": "直接作用对象"
+        },
+        {
+          "label_zh": "作用方式",
+          "field_key": "mode_of_action",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "沉默必需基因；破坏膜完整性",
+          "extraction_rule": "干预如何发挥作用"
+        },
+        {
+          "label_zh": "递送/施用方式",
+          "field_key": "delivery_application",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "叶面喷施；根部处理；纳米载体递送",
+          "extraction_rule": "应用或递送方式"
+        },
+        {
+          "label_zh": "剂量/处理条件",
+          "field_key": "dose_treatment",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "50 nM dsRNA；处理24 h",
+          "extraction_rule": "关键处理条件"
+        },
+        {
+          "label_zh": "体外活性",
+          "field_key": "in_vitro_activity",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "EC50=2.1 μg/mL；菌丝生长抑制70%",
+          "extraction_rule": "体外效果"
+        },
+        {
+          "label_zh": "温室/活体效果",
+          "field_key": "greenhouse_in_vivo_efficacy",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "温室防效65%",
+          "extraction_rule": "活体或温室效果"
+        },
+        {
+          "label_zh": "田间效果",
+          "field_key": "field_efficacy",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "田间防效52%",
+          "extraction_rule": "田间结果"
+        },
+        {
+          "label_zh": "机制证据",
+          "field_key": "mechanism",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "基因沉默导致孢子萌发受阻",
+          "extraction_rule": "机制层面的证据"
+        },
+        {
+          "label_zh": "协同/联合效果",
+          "field_key": "synergy_combination",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "与mandipropamid协同，FIC=0.4",
+          "extraction_rule": "组合效果"
+        },
+        {
+          "label_zh": "非靶标/植物安全",
+          "field_key": "non_target_plant_safety",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对植物生长无显著影响",
+          "extraction_rule": "安全性"
+        },
+        {
+          "label_zh": "局限/应用条件",
+          "field_key": "limitations_conditions",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "需纳米载体；紫外稳定性差",
+          "extraction_rule": "应用限制"
+        }
+      ]
+    },
+    {
+      "question_id": "Q8",
+      "title_zh": "病害诊断、监测、流行病学与预测预警",
+      "core_relation": "Diagnosis / Surveillance / Epidemiology / Forecasting",
+      "fields": [
+        {
+          "label_zh": "记录类型",
+          "field_key": "record_type",
+          "required_in_source": "是",
+          "type_in_source": "枚举",
+          "example_in_source": "分子诊断；病原检测；病害监测；流行病学；风险预测；预警模型",
+          "extraction_rule": "Q8最关键的分类字段；决定后续条件字段是否适用"
+        },
+        {
+          "label_zh": "病害名称",
+          "field_key": "disease_name",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "大豆疫霉根腐病",
+          "extraction_rule": "病害名称"
+        },
+        {
+          "label_zh": "病原种",
+          "field_key": "pathogen_species",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "P. sojae",
+          "extraction_rule": "病原物种"
+        },
+        {
+          "label_zh": "宿主/作物",
+          "field_key": "host_crop",
+          "required_in_source": "是",
+          "type_in_source": "文本",
+          "example_in_source": "Glycine max",
+          "extraction_rule": "宿主或作物"
+        },
+        {
+          "label_zh": "品种/材料",
+          "field_key": "cultivar",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "Williams 82",
+          "extraction_rule": "涉及具体品种时记录"
+        },
+        {
+          "label_zh": "地理范围",
+          "field_key": "geographic_scope",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "中国东北；江苏省",
+          "extraction_rule": "采样或流行病学范围"
+        },
+        {
+          "label_zh": "诊断靶标",
+          "field_key": "diagnostic_target",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "ITS；COX1；特异效应子基因",
+          "extraction_rule": "诊断所检测的靶标"
+        },
+        {
+          "label_zh": "检测技术",
+          "field_key": "detection_technology",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "qPCR；LAMP；ddPCR；显微鉴定",
+          "extraction_rule": "检测方法"
+        },
+        {
+          "label_zh": "引物/探针名称",
+          "field_key": "primer_probe_name",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "PsSOX2-F/R；probe P1",
+          "extraction_rule": "名称或编号"
+        },
+        {
+          "label_zh": "引物/探针序列",
+          "field_key": "primer_probe_sequence",
+          "required_in_source": "否",
+          "type_in_source": "序列",
+          "example_in_source": "5'-AGCT...-3'",
+          "extraction_rule": "论文明确给出时原样记录"
+        },
+        {
+          "label_zh": "扩增片段长度",
+          "field_key": "amplicon_size",
+          "required_in_source": "否",
+          "type_in_source": "数值+bp",
+          "example_in_source": "125 bp",
+          "extraction_rule": "PCR/等温扩增产物长度"
+        },
+        {
+          "label_zh": "样本类型",
+          "field_key": "sample_type",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "根组织；土壤；水样；空气样本",
+          "extraction_rule": "检测材料"
+        },
+        {
+          "label_zh": "采样/样本前处理",
+          "field_key": "sampling_preparation",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "土壤DNA提取；根组织研磨",
+          "extraction_rule": "前处理关键步骤"
+        },
+        {
+          "label_zh": "灵敏度/LOD",
+          "field_key": "sensitivity_LOD",
+          "required_in_source": "否",
+          "type_in_source": "数值+单位",
+          "example_in_source": "LOD=10 spores/g soil",
+          "extraction_rule": "最低检测限或灵敏度"
+        },
+        {
+          "label_zh": "定量范围/LOQ",
+          "field_key": "LOQ",
+          "required_in_source": "否",
+          "type_in_source": "数值+单位",
+          "example_in_source": "LOQ=100 copies/reaction",
+          "extraction_rule": "有定量检测时记录"
+        },
+        {
+          "label_zh": "特异性/交叉反应",
+          "field_key": "specificity_cross_reaction",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "不扩增P. nicotianae等近缘种",
+          "extraction_rule": "特异性验证"
+        },
+        {
+          "label_zh": "检测时间",
+          "field_key": "assay_time",
+          "required_in_source": "否",
+          "type_in_source": "时间",
+          "example_in_source": "45 min",
+          "extraction_rule": "从样本到结果所需时间"
+        },
+        {
+          "label_zh": "验证设计/样本量",
+          "field_key": "validation_design_sample_size",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "田间样本n=120；盲样验证",
+          "extraction_rule": "诊断方法的验证设计"
+        },
+        {
+          "label_zh": "监测策略/范围",
+          "field_key": "surveillance_design",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "分层随机采样；年度监测",
+          "extraction_rule": "病害或病原监测设计"
+        },
+        {
+          "label_zh": "监测结果",
+          "field_key": "surveillance_result",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "阳性率18%；空间聚集",
+          "extraction_rule": "监测得到的结果"
+        },
+        {
+          "label_zh": "病害阶段/进程",
+          "field_key": "disease_stage_course",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "苗期高发；降雨后7 d上升",
+          "extraction_rule": "流行病学时间进程"
+        },
+        {
+          "label_zh": "环境因素",
+          "field_key": "environmental_factors",
+          "required_in_source": "否",
+          "type_in_source": "文本/数值",
+          "example_in_source": "温度、降雨、土壤含水量",
+          "extraction_rule": "环境驱动因素"
+        },
+        {
+          "label_zh": "宿主因素",
+          "field_key": "host_factors",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "品种抗性、种植密度",
+          "extraction_rule": "宿主相关因素"
+        },
+        {
+          "label_zh": "病原因素",
+          "field_key": "pathogen_factors",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "初始接种量、种群结构",
+          "extraction_rule": "病原相关因素"
+        },
+        {
+          "label_zh": "流行病学关系",
+          "field_key": "epidemiological_relationships",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "降雨与病害发生显著正相关",
+          "extraction_rule": "变量之间的关系"
+        },
+        {
+          "label_zh": "模型名称",
+          "field_key": "model_name",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "CLIMEX；logistic regression",
+          "extraction_rule": "预测/预警模型名称"
+        },
+        {
+          "label_zh": "模型类型",
+          "field_key": "model_type",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "机器学习；回归；机制模型",
+          "extraction_rule": "模型类别"
+        },
+        {
+          "label_zh": "模型输入",
+          "field_key": "model_inputs",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "温度、降雨、土壤湿度、历史病情",
+          "extraction_rule": "输入变量"
+        },
+        {
+          "label_zh": "模型输出",
+          "field_key": "model_outputs",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "发病概率；风险等级",
+          "extraction_rule": "预测输出"
+        },
+        {
+          "label_zh": "预测时距",
+          "field_key": "forecast_horizon",
+          "required_in_source": "否",
+          "type_in_source": "时间",
+          "example_in_source": "未来7天；未来1个月",
+          "extraction_rule": "提前预测时间范围"
+        },
+        {
+          "label_zh": "时空尺度",
+          "field_key": "spatiotemporal_scale",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "县域/周尺度",
+          "extraction_rule": "预测或流行病学分析尺度"
+        },
+        {
+          "label_zh": "验证设计",
+          "field_key": "forecast_validation_design",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "独立年份验证；交叉验证",
+          "extraction_rule": "模型验证方式"
+        },
+        {
+          "label_zh": "验证指标",
+          "field_key": "forecast_validation_metrics",
+          "required_in_source": "否",
+          "type_in_source": "数值/文本",
+          "example_in_source": "AUC=0.87；RMSE=0.21",
+          "extraction_rule": "模型性能指标"
+        },
+        {
+          "label_zh": "实际应用",
+          "field_key": "operational_application",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "用于病害预警和施药决策",
+          "extraction_rule": "是否进入实际监测/预警"
+        },
+        {
+          "label_zh": "局限性",
+          "field_key": "limitations",
+          "required_in_source": "否",
+          "type_in_source": "文本",
+          "example_in_source": "对极端天气预测不稳定",
+          "extraction_rule": "作者明确指出的局限"
+        }
+      ]
+    }
+  ],
+  "common_evidence_fields": [
+    {
+      "label_zh": "记录ID",
+      "field_key": "record_id",
+      "example_in_source": "REC-PSOJA-001",
+      "extraction_rule": "每个独立科学记录唯一ID"
+    },
+    {
+      "label_zh": "论文ID",
+      "field_key": "paper_id",
+      "example_in_source": "PAPER-000123",
+      "extraction_rule": "同一论文多个记录共享paper_id"
+    },
+    {
+      "label_zh": "DOI/PMID",
+      "field_key": "doi_pmid",
+      "example_in_source": "10.xxxx/xxxxx；PMID 12345678",
+      "extraction_rule": "标准文献标识"
+    },
+    {
+      "label_zh": "卵菌种",
+      "field_key": "pathogen_species",
+      "example_in_source": "P. sojae",
+      "extraction_rule": "与具体记录对应"
+    },
+    {
+      "label_zh": "菌株/分离物",
+      "field_key": "strain_isolate",
+      "example_in_source": "P6497",
+      "extraction_rule": "多个菌株时分别记录"
+    },
+    {
+      "label_zh": "宿主种",
+      "field_key": "host_species",
+      "example_in_source": "Glycine max",
+      "extraction_rule": "具体实验宿主"
+    },
+    {
+      "label_zh": "宿主品种",
+      "field_key": "host_cultivar",
+      "example_in_source": "Williams 82",
+      "extraction_rule": "明确报告时记录"
+    },
+    {
+      "label_zh": "生活史阶段",
+      "field_key": "life_stage",
+      "example_in_source": "游动孢子；菌丝",
+      "extraction_rule": "实验对象阶段"
+    },
+    {
+      "label_zh": "实验背景",
+      "field_key": "experimental_context",
+      "example_in_source": "根部接种后24 h",
+      "extraction_rule": "关键条件摘要"
+    },
+    {
+      "label_zh": "结果状态",
+      "field_key": "result_status",
+      "example_in_source": "显著增加；显著降低；无显著差异",
+      "extraction_rule": "结果方向和显著性"
+    },
+    {
+      "label_zh": "证据类型",
+      "field_key": "evidence_type",
+      "example_in_source": "遗传；生化；结构；表型；田间",
+      "extraction_rule": "证据性质"
+    },
+    {
+      "label_zh": "证据等级",
+      "field_key": "evidence_level",
+      "example_in_source": "直接验证；间接证据；作者推测",
+      "extraction_rule": "区分证据强弱"
+    },
+    {
+      "label_zh": "方法标签",
+      "field_key": "method_tags",
+      "example_in_source": "CRISPR；Co-IP；qPCR；RNA-seq",
+      "extraction_rule": "可多值"
+    },
+    {
+      "label_zh": "证据来源/位置",
+      "field_key": "provenance",
+      "example_in_source": "Figure 3B；Table 2；Supplementary Fig. S4",
+      "extraction_rule": "定位到图表/章节"
+    },
+    {
+      "label_zh": "证据原文",
+      "field_key": "evidence_text",
+      "example_in_source": "支持该字段的原文短句或结果摘要",
+      "extraction_rule": "保留短证据"
+    },
+    {
+      "label_zh": "作者假设",
+      "field_key": "author_hypothesis",
+      "example_in_source": "作者提出该蛋白可能介导……",
+      "extraction_rule": "只记录作者明确提出的解释"
+    },
+    {
+      "label_zh": "备注",
+      "field_key": "notes",
+      "example_in_source": "存在冲突；需要人工复核",
+      "extraction_rule": "不确定/冲突/特殊情况"
+    }
+  ],
+  "source_structure": {
+    "table_count": 10,
+    "tracked_insertions": 0,
+    "tracked_deletions": 0,
+    "has_comments": false,
+    "media_count": 0
+  }
+}
